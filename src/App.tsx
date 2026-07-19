@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import StatsCounter from "./components/StatsCounter";
@@ -383,46 +384,60 @@ export default function App() {
             if (list.length === 0) return null;
             const currentText = list[currentAnnIdx] || "";
             return (
-              <div 
-                className="relative bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-purple-600/10 border-b border-indigo-100/50 dark:border-indigo-950/60 px-4 py-3 shadow-sm"
-                id="site-announcement-banner"
-              >
-                <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-                  {/* Left Side: Dynamic Glowing Badge & Text */}
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className="flex-none px-2.5 py-1 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+              <div className="max-w-5xl mx-auto px-4 pt-6" id="site-announcement-container">
+                <div 
+                  className="relative overflow-hidden bg-white/75 dark:bg-slate-900/70 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-4 shadow-lg shadow-slate-100/50 dark:shadow-none flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-300"
+                  id="site-announcement-toast"
+                >
+                  {/* Left accent color strip */}
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-blue-500 via-indigo-500 to-purple-600"></div>
+                  
+                  {/* Left Side: Badge & Animating Text */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1 pl-1.5">
+                    <span className="flex-none px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-blue-100/30 dark:border-blue-900/30">
                       <span className="relative flex h-1.5 w-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500"></span>
                       </span>
-                      DUYURU
+                      Duyuru
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 tracking-tight leading-relaxed">
-                        {currentText}
-                      </p>
+                    
+                    {/* Sliding text wrapper */}
+                    <div className="min-w-0 flex-1 relative h-5 flex items-center overflow-hidden">
+                      <AnimatePresence mode="wait">
+                        <motion.p
+                          key={currentAnnIdx}
+                          initial={{ y: 12, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: -12, opacity: 0 }}
+                          transition={{ duration: 0.28, ease: "easeOut" }}
+                          className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight leading-relaxed truncate"
+                        >
+                          {currentText}
+                        </motion.p>
+                      </AnimatePresence>
                     </div>
                   </div>
 
-                  {/* Right Side: Navigation controls, View All, and Dismiss */}
+                  {/* Right Side: Navigation, View All & Dismiss */}
                   <div className="flex items-center gap-3 shrink-0">
                     {list.length > 1 && (
-                      <div className="flex items-center gap-1 bg-white/70 dark:bg-slate-900/40 p-1 rounded-lg border border-slate-200/50 dark:border-slate-800/50 text-[10px] font-extrabold text-slate-500">
+                      <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-950/50 p-1 rounded-xl border border-slate-200/40 dark:border-slate-800/60 text-[10px] font-extrabold text-slate-500">
                         <button
                           type="button"
                           onClick={() => setCurrentAnnIdx((prev) => (prev - 1 + list.length) % list.length)}
-                          className="hover:bg-slate-200 dark:hover:bg-slate-800 p-1 rounded transition-colors cursor-pointer"
+                          className="hover:bg-slate-200 dark:hover:bg-slate-850 p-1 rounded-lg transition-colors cursor-pointer text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                           title="Önceki"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         </button>
-                        <span className="px-1 text-[9px]">{currentAnnIdx + 1} / {list.length}</span>
+                        <span className="px-1 text-[9px] font-black tabular-nums">{currentAnnIdx + 1} / {list.length}</span>
                         <button
                           type="button"
                           onClick={() => setCurrentAnnIdx((prev) => (prev + 1) % list.length)}
-                          className="hover:bg-slate-200 dark:hover:bg-slate-800 p-1 rounded transition-colors cursor-pointer"
+                          className="hover:bg-slate-200 dark:hover:bg-slate-850 p-1 rounded-lg transition-colors cursor-pointer text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                           title="Sonraki"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
@@ -435,15 +450,17 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setShowAllAnnouncements(true)}
-                      className="hidden sm:inline-block text-[10px] font-black text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline shrink-0 cursor-pointer"
+                      className="text-[10px] font-black text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline shrink-0 cursor-pointer bg-blue-50/50 dark:bg-blue-950/20 px-2 py-1 rounded-lg border border-blue-100/30 dark:border-blue-900/20"
                     >
                       Hepsini Gör ({list.length})
                     </button>
 
+                    <div className="w-px h-4 bg-slate-200 dark:bg-slate-800 hidden sm:block"></div>
+
                     <button
                       type="button"
                       onClick={() => setIsAnnDismissed(true)}
-                      className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 p-1 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer"
+                      className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
                       title="Kapat"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -647,7 +664,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${theme === "dark" ? "dark bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`} id="app-root-container">
+    <div className={`min-h-screen max-w-full overflow-x-hidden flex flex-col font-sans transition-colors duration-300 ${theme === "dark" ? "dark bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`} id="app-root-container">
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}

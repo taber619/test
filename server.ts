@@ -1543,7 +1543,12 @@ async function startServer() {
     try {
       const { password } = req.body;
       const actualPassword = await dbGetAdminPassword();
-      if (password === actualPassword || password === "admin" || password === "1234") {
+      
+      // If the admin password is changed (it's not "admin" anymore), only the changed password is valid.
+      // If it's still the default "admin", we allow "admin" or "1234" for first-time access.
+      const isMatch = (password === actualPassword) || (actualPassword === "admin" && (password === "admin" || password === "1234"));
+      
+      if (isMatch) {
         res.json({ success: true });
       } else {
         res.status(401).json({ error: "Geçersiz yönetici şifresi!" });
