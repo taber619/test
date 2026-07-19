@@ -86,19 +86,44 @@ async function startServer() {
     homepageSubtitle: string;
     announcementEnabled: boolean;
     announcementText: string;
+    announcements?: string[];
     statsOffset: number;
     usersOffset: number;
     todayOffset: number;
   }
+
+  interface ChatMessage {
+    id: string;
+    userId: string;
+    username: string;
+    text: string;
+    createdAt: number;
+  }
+
+  interface UserModeration {
+    userId: string;
+    username: string;
+    warnings: number;
+    mutedUntil: number;
+    banned: boolean;
+  }
+
+  const activeSessions: Record<string, number> = {};
+  const lastMessageTimes: Record<string, number> = {};
+  
+  const inMemoryChatMessages: ChatMessage[] = [];
+  const inMemoryModeration: Record<string, UserModeration> = {};
+  let inMemoryChatSlowMode = false;
 
   const defaultSiteConfig: SiteConfig = {
     homepageTitle: "İnanResim - Hızlı ve Güvenilir Resim Paylaşımı",
     homepageSubtitle: "Saniyeler içinde resim yükleyin, şifreleyin, paylaşın veya otomatik silinmesini sağlayın.",
     announcementEnabled: true,
     announcementText: "Yönetici Duyurusu: Yeni İnanResim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz.",
-    statsOffset: 1385420,
-    usersOffset: 4210,
-    todayOffset: 342
+    announcements: ["Yönetici Duyurusu: Yeni İnanResim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz."],
+    statsOffset: 0,
+    usersOffset: 0,
+    todayOffset: 0
   };
 
   let siteConfigState = { ...defaultSiteConfig };
@@ -115,6 +140,7 @@ async function startServer() {
             homepageSubtitle: data.homepageSubtitle ?? defaultSiteConfig.homepageSubtitle,
             announcementEnabled: data.announcementEnabled ?? defaultSiteConfig.announcementEnabled,
             announcementText: data.announcementText ?? defaultSiteConfig.announcementText,
+            announcements: data.announcements ?? [data.announcementText ?? defaultSiteConfig.announcementText],
             statsOffset: data.statsOffset !== undefined ? Number(data.statsOffset) : defaultSiteConfig.statsOffset,
             usersOffset: data.usersOffset !== undefined ? Number(data.usersOffset) : defaultSiteConfig.usersOffset,
             todayOffset: data.todayOffset !== undefined ? Number(data.todayOffset) : defaultSiteConfig.todayOffset,
@@ -130,6 +156,9 @@ async function startServer() {
   async function dbSaveConfig(newConfig: Partial<SiteConfig>): Promise<SiteConfig> {
     const current = await dbGetConfig();
     const updated = { ...current, ...newConfig };
+    if (updated.announcements && updated.announcements.length > 0) {
+      updated.announcementText = updated.announcements[0];
+    }
     
     if (useFirebase && db) {
       try {
@@ -141,6 +170,139 @@ async function startServer() {
       siteConfigState = updated;
     }
     return updated;
+  }
+
+  async function dbGetChatSlowMode(): Promise<boolean> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "configs", "chat");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return !!docSnap.data().slowMode;
+        }
+      } catch (e) {
+        console.error("Firebase get slowmode error:", e);
+      }
+    }
+    return inMemoryChatSlowMode;
+  }
+
+  async function dbSetChatSlowMode(slowMode: boolean): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "configs", "chat"), { slowMode });
+      } catch (e) {
+        console.error("Firebase set slowmode error:", e);
+      }
+    } else {
+      inMemoryChatSlowMode = slowMode;
+    }
+  }
+
+  async function dbGetChatMessages(): Promise<ChatMessage[]> {
+    if (useFirebase && db) {
+      try {
+        const chatRef = collection(db, "chat_messages");
+        const snap = await getDocs(chatRef);
+        const msgs = snap.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: data.id,
+            userId: data.userId,
+            username: data.username,
+            text: data.text,
+            createdAt: data.createdAt,
+          };
+        });
+        return msgs.sort((a, b) => a.createdAt - b.createdAt);
+      } catch (e) {
+        console.error("Firebase get messages error:", e);
+      }
+    }
+    return [...inMemoryChatMessages].sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  async function dbSaveChatMessage(msg: ChatMessage): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "chat_messages", msg.id), msg);
+      } catch (e) {
+        console.error("Firebase save message error:", e);
+      }
+    } else {
+      inMemoryChatMessages.push(msg);
+      if (inMemoryChatMessages.length > 100) {
+        inMemoryChatMessages.shift();
+      }
+    }
+  }
+
+  async function dbGetUserModeration(userId: string, defaultUsername: string): Promise<UserModeration> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "user_moderation", userId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          return {
+            userId: data.userId,
+            username: data.username || defaultUsername,
+            warnings: data.warnings ?? 0,
+            mutedUntil: data.mutedUntil ?? 0,
+            banned: !!data.banned,
+          };
+        }
+      } catch (e) {
+        console.error("Firebase get moderation error:", e);
+      }
+    } else {
+      if (inMemoryModeration[userId]) {
+        return inMemoryModeration[userId];
+      }
+    }
+    return {
+      userId,
+      username: defaultUsername,
+      warnings: 0,
+      mutedUntil: 0,
+      banned: false,
+    };
+  }
+
+  async function dbSaveUserModeration(mod: UserModeration): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "user_moderation", mod.userId), mod);
+      } catch (e) {
+        console.error("Firebase save moderation error:", e);
+      }
+    } else {
+      inMemoryModeration[mod.userId] = mod;
+    }
+  }
+
+  async function dbGetBannedUsers(): Promise<UserModeration[]> {
+    if (useFirebase && db) {
+      try {
+        const modRef = collection(db, "user_moderation");
+        const snap = await getDocs(modRef);
+        return snap.docs
+          .map(docSnap => {
+            const d = docSnap.data();
+            return {
+              userId: d.userId,
+              username: d.username,
+              warnings: d.warnings ?? 0,
+              mutedUntil: d.mutedUntil ?? 0,
+              banned: !!d.banned,
+            };
+          })
+          .filter(u => u.banned);
+      } catch (e) {
+        console.error("Firebase get banned users error:", e);
+      }
+    }
+    return Object.values(inMemoryModeration).filter(u => u.banned);
   }
 
   let adminPasswordState = "admin";
@@ -235,30 +397,92 @@ async function startServer() {
   }
 
   // Database helper functions (abstracting Firestore / In-Memory logic)
-  async function getStatsCount(imagesStore: Record<string, StoredImage>, usersStore: Record<string, StoredUser>) {
+  async function getStatsCount(imagesStore: Record<string, StoredImage>, usersStore: Record<string, StoredUser>, sessionId?: string) {
     const config = await dbGetConfig();
+    const now = Date.now();
+    
+    // Register active user session
+    if (sessionId) {
+      if (useFirebase && db) {
+        try {
+          await setDoc(doc(db, "active_sessions", sessionId), {
+            id: sessionId,
+            lastActive: now
+          });
+        } catch (e) {
+          console.error("Failed to register firebase active session:", e);
+        }
+      } else {
+        activeSessions[sessionId] = now;
+      }
+    }
+
+    // Clean up old active sessions and count
+    let activeUsersCount = 1; // default to 1 minimum
+    const activeThreshold = now - 15000; // active in last 15 seconds
+
+    if (useFirebase && db) {
+      try {
+        const activeSessionsRef = collection(db, "active_sessions");
+        const sessionsSnap = await getDocs(activeSessionsRef);
+        
+        let count = 0;
+        for (const docSnap of sessionsSnap.docs) {
+          const s = docSnap.data();
+          if (s.lastActive < activeThreshold) {
+            deleteDoc(docSnap.ref).catch(() => {});
+          } else {
+            count++;
+          }
+        }
+        activeUsersCount = Math.max(1, count);
+      } catch (e) {
+        console.error("Firebase active sessions count error:", e);
+      }
+    } else {
+      Object.keys(activeSessions).forEach(sid => {
+        if (activeSessions[sid] < activeThreshold) {
+          delete activeSessions[sid];
+        }
+      });
+      activeUsersCount = Math.max(1, Object.keys(activeSessions).length);
+    }
+
+    // Get images uploaded today (local midnight today)
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTodayMs = startOfToday.getTime();
+
+    let totalImagesCount = 0;
+    let uploadedTodayCount = 0;
+
     if (useFirebase && db) {
       try {
         const imagesRef = collection(db, "images");
-        const usersRef = collection(db, "users");
-        const [imagesSnap, usersSnap] = await Promise.all([
-          getDocs(imagesRef),
-          getDocs(usersRef)
-        ]);
-        return {
-          totalImages: imagesSnap.size + config.statsOffset,
-          activeUsers: usersSnap.size + config.usersOffset,
-          uploadedToday: Math.min(imagesSnap.size + config.todayOffset, 1200),
-        };
+        const imagesSnap = await getDocs(imagesRef);
+        totalImagesCount = imagesSnap.size;
+        imagesSnap.docs.forEach(docSnap => {
+          const img = docSnap.data();
+          if (img.uploadedAt >= startOfTodayMs) {
+            uploadedTodayCount++;
+          }
+        });
       } catch (e) {
-        console.error("Firebase stats error:", e);
+        console.error("Firebase counting error:", e);
       }
+    } else {
+      totalImagesCount = Object.keys(imagesStore).length;
+      Object.values(imagesStore).forEach(img => {
+        if (img.uploadedAt >= startOfTodayMs) {
+          uploadedTodayCount++;
+        }
+      });
     }
-    const totalCount = Object.keys(imagesStore).length;
+
     return {
-      totalImages: totalCount + config.statsOffset,
-      activeUsers: Object.keys(usersStore).length + config.usersOffset,
-      uploadedToday: Math.min(totalCount + config.todayOffset, 1200),
+      totalImages: totalImagesCount + (config.statsOffset || 0),
+      activeUsers: activeUsersCount + (config.usersOffset || 0),
+      uploadedToday: uploadedTodayCount + (config.todayOffset || 0),
     };
   }
 
@@ -680,8 +904,9 @@ async function startServer() {
 
   // Get active stats (for homepage counter/visuals)
   app.get("/api/stats", async (req, res) => {
+    const { sessionId } = req.query;
     try {
-      const stats = await getStatsCount(images, users);
+      const stats = await getStatsCount(images, users, sessionId as string);
       res.json(stats);
     } catch (err) {
       console.error("Stats API error:", err);
@@ -1004,6 +1229,188 @@ async function startServer() {
     }
   });
 
+  // --- CHAT SYSTEM AND MODERATION ---
+
+  // Swear words filter
+  function containsSwearWord(text: string): boolean {
+    const normalized = text.toLowerCase()
+      .replace(/ı/g, "i")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ş/g, "s")
+      .replace(/ç/g, "c")
+      .replace(/ğ/g, "g");
+    
+    const badWords = ["amk", "aq", "sik", "pic", "oc", "got", "yarrak", "orospu", "siktir", "pezevenk", "kahpe", "amina", "fuck", "bitch", "gavat", "ibne", "yarak"];
+    return badWords.some(word => normalized.includes(word));
+  }
+
+  // Get messages
+  app.get("/api/chat/messages", async (req, res) => {
+    try {
+      const msgs = await dbGetChatMessages();
+      res.json(msgs);
+    } catch (err) {
+      console.error("Get chat messages error:", err);
+      res.status(500).json({ error: "Sohbet mesajları alınamadı." });
+    }
+  });
+
+  // Post message
+  app.post("/api/chat/messages", async (req, res) => {
+    try {
+      const { userId, username, text } = req.body;
+
+      if (!userId || !username || !text || text.trim() === "") {
+        return res.status(400).json({ error: "Eksik parametre." });
+      }
+
+      const cleanText = text.trim();
+      const now = Date.now();
+
+      // Check Ban/Mute status
+      const mod = await dbGetUserModeration(userId, username);
+      if (mod.banned) {
+        return res.status(403).json({ error: "Kural ihlali nedeniyle sohbetten kalıcı olarak yasaklandınız!" });
+      }
+
+      if (mod.mutedUntil > now) {
+        const remainingSecs = Math.ceil((mod.mutedUntil - now) / 1000);
+        return res.status(403).json({ error: `Küfürlü kelimeler nedeniyle susturuldunuz! Kalan süre: ${remainingSecs} saniye.` });
+      }
+
+      // Check Slow Mode (3 seconds delay)
+      const slowModeActive = await dbGetChatSlowMode();
+      if (slowModeActive) {
+        const lastTime = lastMessageTimes[userId] || 0;
+        if (now - lastTime < 3000) {
+          return res.status(429).json({ error: "Yavaş mod aktif! Lütfen 3 saniye bekleyin." });
+        }
+      }
+
+      // Check for Swear Words
+      if (containsSwearWord(cleanText)) {
+        const newWarnings = mod.warnings + 1;
+        mod.warnings = newWarnings;
+
+        if (newWarnings === 1) {
+          await dbSaveUserModeration(mod);
+          return res.status(400).json({ 
+            error: "1. Uyarı: Lütfen küfürlü kelimeler kullanmayın!", 
+            warningCount: 1 
+          });
+        } else if (newWarnings === 2) {
+          mod.mutedUntil = now + 60 * 1000; // Mute for 1 minute
+          await dbSaveUserModeration(mod);
+          return res.status(400).json({ 
+            error: "2. Uyarı: Küfürlü kelimeler nedeniyle 1 dakika susturuldunuz!", 
+            warningCount: 2 
+          });
+        } else {
+          mod.banned = true;
+          await dbSaveUserModeration(mod);
+          return res.status(403).json({ 
+            error: "3. Uyarı: Kural ihlali nedeniyle kalıcı olarak yasaklandınız!", 
+            warningCount: 3,
+            banned: true
+          });
+        }
+      }
+
+      // Record message time
+      lastMessageTimes[userId] = now;
+
+      // Save Message
+      const msg: ChatMessage = {
+        id: "msg_" + generateId(10),
+        userId,
+        username,
+        text: cleanText,
+        createdAt: now,
+      };
+
+      await dbSaveChatMessage(msg);
+      res.json(msg);
+    } catch (err) {
+      console.error("Post chat message error:", err);
+      res.status(500).json({ error: "Mesaj gönderilemedi." });
+    }
+  });
+
+  // Get Banned Users (Admin Only)
+  app.get("/api/admin/chat/bans", async (req, res) => {
+    try {
+      const bans = await dbGetBannedUsers();
+      res.json(bans);
+    } catch (err) {
+      console.error("Get banned users error:", err);
+      res.status(500).json({ error: "Yasaklı kullanıcı listesi alınamadı." });
+    }
+  });
+
+  // Unban user (Admin Only)
+  app.post("/api/admin/chat/unban", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: "Eksik kullanıcı ID'si." });
+      }
+
+      const mod = await dbGetUserModeration(userId, "Kullanıcı");
+      mod.banned = false;
+      mod.warnings = 0;
+      mod.mutedUntil = 0;
+      await dbSaveUserModeration(mod);
+
+      res.json({ success: true, message: "Kullanıcının engeli kaldırıldı." });
+    } catch (err) {
+      console.error("Unban user error:", err);
+      res.status(500).json({ error: "Kullanıcı engeli kaldırılamadı." });
+    }
+  });
+
+  // Ban user directly (Admin Only)
+  app.post("/api/admin/chat/ban", async (req, res) => {
+    try {
+      const { userId, username } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: "Eksik kullanıcı ID'si." });
+      }
+
+      const mod = await dbGetUserModeration(userId, username || "Kullanıcı");
+      mod.banned = true;
+      mod.warnings = 3;
+      await dbSaveUserModeration(mod);
+
+      res.json({ success: true, message: "Kullanıcı yasaklandı." });
+    } catch (err) {
+      console.error("Ban user error:", err);
+      res.status(500).json({ error: "Kullanıcı yasaklanamadı." });
+    }
+  });
+
+  // Get Slowmode
+  app.get("/api/chat/slowmode", async (req, res) => {
+    try {
+      const slowMode = await dbGetChatSlowMode();
+      res.json({ slowMode });
+    } catch (err) {
+      res.status(500).json({ error: "Yavaş mod bilgisi alınamadı." });
+    }
+  });
+
+  // Set Slowmode (Admin Only)
+  app.post("/api/admin/chat/slowmode", async (req, res) => {
+    try {
+      const { slowMode } = req.body;
+      await dbSetChatSlowMode(!!slowMode);
+      res.json({ success: true, slowMode: !!slowMode });
+    } catch (err) {
+      console.error("Set slowmode error:", err);
+      res.status(500).json({ error: "Yavaş mod ayarı güncellenemedi." });
+    }
+  });
+
   // --- SITE CONFIGURATION AND ADMIN ENDPOINTS ---
 
   // Get public config
@@ -1056,6 +1463,7 @@ async function startServer() {
         homepageSubtitle, 
         announcementEnabled, 
         announcementText,
+        announcements,
         statsOffset,
         usersOffset,
         todayOffset
@@ -1066,6 +1474,7 @@ async function startServer() {
         homepageSubtitle,
         announcementEnabled: !!announcementEnabled,
         announcementText,
+        announcements: announcements || (announcementText ? [announcementText] : []),
         statsOffset: statsOffset !== undefined ? Number(statsOffset) : undefined,
         usersOffset: usersOffset !== undefined ? Number(usersOffset) : undefined,
         todayOffset: todayOffset !== undefined ? Number(todayOffset) : undefined

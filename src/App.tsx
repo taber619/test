@@ -9,6 +9,7 @@ import AuthView from "./components/AuthView";
 import ImageDetailView from "./components/ImageDetailView";
 import UrlUploadView from "./components/UrlUploadView";
 import AdminView from "./components/AdminView";
+import MiniChat from "./components/MiniChat";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -332,16 +333,20 @@ export default function App() {
 
     return (
       <div id="homepage-main">
-        {siteConfig?.announcementEnabled && siteConfig.announcementText && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 py-3.5 px-4" id="site-announcement-banner">
-            <div className="max-w-4xl mx-auto flex items-center justify-center gap-2.5">
-              <span className="flex h-2 w-2 relative shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
-              </span>
-              <p className="text-xs font-bold text-slate-800 tracking-tight text-center">
-                {siteConfig.announcementText}
-              </p>
+        {siteConfig?.announcementEnabled && (siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean).length > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-900 dark:to-indigo-950/40 border-b border-blue-100 dark:border-indigo-950/80 py-3.5 px-4" id="site-announcement-banner">
+            <div className="max-w-4xl mx-auto flex flex-col gap-2">
+              {(siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean).map((ann, idx) => (
+                <div key={idx} className="flex items-center justify-center gap-2.5">
+                  <span className="flex h-2 w-2 relative shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 dark:bg-blue-400"></span>
+                  </span>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 tracking-tight text-center">
+                    {ann}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -496,6 +501,9 @@ export default function App() {
       <main className="flex-grow bg-slate-50/30">
         {renderContent()}
       </main>
+
+      {/* Floating Chat Panel */}
+      <MiniChat />
 
       {/* Bottom Footer block */}
       <Footer />

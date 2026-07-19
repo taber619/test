@@ -29,6 +29,7 @@ export interface SiteConfig {
   homepageSubtitle: string;
   announcementEnabled: boolean;
   announcementText: string;
+  announcements?: string[];
   statsOffset: number;
   usersOffset: number;
   todayOffset: number;

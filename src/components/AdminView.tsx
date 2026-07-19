@@ -13,7 +13,11 @@ import {
   RefreshCw,
   Eye,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  MessageCircle,
+  Plus,
+  X,
+  ShieldAlert
 } from "lucide-react";
 import { SiteConfig } from "../types";
 
@@ -46,7 +50,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [authError, setAuthError] = useState("");
   
   // Tab states
-  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images">("settings");
+  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat">("settings");
   
   // Loading & Action feedback
   const [isLoading, setIsLoading] = useState(false);
@@ -67,6 +71,14 @@ export default function AdminView({ onBack }: AdminViewProps) {
     usersOffset: 0,
     todayOffset: 0
   });
+
+  const [announcements, setAnnouncements] = useState<string[]>([]);
+  const [newAnnText, setNewAnnText] = useState("");
+
+  const [bannedUsers, setBannedUsers] = useState<any[]>([]);
+  const [chatSlowMode, setChatSlowMode] = useState(false);
+  const [directBanUserId, setDirectBanUserId] = useState("");
+  const [directBanUsername, setDirectBanUsername] = useState("");
   
   const [usersList, setUsersList] = useState<AdminUser[]>([]);
   const [imagesList, setImagesList] = useState<AdminImage[]>([]);
@@ -128,6 +140,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
       const data = await res.json();
       if (res.ok) {
         setSiteConfig(data);
+        setAnnouncements(data.announcements || (data.announcementText ? [data.announcementText] : []));
       }
     } catch (e) {
       console.error("Config fetch error", e);
@@ -158,10 +171,40 @@ export default function AdminView({ onBack }: AdminViewProps) {
     }
   };
 
+  const fetchBannedUsers = async () => {
+    try {
+      const res = await fetch("/api/admin/chat/bans");
+      const data = await res.json();
+      if (res.ok) {
+        setBannedUsers(data);
+      }
+    } catch (e) {
+      console.error("Fetch bans error", e);
+    }
+  };
+
+  const fetchChatSlowMode = async () => {
+    try {
+      const res = await fetch("/api/chat/slowmode");
+      const data = await res.json();
+      if (res.ok && data.slowMode !== undefined) {
+        setChatSlowMode(data.slowMode);
+      }
+    } catch (e) {
+      console.error("Fetch slowmode error", e);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       setIsLoading(true);
-      Promise.all([fetchConfig(), fetchUsers(), fetchImages()]).finally(() => {
+      Promise.all([
+        fetchConfig(),
+        fetchUsers(),
+        fetchImages(),
+        fetchBannedUsers(),
+        fetchChatSlowMode()
+      ]).finally(() => {
         setIsLoading(false);
       });
     }
@@ -175,7 +218,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
       const res = await fetch("/api/admin/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(siteConfig),
+        body: JSON.stringify({ ...siteConfig, announcements }),
       });
       if (res.ok) {
         setSaveSuccess(true);
@@ -203,6 +246,63 @@ export default function AdminView({ onBack }: AdminViewProps) {
         alert("Görsel başarıyla silindi.");
       } else {
         alert("Görsel silinemedi.");
+      }
+    } catch (e) {
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleToggleSlowMode = async (checked: boolean) => {
+    setChatSlowMode(checked);
+    try {
+      await fetch("/api/admin/chat/slowmode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slowMode: checked })
+      });
+    } catch (e) {
+      console.error("Toggle slowmode error", e);
+    }
+  };
+
+  const handleUnbanUser = async (userId: string) => {
+    try {
+      const res = await fetch("/api/admin/chat/unban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId })
+      });
+      if (res.ok) {
+        alert("Kullanıcının engeli başarıyla kaldırıldı.");
+        fetchBannedUsers();
+      } else {
+        alert("Engel kaldırılamadı.");
+      }
+    } catch (e) {
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleBanUserDirectly = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!directBanUserId.trim()) return;
+
+    try {
+      const res = await fetch("/api/admin/chat/ban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: directBanUserId.trim(),
+          username: directBanUsername.trim() || "Kullanıcı"
+        })
+      });
+      if (res.ok) {
+        alert("Kullanıcı başarıyla yasaklandı.");
+        setDirectBanUserId("");
+        setDirectBanUsername("");
+        fetchBannedUsers();
+      } else {
+        alert("Yasaklama işlemi başarısız.");
       }
     } catch (e) {
       alert("Hata oluştu.");
@@ -386,6 +486,18 @@ export default function AdminView({ onBack }: AdminViewProps) {
           <ImageIcon className="w-4 h-4" />
           Tüm Yüklenen Görseller ({imagesList.length})
         </button>
+
+        <button
+          onClick={() => setActiveSubTab("chat")}
+          className={`px-5 py-3 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeSubTab === "chat"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <MessageCircle className="w-4 h-4" />
+          Sohbet Moderasyonu
+        </button>
       </div>
 
       {/* Tab Contents */}
@@ -436,7 +548,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Yönetici Duyuru Panosu</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Ana sayfanın en üstünde gösterilen genel duyuru şeridini ayarlayın.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Sitenin en üstünde gösterilecek duyuruları ekleyin, sıralayın ve silin.</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input 
@@ -449,18 +561,61 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </label>
             </div>
 
-            <input
-              type="text"
-              value={siteConfig.announcementText}
-              onChange={(e) => setSiteConfig({ ...siteConfig, announcementText: e.target.value })}
-              placeholder="Duyuru mesajını girin..."
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/50 focus:bg-white"
-              disabled={!siteConfig.announcementEnabled}
-            />
+            {/* List of active announcements */}
+            {announcements.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Yayındaki Duyurular ({announcements.length})</span>
+                {announcements.map((ann, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 px-4 py-2.5 rounded-xl">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{ann}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = announcements.filter((_, i) => i !== idx);
+                        setAnnouncements(next);
+                        // sync first announcement for legacy views
+                        setSiteConfig(prev => ({ ...prev, announcementText: next[0] || "" }));
+                      }}
+                      className="text-slate-400 hover:text-red-500 p-1 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic mb-4">Şu an aktif duyuru bulunmuyor.</p>
+            )}
+
+            {/* Add new announcement form */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newAnnText}
+                onChange={(e) => setNewAnnText(e.target.value)}
+                placeholder="Yeni bir duyuru mesajı yazın..."
+                className="flex-grow px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/50 focus:bg-white"
+                disabled={!siteConfig.announcementEnabled}
+              />
+              <button
+                type="button"
+                disabled={!siteConfig.announcementEnabled || !newAnnText.trim()}
+                onClick={() => {
+                  const next = [...announcements, newAnnText.trim()];
+                  setAnnouncements(next);
+                  setNewAnnText("");
+                  setSiteConfig(prev => ({ ...prev, announcementText: next[0] || "" }));
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Ekle
+              </button>
+            </div>
 
             {/* Ready-made Announcement Templates shortcuts */}
-            <div className="mt-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1.5">Hazır Duyuru Taslakları (Tıkla ve Uygula)</span>
+            <div className="mt-4">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1.5">Hazır Duyuru Taslakları (Listeye Ekle)</span>
               <div className="flex flex-wrap gap-2">
                 {[
                   { label: "🔧 Bakım Duyurusu", text: "🔧 Duyuru: Sistemlerimizde yapılacak kısa süreli bakım çalışması nedeniyle bu gece 02:00-04:00 saatleri arasında kesintiler yaşanabilir." },
@@ -472,8 +627,13 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   <button
                     key={i}
                     type="button"
-                    onClick={() => setSiteConfig({ ...siteConfig, announcementText: tpl.text, announcementEnabled: true })}
-                    className="px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 text-slate-600 hover:text-blue-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                    disabled={!siteConfig.announcementEnabled}
+                    onClick={() => {
+                      const next = [...announcements, tpl.text];
+                      setAnnouncements(next);
+                      setSiteConfig(prev => ({ ...prev, announcementText: next[0] || "" }));
+                    }}
+                    className="px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 disabled:opacity-50 text-slate-600 hover:text-blue-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
                   >
                     {tpl.label}
                   </button>
@@ -734,6 +894,128 @@ export default function AdminView({ onBack }: AdminViewProps) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {activeSubTab === "chat" && (
+        <div className="space-y-6" id="admin-chat-moderation-panel">
+          {/* Chat Settings Box */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+              <MessageCircle className="w-5 h-5 text-slate-400" />
+              Sohbet Genel Ayarları
+            </h3>
+            <p className="text-xs text-slate-400 mb-6">Sohbet odasının akış hızını ve kurallarını buradan kontrol edebilirsiniz.</p>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-2xl">
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">3 Saniye Yavaş Mod (Slow Mode)</h4>
+                <p className="text-[10px] text-slate-400 mt-0.5">Kullanıcıların peş peşe hızlı mesaj atarak spamlama yapmasını engeller.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={chatSlowMode}
+                  onChange={(e) => handleToggleSlowMode(e.target.checked)}
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+
+          {/* Banned Users List Box */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+              <ShieldAlert className="w-5 h-5 text-slate-400" />
+              Yasaklı (Banlı) Kullanıcılar
+            </h3>
+            <p className="text-xs text-slate-400 mb-6">Küfür, hakaret veya kurallara aykırı davranıştan dolayı sistem tarafından veya manuel olarak yasaklanan kullanıcılar.</p>
+
+            {bannedUsers.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs">
+                Şu anda yasaklı herhangi bir kullanıcı bulunmuyor.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <th className="py-3 px-4">Kullanıcı Adı / Rumuz</th>
+                      <th className="py-3 px-4">Yasaklanma Sebebi / Uyarı Skoru</th>
+                      <th className="py-3 px-4">Kullanıcı ID</th>
+                      <th className="py-3 px-4 text-right">İşlem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {bannedUsers.map((b) => (
+                      <tr key={b.userId} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3.5 px-4 font-extrabold text-slate-800">
+                          {b.username}
+                        </td>
+                        <td className="py-3.5 px-4 text-rose-600 font-semibold flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          <span>Maksimum Uyarı Sınırı Aşıldı (3/3 Uyarı)</span>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">{b.userId}</td>
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            onClick={() => handleUnbanUser(b.userId)}
+                            className="px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Engeli Kaldır
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Manual Ban Form Box */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+              <Lock className="w-5 h-5 text-slate-400" />
+              Kullanıcıyı Doğrudan Yasakla
+            </h3>
+            <p className="text-xs text-slate-400 mb-6">Bir kullanıcının ID'sini yazarak onu sohbet odasından süresiz olarak yasaklayabilirsiniz.</p>
+
+            <form onSubmit={handleBanUserDirectly} className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Kullanıcı ID (Gerekli)</label>
+                <input
+                  type="text"
+                  required
+                  value={directBanUserId}
+                  onChange={(e) => setDirectBanUserId(e.target.value)}
+                  placeholder="Örn: guest_12345"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Rumuz / İsim (İsteğe Bağlı)</label>
+                <input
+                  type="text"
+                  value={directBanUsername}
+                  onChange={(e) => setDirectBanUsername(e.target.value)}
+                  placeholder="Örn: Ahmet"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm cursor-pointer"
+                >
+                  Doğrudan Yasakla (Ban)
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
