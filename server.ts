@@ -141,7 +141,12 @@ async function startServer() {
       };
     }
 
-    const fromAddress = config.from || `"İnanResim" <${config.user}>`;
+    let fromAddress = (config.from || "").trim();
+    if (!fromAddress) {
+      fromAddress = `"İnanResim" <${config.user}>`;
+    } else if (!fromAddress.includes("@") && !fromAddress.includes("<")) {
+      fromAddress = `"${fromAddress}" <${config.user}>`;
+    }
 
     const mailOptions = {
       from: fromAddress,
@@ -1932,7 +1937,12 @@ async function startServer() {
       });
 
       const targetEmail = testEmail || user;
-      const fromAddress = from || `"İnanResim SMTP Test" <${user}>`;
+      let fromAddress = (from || "").trim();
+      if (!fromAddress) {
+        fromAddress = `"İnanResim SMTP Test" <${user}>`;
+      } else if (!fromAddress.includes("@") && !fromAddress.includes("<")) {
+        fromAddress = `"${fromAddress}" <${user}>`;
+      }
 
       await testTransporter.sendMail({
         from: fromAddress,
