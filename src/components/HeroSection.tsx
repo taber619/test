@@ -12,6 +12,8 @@ interface HeroSectionProps {
   onSwitchToUrlUpload: () => void;
   isUploading: boolean;
   uploadProgress: number;
+  homepageTitle?: string;
+  homepageSubtitle?: string;
 }
 
 export default function HeroSection({
@@ -19,6 +21,8 @@ export default function HeroSection({
   onSwitchToUrlUpload,
   isUploading,
   uploadProgress,
+  homepageTitle = "Resimlerinizi Saniyeler İçinde Paylaşın",
+  homepageSubtitle = "Türkiye'nin en hızlı resim yükleme platformu.",
 }: HeroSectionProps) {
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -221,10 +225,10 @@ export default function HeroSection({
       {/* Title */}
       <div className="text-center mb-8">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">
-          Resimlerinizi Saniyeler İçinde Paylaşın
+          {homepageTitle}
         </h1>
         <p className="text-base sm:text-lg text-slate-500 font-medium">
-          Türkiye'nin en hızlı resim yükleme platformu.
+          {homepageSubtitle}
         </p>
       </div>
 

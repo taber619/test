@@ -80,8 +80,134 @@ async function startServer() {
     return chunks;
   }
 
+  // Site configuration interface
+  interface SiteConfig {
+    homepageTitle: string;
+    homepageSubtitle: string;
+    announcementEnabled: boolean;
+    announcementText: string;
+    statsOffset: number;
+    usersOffset: number;
+    todayOffset: number;
+  }
+
+  const defaultSiteConfig: SiteConfig = {
+    homepageTitle: "Hızlı ve Güvenilir Resim Paylaşımı",
+    homepageSubtitle: "Saniyeler içinde resim yükleyin, şifreleyin, paylaşın veya otomatik silinmesini sağlayın.",
+    announcementEnabled: true,
+    announcementText: "Yönetici Duyurusu: Yeni Hızlı Resim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz.",
+    statsOffset: 1385420,
+    usersOffset: 4210,
+    todayOffset: 342
+  };
+
+  let siteConfigState = { ...defaultSiteConfig };
+
+  async function dbGetConfig(): Promise<SiteConfig> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "configs", "site");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          return {
+            homepageTitle: data.homepageTitle ?? defaultSiteConfig.homepageTitle,
+            homepageSubtitle: data.homepageSubtitle ?? defaultSiteConfig.homepageSubtitle,
+            announcementEnabled: data.announcementEnabled ?? defaultSiteConfig.announcementEnabled,
+            announcementText: data.announcementText ?? defaultSiteConfig.announcementText,
+            statsOffset: data.statsOffset !== undefined ? Number(data.statsOffset) : defaultSiteConfig.statsOffset,
+            usersOffset: data.usersOffset !== undefined ? Number(data.usersOffset) : defaultSiteConfig.usersOffset,
+            todayOffset: data.todayOffset !== undefined ? Number(data.todayOffset) : defaultSiteConfig.todayOffset,
+          };
+        }
+      } catch (e) {
+        console.error("Firebase get config error:", e);
+      }
+    }
+    return siteConfigState;
+  }
+
+  async function dbSaveConfig(newConfig: Partial<SiteConfig>): Promise<SiteConfig> {
+    const current = await dbGetConfig();
+    const updated = { ...current, ...newConfig };
+    
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "configs", "site"), updated);
+      } catch (e) {
+        console.error("Firebase save config error:", e);
+      }
+    } else {
+      siteConfigState = updated;
+    }
+    return updated;
+  }
+
+  async function dbGetAllUsers(usersStore: Record<string, StoredUser>): Promise<any[]> {
+    if (useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const snap = await getDocs(usersRef);
+        return snap.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: data.id,
+            username: data.username,
+            email: data.email,
+            createdAt: data.createdAt,
+          };
+        });
+      } catch (e) {
+        console.error("Firebase get all users error:", e);
+      }
+    }
+    return Object.values(usersStore).map(u => ({
+      id: u.id,
+      username: u.username,
+      email: u.email,
+      createdAt: u.createdAt,
+    }));
+  }
+
+  async function dbGetAllImages(imagesStore: Record<string, StoredImage>): Promise<any[]> {
+    if (useFirebase && db) {
+      try {
+        const imagesRef = collection(db, "images");
+        const snap = await getDocs(imagesRef);
+        return snap.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: data.id,
+            name: data.name,
+            mimeType: data.mimeType,
+            size: data.size,
+            uploadedAt: data.uploadedAt,
+            deleteAfter: data.deleteAfter,
+            views: data.views || 0,
+            hasPassword: !!data.password,
+            userId: data.userId || null,
+          };
+        });
+      } catch (e) {
+        console.error("Firebase get all images error:", e);
+      }
+    }
+    return Object.values(imagesStore).map(img => ({
+      id: img.id,
+      name: img.name,
+      mimeType: img.mimeType,
+      size: img.size,
+      uploadedAt: img.uploadedAt,
+      deleteAfter: img.deleteAfter,
+      views: img.views,
+      hasPassword: !!img.password,
+      userId: img.userId || null,
+    }));
+  }
+
   // Database helper functions (abstracting Firestore / In-Memory logic)
   async function getStatsCount(imagesStore: Record<string, StoredImage>, usersStore: Record<string, StoredUser>) {
+    const config = await dbGetConfig();
     if (useFirebase && db) {
       try {
         const imagesRef = collection(db, "images");
@@ -91,9 +217,9 @@ async function startServer() {
           getDocs(usersRef)
         ]);
         return {
-          totalImages: imagesSnap.size + 1385420,
-          activeUsers: usersSnap.size + 4210,
-          uploadedToday: Math.min(imagesSnap.size + 342, 1200),
+          totalImages: imagesSnap.size + config.statsOffset,
+          activeUsers: usersSnap.size + config.usersOffset,
+          uploadedToday: Math.min(imagesSnap.size + config.todayOffset, 1200),
         };
       } catch (e) {
         console.error("Firebase stats error:", e);
@@ -101,9 +227,9 @@ async function startServer() {
     }
     const totalCount = Object.keys(imagesStore).length;
     return {
-      totalImages: totalCount + 1385420,
-      activeUsers: Object.keys(usersStore).length + 4210,
-      uploadedToday: Math.min(totalCount + 342, 1200),
+      totalImages: totalCount + config.statsOffset,
+      activeUsers: Object.keys(usersStore).length + config.usersOffset,
+      uploadedToday: Math.min(totalCount + config.todayOffset, 1200),
     };
   }
 
@@ -846,6 +972,87 @@ async function startServer() {
     } catch (err) {
       console.error("Get user uploads error:", err);
       res.status(500).json({ error: "Yüklemeler alınırken hata oluştu." });
+    }
+  });
+
+  // --- SITE CONFIGURATION AND ADMIN ENDPOINTS ---
+
+  // Get public config
+  app.get("/api/config", async (req, res) => {
+    try {
+      const config = await dbGetConfig();
+      res.json(config);
+    } catch (err) {
+      console.error("Get config error:", err);
+      res.status(500).json({ error: "Site ayarları yüklenemedi." });
+    }
+  });
+
+  // Update site config (Admin only)
+  app.post("/api/admin/config", async (req, res) => {
+    try {
+      const { 
+        homepageTitle, 
+        homepageSubtitle, 
+        announcementEnabled, 
+        announcementText,
+        statsOffset,
+        usersOffset,
+        todayOffset
+      } = req.body;
+
+      const updated = await dbSaveConfig({
+        homepageTitle,
+        homepageSubtitle,
+        announcementEnabled: !!announcementEnabled,
+        announcementText,
+        statsOffset: statsOffset !== undefined ? Number(statsOffset) : undefined,
+        usersOffset: usersOffset !== undefined ? Number(usersOffset) : undefined,
+        todayOffset: todayOffset !== undefined ? Number(todayOffset) : undefined
+      });
+
+      res.json({ success: true, config: updated });
+    } catch (err) {
+      console.error("Save config error:", err);
+      res.status(500).json({ error: "Site ayarları kaydedilirken hata oluştu." });
+    }
+  });
+
+  // Get all registered users (Admin only)
+  app.get("/api/admin/users", async (req, res) => {
+    try {
+      const allUsers = await dbGetAllUsers(users);
+      res.json(allUsers);
+    } catch (err) {
+      console.error("Admin get users error:", err);
+      res.status(500).json({ error: "Kullanıcı listesi alınamadı." });
+    }
+  });
+
+  // Get all uploaded images metadata (Admin only)
+  app.get("/api/admin/images", async (req, res) => {
+    try {
+      const allImages = await dbGetAllImages(images);
+      res.json(allImages);
+    } catch (err) {
+      console.error("Admin get images error:", err);
+      res.status(500).json({ error: "Görsel listesi alınamadı." });
+    }
+  });
+
+  // Admin delete image
+  app.delete("/api/admin/images/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const deleted = await dbDeleteImage(id, images);
+      if (deleted) {
+        res.json({ success: true, message: "Görsel yönetici tarafından silindi." });
+      } else {
+        res.status(404).json({ error: "Görsel bulunamadı." });
+      }
+    } catch (err) {
+      console.error("Admin delete image error:", err);
+      res.status(500).json({ error: "Görsel silinirken hata oluştu." });
     }
   });
 

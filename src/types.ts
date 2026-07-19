@@ -22,4 +22,14 @@ export interface ClientImage {
   markdownCode: string;
 }
 
-export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-detail";
+export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-detail" | "admin";
+
+export interface SiteConfig {
+  homepageTitle: string;
+  homepageSubtitle: string;
+  announcementEnabled: boolean;
+  announcementText: string;
+  statsOffset: number;
+  usersOffset: number;
+  todayOffset: number;
+}

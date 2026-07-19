@@ -41,6 +41,18 @@ export default function Navbar({ activeTab, setActiveTab, currentUser, onLogout 
         </button>
 
         <button
+          id="nav-btn-admin"
+          onClick={() => setActiveTab("admin")}
+          className={`pb-1 mt-0.5 border-b-2 transition-all duration-200 text-sm font-medium cursor-pointer ${
+            activeTab === "admin"
+              ? "text-blue-600 border-blue-600"
+              : "text-slate-500 border-transparent hover:text-slate-900"
+          }`}
+        >
+          Yönetici Paneli
+        </button>
+
+        <button
           id="nav-btn-api"
           onClick={() => alert("Hızlı Resim API çok yakında aktif olacaktır!")}
           className="text-slate-500 hover:text-slate-900 transition-colors cursor-pointer font-medium text-sm hidden sm:block"

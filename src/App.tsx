@@ -8,12 +8,30 @@ import GalleryView from "./components/GalleryView";
 import AuthView from "./components/AuthView";
 import ImageDetailView from "./components/ImageDetailView";
 import UrlUploadView from "./components/UrlUploadView";
-import { ActiveTab, ClientImage, ClientUser } from "./types";
-import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon } from "lucide-react";
+import AdminView from "./components/AdminView";
+import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
+import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
+
+  const fetchSiteConfig = async () => {
+    try {
+      const res = await fetch("/api/config");
+      if (res.ok) {
+        const data = await res.json();
+        setSiteConfig(data);
+      }
+    } catch (e) {
+      console.error("Failed to load site config:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchSiteConfig();
+  }, [activeTab]);
   
   // Upload states
   const [isUploading, setIsUploading] = useState(false);
@@ -244,6 +262,10 @@ export default function App() {
       return <AuthView onLoginSuccess={handleLoginSuccess} />;
     }
 
+    if (activeTab === "admin") {
+      return <AdminView onBack={navigateBack} />;
+    }
+
     // Default Home view
     if (uploadedImages.length > 0) {
       return (
@@ -258,12 +280,28 @@ export default function App() {
 
     return (
       <div id="homepage-main">
+        {siteConfig?.announcementEnabled && siteConfig.announcementText && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 py-3.5 px-4" id="site-announcement-banner">
+            <div className="max-w-4xl mx-auto flex items-center justify-center gap-2.5">
+              <span className="flex h-2 w-2 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+              </span>
+              <p className="text-xs font-bold text-slate-800 tracking-tight text-center">
+                {siteConfig.announcementText}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Upload Hero Section */}
         <HeroSection
           onUploadStart={handleLocalUpload}
           onSwitchToUrlUpload={() => setActiveTab("url-upload")}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
+          homepageTitle={siteConfig?.homepageTitle}
+          homepageSubtitle={siteConfig?.homepageSubtitle}
         />
 
         {/* Real-time stats */}
