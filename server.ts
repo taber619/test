@@ -51,6 +51,7 @@ async function startServer() {
   // In-memory data store (fallback if Firebase is not active)
   const images: Record<string, StoredImage> = {};
   const users: Record<string, StoredUser> = {};
+  const passwordResets: Record<string, { code: string; expiresAt: number }> = {};
 
   // Load Firebase configuration
   let db: any = null;
@@ -1274,6 +1275,141 @@ async function startServer() {
     res.json({
       success: true,
       user: { id: user.id, username: user.username, email: user.email },
+    });
+  });
+
+  // Forgot Password
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({ error: "Lütfen e-posta adresinizi girin." });
+      return;
+    }
+
+    const emailLower = email.toLowerCase();
+    let userExists = false;
+
+    // Check if user exists
+    if (useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("email", "==", emailLower));
+        const snap = await getDocs(q);
+        userExists = !snap.empty;
+      } catch (e) {
+        console.error("Firebase forgot password search user error:", e);
+      }
+    } else {
+      userExists = Object.values(users).some(u => u.email === emailLower);
+    }
+
+    if (!userExists) {
+      res.status(404).json({ error: "Bu e-posta adresine kayıtlı bir kullanıcı bulunamadı." });
+      return;
+    }
+
+    // Generate 6-digit random code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
+
+    // Store the reset request
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "password_resets", emailLower), {
+          email: emailLower,
+          code,
+          expiresAt,
+        });
+      } catch (e) {
+        console.error("Firebase save password reset error:", e);
+      }
+    } else {
+      // In memory fallback
+      passwordResets[emailLower] = { code, expiresAt };
+    }
+
+    console.log(`[PASSWORD RESET CODE] Email: ${emailLower}, Code: ${code}`);
+
+    res.json({
+      success: true,
+      message: "E-posta adresinize 6 haneli sıfırlama kodu başarıyla gönderildi.",
+      debugCode: code // Send back the code so the UI can show it in a simulation alert
+    });
+  });
+
+  // Reset Password
+  app.post("/api/auth/reset-password", async (req, res) => {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      res.status(400).json({ error: "Lütfen tüm alanları doldurun." });
+      return;
+    }
+
+    const emailLower = email.toLowerCase();
+    let validReset = false;
+
+    // Verify reset request
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "password_resets", emailLower);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.code === code && data.expiresAt > Date.now()) {
+            validReset = true;
+          }
+        }
+      } catch (e) {
+        console.error("Firebase check password reset error:", e);
+      }
+    } else {
+      const reset = passwordResets[emailLower];
+      if (reset && reset.code === code && reset.expiresAt > Date.now()) {
+        validReset = true;
+      }
+    }
+
+    if (!validReset) {
+      res.status(400).json({ error: "Geçersiz veya süresi dolmuş doğrulama kodu." });
+      return;
+    }
+
+    // Update password
+    let updateSuccess = false;
+    if (useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("email", "==", emailLower));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const userDoc = snap.docs[0];
+          await updateDoc(doc(db, "users", userDoc.id), { passwordHash: newPassword });
+          updateSuccess = true;
+          // Delete reset record
+          await deleteDoc(doc(db, "password_resets", emailLower));
+        }
+      } catch (e) {
+        console.error("Firebase update password error:", e);
+      }
+    } else {
+      const user = Object.values(users).find(u => u.email === emailLower);
+      if (user) {
+        user.passwordHash = newPassword;
+        updateSuccess = true;
+        delete passwordResets[emailLower];
+      }
+    }
+
+    if (!updateSuccess) {
+      res.status(500).json({ error: "Şifre güncellenirken bir hata oluştu." });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: "Şifreniz başarıyla güncellendi! Yeni şifrenizle giriş yapabilirsiniz."
     });
   });
 

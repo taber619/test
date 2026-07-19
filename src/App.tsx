@@ -386,7 +386,7 @@ export default function App() {
             return (
               <div className="max-w-5xl mx-auto px-4 pt-6" id="site-announcement-container">
                 <div 
-                  className="relative overflow-hidden bg-white/75 dark:bg-slate-900/70 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-4 shadow-lg shadow-slate-100/50 dark:shadow-none flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-300"
+                  className="relative overflow-hidden bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-4 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-300"
                   id="site-announcement-toast"
                 >
                   {/* Left accent color strip */}
@@ -403,7 +403,7 @@ export default function App() {
                     </span>
                     
                     {/* Sliding text wrapper */}
-                    <div className="min-w-0 flex-1 relative h-5 flex items-center overflow-hidden">
+                    <div className="min-w-0 flex-1 relative min-h-[24px] flex items-center overflow-hidden">
                       <AnimatePresence mode="wait">
                         <motion.p
                           key={currentAnnIdx}
@@ -411,7 +411,7 @@ export default function App() {
                           animate={{ y: 0, opacity: 1 }}
                           exit={{ y: -12, opacity: 0 }}
                           transition={{ duration: 0.28, ease: "easeOut" }}
-                          className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight leading-relaxed truncate"
+                          className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight leading-relaxed"
                         >
                           {currentText}
                         </motion.p>

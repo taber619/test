@@ -95,15 +95,6 @@ export default function Navbar({
           Ana Sayfa
         </button>
 
-        <button
-          id="nav-btn-api"
-          onClick={handleApiClick}
-          className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/60 hover:text-slate-900 dark:hover:text-slate-100 transition-all cursor-pointer flex items-center gap-1"
-        >
-          API
-          <span className="hidden sm:inline-block text-[9px] bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md font-black uppercase">YAKINDA</span>
-        </button>
-
         {/* Separator */}
         <div className="h-5 w-px bg-slate-200/80 dark:bg-slate-800 mx-1 sm:mx-2"></div>
 
