@@ -63,17 +63,44 @@ export default function App() {
     playThemeSound(nextTheme);
   };
 
+  // Live reload version checking states
+  const initialAppVersionRef = React.useRef<string | null>(null);
+  const [showUpdateToast, setShowUpdateToast] = useState(false);
+  const [updateCountdown, setUpdateCountdown] = useState(5);
+
   const fetchSiteConfig = async () => {
     try {
       const res = await fetch("/api/config");
       if (res.ok) {
         const data = await res.json();
         setSiteConfig(data);
+
+        // Check if there is a new server-side boot ID or update
+        if (data.appVersion) {
+          if (!initialAppVersionRef.current) {
+            initialAppVersionRef.current = data.appVersion;
+          } else if (initialAppVersionRef.current !== data.appVersion) {
+            setShowUpdateToast(true);
+          }
+        }
       }
     } catch (e) {
       console.error("Failed to load site config:", e);
     }
   };
+
+  // Automatic reload countdown trigger
+  useEffect(() => {
+    if (!showUpdateToast) return;
+    if (updateCountdown <= 0) {
+      window.location.reload();
+      return;
+    }
+    const timer = setTimeout(() => {
+      setUpdateCountdown((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [showUpdateToast, updateCountdown]);
 
   useEffect(() => {
     fetchSiteConfig();
@@ -85,6 +112,23 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [activeTab]);
+
+  // Announcement Slider & View States
+  const [currentAnnIdx, setCurrentAnnIdx] = useState(0);
+  const [isAnnDismissed, setIsAnnDismissed] = useState(false);
+  const [showAllAnnouncements, setShowAllAnnouncements] = useState(false);
+
+  useEffect(() => {
+    if (!siteConfig || !siteConfig.announcementEnabled) return;
+    const list = (siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean);
+    if (list.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCurrentAnnIdx((prev) => (prev + 1) % list.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [siteConfig]);
   
   // Upload states
   const [isUploading, setIsUploading] = useState(false);
@@ -333,20 +377,137 @@ export default function App() {
 
     return (
       <div id="homepage-main">
-        {siteConfig?.announcementEnabled && (siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean).length > 0 && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-900 dark:to-indigo-950/40 border-b border-blue-100 dark:border-indigo-950/80 py-3.5 px-4" id="site-announcement-banner">
-            <div className="max-w-4xl mx-auto flex flex-col gap-2">
-              {(siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean).map((ann, idx) => (
-                <div key={idx} className="flex items-center justify-center gap-2.5">
-                  <span className="flex h-2 w-2 relative shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 dark:bg-blue-400"></span>
-                  </span>
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 tracking-tight text-center">
-                    {ann}
-                  </p>
+        {siteConfig?.announcementEnabled && !isAnnDismissed && (
+          (() => {
+            const list = (siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean);
+            if (list.length === 0) return null;
+            const currentText = list[currentAnnIdx] || "";
+            return (
+              <div 
+                className="relative bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-purple-600/10 border-b border-indigo-100/50 dark:border-indigo-950/60 px-4 py-3 shadow-sm"
+                id="site-announcement-banner"
+              >
+                <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+                  {/* Left Side: Dynamic Glowing Badge & Text */}
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className="flex-none px-2.5 py-1 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+                      </span>
+                      DUYURU
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 tracking-tight leading-relaxed">
+                        {currentText}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right Side: Navigation controls, View All, and Dismiss */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    {list.length > 1 && (
+                      <div className="flex items-center gap-1 bg-white/70 dark:bg-slate-900/40 p-1 rounded-lg border border-slate-200/50 dark:border-slate-800/50 text-[10px] font-extrabold text-slate-500">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentAnnIdx((prev) => (prev - 1 + list.length) % list.length)}
+                          className="hover:bg-slate-200 dark:hover:bg-slate-800 p-1 rounded transition-colors cursor-pointer"
+                          title="Önceki"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        <span className="px-1 text-[9px]">{currentAnnIdx + 1} / {list.length}</span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentAnnIdx((prev) => (prev + 1) % list.length)}
+                          className="hover:bg-slate-200 dark:hover:bg-slate-800 p-1 rounded transition-colors cursor-pointer"
+                          title="Sonraki"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAnnouncements(true)}
+                      className="hidden sm:inline-block text-[10px] font-black text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline shrink-0 cursor-pointer"
+                    >
+                      Hepsini Gör ({list.length})
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsAnnDismissed(true)}
+                      className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 p-1 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer"
+                      title="Kapat"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              ))}
+              </div>
+            );
+          })()
+        )}
+
+        {/* Modal for viewing all announcements */}
+        {showAllAnnouncements && siteConfig && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl">
+              <button
+                type="button"
+                onClick={() => setShowAllAnnouncements(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-950/40 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wide">Yayınlanan Tüm Duyurular</h3>
+                  <p className="text-[11px] text-slate-400">Yöneticiler tarafından yayınlanan tüm aktif duyurular ve sistem bilgilendirmeleri.</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2">
+                {(siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean).map((ann, idx) => (
+                  <div 
+                    key={idx}
+                    className="p-4 bg-slate-50 dark:bg-slate-850/30 border border-slate-100 dark:border-slate-800/60 rounded-2xl flex items-start gap-3.5 hover:border-indigo-100/60 dark:hover:border-indigo-950/60 transition-colors"
+                  >
+                    <span className="flex-none w-5 h-5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg flex items-center justify-center font-bold text-xs mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-relaxed">
+                      {ann}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowAllAnnouncements(false)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  Kapat
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -504,6 +665,53 @@ export default function App() {
 
       {/* Floating Chat Panel */}
       <MiniChat />
+
+      {/* Live Update Toast */}
+      {showUpdateToast && (
+        <div className="fixed bottom-6 left-6 right-6 sm:left-auto sm:right-6 sm:w-96 z-[9999] bg-slate-900 dark:bg-slate-900 border border-slate-800 text-white rounded-2xl shadow-2xl p-5 animate-bounce-short">
+          <div className="flex items-start gap-3.5">
+            <div className="w-9 h-9 bg-indigo-600/20 text-indigo-400 rounded-xl flex items-center justify-center shrink-0 animate-pulse">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.2" />
+              </svg>
+            </div>
+            <div className="flex-grow">
+              <h4 className="text-xs font-black uppercase tracking-wider text-indigo-300">Sistem Güncellendi! 🚀</h4>
+              <p className="text-[11px] text-slate-300 font-semibold mt-1 leading-relaxed">
+                Sitenin yeni bir sürümü yayınlandı. Yeni özellikler ve düzeltmeleri görmek için sayfa yenileniyor...
+              </p>
+              
+              <div className="flex items-center justify-between gap-4 mt-3.5 pt-3 border-t border-slate-800">
+                <span className="text-[10px] text-slate-400 font-bold">
+                  Kalan süre: <span className="text-white font-black">{updateCountdown} sn</span>
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUpdateToast(false);
+                      // Set current config version as acknowledged so we don't prompt again until next server reboot
+                      if (siteConfig?.appVersion) {
+                        initialAppVersionRef.current = siteConfig.appVersion;
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer"
+                  >
+                    Ertele
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black transition-all shadow-sm cursor-pointer"
+                  >
+                    Şimdi Yenile
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Footer block */}
       <Footer />

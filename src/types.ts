@@ -33,4 +33,5 @@ export interface SiteConfig {
   statsOffset: number;
   usersOffset: number;
   todayOffset: number;
+  appVersion?: string;
 }

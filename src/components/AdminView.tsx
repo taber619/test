@@ -76,6 +76,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [newAnnText, setNewAnnText] = useState("");
 
   const [bannedUsers, setBannedUsers] = useState<any[]>([]);
+  const [moderationLogs, setModerationLogs] = useState<any[]>([]);
   const [chatSlowMode, setChatSlowMode] = useState(false);
   const [directBanUserId, setDirectBanUserId] = useState("");
   const [directBanUsername, setDirectBanUsername] = useState("");
@@ -195,6 +196,18 @@ export default function AdminView({ onBack }: AdminViewProps) {
     }
   };
 
+  const fetchModerationLogs = async () => {
+    try {
+      const res = await fetch("/api/admin/chat/logs");
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        setModerationLogs(data);
+      }
+    } catch (e) {
+      console.error("Fetch moderation logs error", e);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       setIsLoading(true);
@@ -203,7 +216,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
         fetchUsers(),
         fetchImages(),
         fetchBannedUsers(),
-        fetchChatSlowMode()
+        fetchChatSlowMode(),
+        fetchModerationLogs()
       ]).finally(() => {
         setIsLoading(false);
       });
@@ -260,6 +274,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slowMode: checked })
       });
+      fetchModerationLogs();
     } catch (e) {
       console.error("Toggle slowmode error", e);
     }
@@ -275,6 +290,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
       if (res.ok) {
         alert("Kullanıcının engeli başarıyla kaldırıldı.");
         fetchBannedUsers();
+        fetchModerationLogs();
       } else {
         alert("Engel kaldırılamadı.");
       }
@@ -301,8 +317,28 @@ export default function AdminView({ onBack }: AdminViewProps) {
         setDirectBanUserId("");
         setDirectBanUsername("");
         fetchBannedUsers();
+        fetchModerationLogs();
       } else {
         alert("Yasaklama işlemi başarısız.");
+      }
+    } catch (e) {
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (!confirm("Sohbet odasındaki TÜM mesajları silmek ve sıfırlamak istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/chat/clear", {
+        method: "POST"
+      });
+      if (res.ok) {
+        alert("Sohbet odası mesajları başarıyla temizlendi.");
+        fetchModerationLogs();
+      } else {
+        alert("Sohbet odası temizlenemedi.");
       }
     } catch (e) {
       alert("Hata oluştu.");
@@ -922,6 +958,25 @@ export default function AdminView({ onBack }: AdminViewProps) {
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
+
+            {/* Clear Chat Panel row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-rose-50/40 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-950/20 rounded-2xl mt-4 gap-4">
+              <div>
+                <h4 className="text-xs font-bold text-rose-800 dark:text-rose-400 flex items-center gap-1.5">
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                  Sohbet Mesajlarını Temizle / Sıfırla
+                </h4>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Sohbet odasındaki tüm mesaj geçmişini kalıcı olarak siler ve sıfırlar.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearChat}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Tüm Mesajları Toplu Sil
+              </button>
+            </div>
           </div>
 
           {/* Banned Users List Box */}
@@ -1015,6 +1070,90 @@ export default function AdminView({ onBack }: AdminViewProps) {
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Moderation Log History Box */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-slate-400" />
+                  Sohbet Moderasyon Günlükleri (Loglar)
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">Sohbet odasındaki tüm uyarı, ceza, engelleme ve temizlik işlemlerinin kronolojik kaydı.</p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchModerationLogs}
+                className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Güncelle
+              </button>
+            </div>
+
+            {moderationLogs.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs">
+                Sistemde kayıtlı henüz herhangi bir moderasyon işlemi günlüğü bulunmuyor.
+              </div>
+            ) : (
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto border border-slate-100 rounded-2xl">
+                <table className="w-full text-left border-collapse">
+                  <thead className="sticky top-0 bg-slate-50 z-10">
+                    <tr className="border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <th className="py-3 px-4">Tarih</th>
+                      <th className="py-3 px-4">İşlem / Etiket</th>
+                      <th className="py-3 px-4">Kullanıcı (ID)</th>
+                      <th className="py-3 px-4">Detaylar</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {moderationLogs.map((log: any) => {
+                      const badge = (() => {
+                        switch (log.action) {
+                          case "WARNING_1":
+                            return <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 text-[9px] font-extrabold border border-amber-100/50">1. UYARI</span>;
+                          case "MUTE":
+                            return <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400 text-[9px] font-extrabold border border-orange-100/50">SUSTURMA</span>;
+                          case "BAN_AUTO":
+                            return <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 text-[9px] font-extrabold border border-rose-100/50">OTOMATİK BAN</span>;
+                          case "BAN_MANUAL":
+                            return <span className="px-2 py-0.5 rounded bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400 text-[9px] font-extrabold border border-red-100/50">MANUEL BAN</span>;
+                          case "UNBAN":
+                            return <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 text-[9px] font-extrabold border border-emerald-100/50">YASAK KALKTI</span>;
+                          case "CHAT_CLEAR":
+                            return <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-400 text-[9px] font-extrabold border border-purple-100/50">SOHBET SİLİNDİ</span>;
+                          case "SLOWMODE_ON":
+                            return <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 text-[9px] font-extrabold border border-blue-100/50">SLOWMODE AÇIK</span>;
+                          case "SLOWMODE_OFF":
+                            return <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-700 dark:bg-slate-950/20 dark:text-slate-400 text-[9px] font-extrabold border border-slate-100/50">SLOWMODE KAPALI</span>;
+                          default:
+                            return <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-700 dark:bg-slate-950/20 dark:text-slate-400 text-[9px] font-extrabold border border-slate-100/50">{log.action}</span>;
+                        }
+                      })();
+
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 px-4 font-medium text-slate-400 whitespace-nowrap text-[11px]">
+                            {formatDate(log.createdAt)}
+                          </td>
+                          <td className="py-3 px-4 shrink-0">
+                            {badge}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="font-extrabold text-slate-800 dark:text-slate-200 mr-1.5">{log.username}</span>
+                            <span className="font-mono text-[9px] text-slate-400">({log.userId})</span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-medium">
+                            {log.details}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

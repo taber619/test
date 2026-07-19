@@ -41,6 +41,8 @@ interface StoredUser {
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
+  
+  const SERVER_BOOT_TIME = Date.now().toString() + "_" + Math.random().toString(36).substring(2, 9);
 
   // Enable large file uploads (Hızlı Resim max 20MB per file, max 10 files)
   app.use(express.json({ limit: "60mb" }));
@@ -108,11 +110,21 @@ async function startServer() {
     banned: boolean;
   }
 
+  interface ModerationLog {
+    id: string;
+    userId: string;
+    username: string;
+    action: string;
+    details: string;
+    createdAt: number;
+  }
+
   const activeSessions: Record<string, number> = {};
   const lastMessageTimes: Record<string, number> = {};
   
   const inMemoryChatMessages: ChatMessage[] = [];
   const inMemoryModeration: Record<string, UserModeration> = {};
+  const inMemoryModerationLogs: ModerationLog[] = [];
   let inMemoryChatSlowMode = false;
 
   const defaultSiteConfig: SiteConfig = {
@@ -303,6 +315,60 @@ async function startServer() {
       }
     }
     return Object.values(inMemoryModeration).filter(u => u.banned);
+  }
+
+  async function dbGetModerationLogs(): Promise<ModerationLog[]> {
+    if (useFirebase && db) {
+      try {
+        const logsRef = collection(db, "moderation_logs");
+        const snap = await getDocs(logsRef);
+        const logs = snap.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: data.id,
+            userId: data.userId,
+            username: data.username,
+            action: data.action,
+            details: data.details,
+            createdAt: data.createdAt,
+          };
+        });
+        return logs.sort((a, b) => b.createdAt - a.createdAt);
+      } catch (e) {
+        console.error("Firebase get moderation logs error:", e);
+      }
+    }
+    return [...inMemoryModerationLogs].sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async function dbSaveModerationLog(log: ModerationLog): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "moderation_logs", log.id), log);
+      } catch (e) {
+        console.error("Firebase save moderation log error:", e);
+      }
+    } else {
+      inMemoryModerationLogs.push(log);
+      if (inMemoryModerationLogs.length > 200) {
+        inMemoryModerationLogs.shift();
+      }
+    }
+  }
+
+  async function dbClearChatMessages(): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        const chatRef = collection(db, "chat_messages");
+        const snap = await getDocs(chatRef);
+        const promises = snap.docs.map(docSnap => deleteDoc(docSnap.ref));
+        await Promise.all(promises);
+      } catch (e) {
+        console.error("Firebase clear chat messages error:", e);
+      }
+    } else {
+      inMemoryChatMessages.length = 0;
+    }
   }
 
   let adminPasswordState = "admin";
@@ -1245,6 +1311,18 @@ async function startServer() {
     return badWords.some(word => normalized.includes(word));
   }
 
+  async function logModAction(userId: string, username: string, action: string, details: string) {
+    const log: ModerationLog = {
+      id: "log_" + generateId(10),
+      userId,
+      username,
+      action,
+      details,
+      createdAt: Date.now(),
+    };
+    await dbSaveModerationLog(log);
+  }
+
   // Get messages
   app.get("/api/chat/messages", async (req, res) => {
     try {
@@ -1295,6 +1373,7 @@ async function startServer() {
 
         if (newWarnings === 1) {
           await dbSaveUserModeration(mod);
+          await logModAction(userId, username, "WARNING_1", `1. Uyarı: Küfürlü kelime filtresine takıldı. Mesaj: "${cleanText}"`);
           return res.status(400).json({ 
             error: "1. Uyarı: Lütfen küfürlü kelimeler kullanmayın!", 
             warningCount: 1 
@@ -1302,6 +1381,7 @@ async function startServer() {
         } else if (newWarnings === 2) {
           mod.mutedUntil = now + 60 * 1000; // Mute for 1 minute
           await dbSaveUserModeration(mod);
+          await logModAction(userId, username, "MUTE", `2. Uyarı: Küfürlü kelime filtresine takıldı ve 1 dakika susturuldu. Mesaj: "${cleanText}"`);
           return res.status(400).json({ 
             error: "2. Uyarı: Küfürlü kelimeler nedeniyle 1 dakika susturuldunuz!", 
             warningCount: 2 
@@ -1309,6 +1389,7 @@ async function startServer() {
         } else {
           mod.banned = true;
           await dbSaveUserModeration(mod);
+          await logModAction(userId, username, "BAN_AUTO", `3. Uyarı: Küfürlü kelime filtresine takıldı ve otomatik olarak yasaklandı. Mesaj: "${cleanText}"`);
           return res.status(403).json({ 
             error: "3. Uyarı: Kural ihlali nedeniyle kalıcı olarak yasaklandınız!", 
             warningCount: 3,
@@ -1362,6 +1443,8 @@ async function startServer() {
       mod.mutedUntil = 0;
       await dbSaveUserModeration(mod);
 
+      await logModAction(userId, mod.username, "UNBAN", "Yönetici tarafından sohbet yasağı kaldırıldı.");
+
       res.json({ success: true, message: "Kullanıcının engeli kaldırıldı." });
     } catch (err) {
       console.error("Unban user error:", err);
@@ -1381,6 +1464,8 @@ async function startServer() {
       mod.banned = true;
       mod.warnings = 3;
       await dbSaveUserModeration(mod);
+
+      await logModAction(userId, mod.username, "BAN_MANUAL", "Yönetici tarafından doğrudan kalıcı olarak yasaklandı.");
 
       res.json({ success: true, message: "Kullanıcı yasaklandı." });
     } catch (err) {
@@ -1404,10 +1489,36 @@ async function startServer() {
     try {
       const { slowMode } = req.body;
       await dbSetChatSlowMode(!!slowMode);
+
+      await logModAction("admin", "Yönetici", slowMode ? "SLOWMODE_ON" : "SLOWMODE_OFF", `Yavaş mod (slow mode) ${slowMode ? "aktif" : "pasif"} duruma getirildi.`);
+
       res.json({ success: true, slowMode: !!slowMode });
     } catch (err) {
       console.error("Set slowmode error:", err);
       res.status(500).json({ error: "Yavaş mod ayarı güncellenemedi." });
+    }
+  });
+
+  // Clear Chat Messages (Admin Only)
+  app.post("/api/admin/chat/clear", async (req, res) => {
+    try {
+      await dbClearChatMessages();
+      await logModAction("admin", "Yönetici", "CHAT_CLEAR", "Tüm sohbet odası mesajları toplu olarak silindi/sıfırlandı.");
+      res.json({ success: true, message: "Tüm sohbet mesajları silindi." });
+    } catch (err) {
+      console.error("Clear chat error:", err);
+      res.status(500).json({ error: "Sohbet temizlenirken bir hata oluştu." });
+    }
+  });
+
+  // Get Moderation Logs (Admin Only)
+  app.get("/api/admin/chat/logs", async (req, res) => {
+    try {
+      const logs = await dbGetModerationLogs();
+      res.json(logs);
+    } catch (err) {
+      console.error("Get logs error:", err);
+      res.status(500).json({ error: "Moderasyon günlükleri alınamadı." });
     }
   });
 
@@ -1417,7 +1528,10 @@ async function startServer() {
   app.get("/api/config", async (req, res) => {
     try {
       const config = await dbGetConfig();
-      res.json(config);
+      res.json({
+        ...config,
+        appVersion: SERVER_BOOT_TIME
+      });
     } catch (err) {
       console.error("Get config error:", err);
       res.status(500).json({ error: "Site ayarları yüklenemedi." });
