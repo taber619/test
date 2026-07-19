@@ -1,6 +1,6 @@
 {
-  "name": "Hızlı Resim",
-  "description": "Türkiye'nin en hızlı resim yükleme platformu Hızlı Resim'in birebir klonu. Drag & drop, URL'den yükleme, clipboard yapıştırma, şifre koruması, otomatik silinme süreleri ve paylaşım linkleri içerir.",
+  "name": "İnanResim",
+  "description": "Türkiye'nin en hızlı resim yükleme platformu İnanResim'in birebir klonu. Drag & drop, URL'den yükleme, clipboard yapıştırma, şifre koruması, otomatik silinme süreleri ve paylaşım linkleri içerir.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

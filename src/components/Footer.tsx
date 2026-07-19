@@ -21,11 +21,11 @@ export default function Footer() {
       <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
         <a href="#privacy" onClick={showPrivacy} className="hover:text-blue-600 transition-colors">Gizlilik Politikası</a>
         <a href="#rules" onClick={showTerms} className="hover:text-blue-600 transition-colors">Kullanım Şartları</a>
-        <a href="mailto:destek@hizliresim.com" className="hover:text-blue-600 transition-colors">İletişim</a>
+        <a href="mailto:destek@inanresim.com" className="hover:text-blue-600 transition-colors">İletişim</a>
         <a href="#api-doc" onClick={showApiDocs} className="hover:text-blue-600 transition-colors">API Dokümantasyonu</a>
       </div>
       <div className="text-center sm:text-right">
-        © 2026 <span className="font-bold text-slate-700">Hızlı Resim</span>. Tüm hakları saklıdır.
+        © 2026 <span className="font-bold text-slate-700">İnanResim</span>. Tüm hakları saklıdır.
       </div>
     </footer>
   );

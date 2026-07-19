@@ -51,6 +51,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
   // Loading & Action feedback
   const [isLoading, setIsLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // New admin password variables
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState("");
   
   // Data states
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({
@@ -70,14 +75,50 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [userSearch, setUserSearch] = useState("");
   const [imageSearch, setImageSearch] = useState("");
 
-  // Authenticate Admin with simple PIN (default is "admin")
-  const handleAuth = (e: React.FormEvent) => {
+  // Authenticate Admin dynamically
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "admin" || password === "1234") {
-      setIsAuthenticated(true);
-      setAuthError("");
-    } else {
-      setAuthError("Geçersiz yönetici şifresi! (İpucu: 'admin' deneyin)");
+    try {
+      const res = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsAuthenticated(true);
+        setAuthError("");
+      } else {
+        setAuthError(data.error || "Geçersiz yönetici şifresi! (Örn: 'admin' deneyin)");
+      }
+    } catch (err) {
+      setAuthError("Sunucu bağlantısı sırasında hata oluştu.");
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError("");
+    setChangePasswordSuccess(false);
+    if (newAdminPassword.trim().length < 4) {
+      setChangePasswordError("Şifre en az 4 karakter olmalıdır.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: newAdminPassword.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setChangePasswordSuccess(true);
+        setNewAdminPassword("");
+      } else {
+        setChangePasswordError(data.error || "Şifre güncellenemedi.");
+      }
+    } catch (err) {
+      setChangePasswordError("Bağlantı hatası oluştu.");
     }
   };
 
@@ -202,7 +243,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
         
         <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Yönetici Paneli Girişi</h2>
         <p className="text-xs text-slate-400 mt-1.5 mb-8">
-          Hızlı Resim sistem yapılandırmasını düzenlemek ve kullanıcıları yönetmek için şifrenizi girin.
+          İnanResim sistem yapılandırmasını düzenlemek ve kullanıcıları yönetmek için şifrenizi girin.
         </p>
 
         <form onSubmit={handleAuth} className="space-y-4" id="admin-login-form">
@@ -416,6 +457,29 @@ export default function AdminView({ onBack }: AdminViewProps) {
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/50 focus:bg-white"
               disabled={!siteConfig.announcementEnabled}
             />
+
+            {/* Ready-made Announcement Templates shortcuts */}
+            <div className="mt-3">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1.5">Hazır Duyuru Taslakları (Tıkla ve Uygula)</span>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "🔧 Bakım Duyurusu", text: "🔧 Duyuru: Sistemlerimizde yapılacak kısa süreli bakım çalışması nedeniyle bu gece 02:00-04:00 saatleri arasında kesintiler yaşanabilir." },
+                  { label: "🌙 Gece Modu", text: "🌙 Yeni Özellik: Sitemize ses efektli Gece/Gündüz modu eklendi! Sağ üstteki butondan hemen deneyebilirsiniz." },
+                  { label: "🔒 Güvenlik", text: "🔒 Bilgilendirme: Hassas veya kişisel görselleriniz için şifre koruma ve otomatik silinme özelliklerimizi ücretsiz kullanabilirsiniz." },
+                  { label: "🚀 Limitler", text: "🚀 Bilgi: İnanResim üzerinde üye olmadan tek seferde maksimum 20MB dosya boyutuna kadar resim yükleyebilirsiniz!" },
+                  { label: "🎉 Bayram", text: "🎉 İnanResim ailesi olarak tüm kullanıcılarımızın bayramını ve tatilini en içten dileklerimizle kutlarız!" }
+                ].map((tpl, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setSiteConfig({ ...siteConfig, announcementText: tpl.text, announcementEnabled: true })}
+                    className="px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 text-slate-600 hover:text-blue-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                  >
+                    {tpl.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="border-t border-slate-100 pt-6">
@@ -479,6 +543,49 @@ export default function AdminView({ onBack }: AdminViewProps) {
             </button>
           </div>
         </form>
+      )}
+
+      {activeSubTab === "settings" && (
+        <div className="mt-6 bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8" id="admin-password-card">
+          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <Lock className="w-4 h-4 text-slate-400" />
+            Yönetici Şifresini Güncelle
+          </h3>
+          <p className="text-xs text-slate-400 mb-4">Yönetici panelinin giriş şifresini güvenli bir şifreyle güncelleyin.</p>
+          
+          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Yeni Yönetici Şifresi</label>
+              <input
+                type="password"
+                value={newAdminPassword}
+                onChange={(e) => setNewAdminPassword(e.target.value)}
+                placeholder="Yeni şifrenizi girin (Min 4 karakter)"
+                className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                required
+              />
+            </div>
+
+            {changePasswordError && (
+              <p className="text-xs text-red-500 font-semibold">{changePasswordError}</p>
+            )}
+
+            {changePasswordSuccess && (
+              <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Şifre başarıyla güncellendi! Yeni girişlerinizde bu şifre geçerli olacaktır.
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              Şifreyi Değiştir
+            </button>
+          </form>
+        </div>
       )}
 
       {activeSubTab === "users" && (

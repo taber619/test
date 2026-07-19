@@ -1,5 +1,5 @@
 import React from "react";
-import { Image as ImageIcon, LogIn, LogOut, LayoutGrid, Upload, HelpCircle, User } from "lucide-react";
+import { Image as ImageIcon, LogIn, LogOut, LayoutGrid, Upload, HelpCircle, User, Sun, Moon } from "lucide-react";
 import { ActiveTab, ClientUser } from "../types";
 
 interface NavbarProps {
@@ -7,9 +7,11 @@ interface NavbarProps {
   setActiveTab: (tab: ActiveTab) => void;
   currentUser: ClientUser | null;
   onLogout: () => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }
 
-export default function Navbar({ activeTab, setActiveTab, currentUser, onLogout }: NavbarProps) {
+export default function Navbar({ activeTab, setActiveTab, currentUser, onLogout, theme, onToggleTheme }: NavbarProps) {
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 px-6 lg:px-12 h-16 flex items-center justify-between" id="main-header">
       {/* Logo */}
@@ -22,7 +24,7 @@ export default function Navbar({ activeTab, setActiveTab, currentUser, onLogout 
           <div className="w-4 h-4 bg-white rounded-sm rotate-45"></div>
         </div>
         <span className="text-xl font-extrabold tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors">
-          hizliresim<span className="text-blue-600">.com</span>
+          inanresim<span className="text-blue-600">.com</span>
         </span>
       </div>
 
@@ -54,10 +56,24 @@ export default function Navbar({ activeTab, setActiveTab, currentUser, onLogout 
 
         <button
           id="nav-btn-api"
-          onClick={() => alert("Hızlı Resim API çok yakında aktif olacaktır!")}
+          onClick={() => alert("İnanResim API çok yakında aktif olacaktır!")}
           className="text-slate-500 hover:text-slate-900 transition-colors cursor-pointer font-medium text-sm hidden sm:block"
         >
           API
+        </button>
+
+        {/* Theme Toggle Button */}
+        <button
+          id="nav-btn-theme-toggle"
+          onClick={onToggleTheme}
+          title={theme === "light" ? "Gece Moduna Geç" : "Gündüz Moduna Geç"}
+          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-full transition-all cursor-pointer flex items-center justify-center"
+        >
+          {theme === "light" ? (
+            <Moon className="w-5 h-5 text-slate-600" />
+          ) : (
+            <Sun className="w-5 h-5 text-amber-500" />
+          )}
         </button>
 
         {currentUser ? (

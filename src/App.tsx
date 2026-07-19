@@ -16,6 +16,51 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">(
+    () => (localStorage.getItem("theme") as "light" | "dark") || "light"
+  );
+
+  const playThemeSound = (currentTheme: "light" | "dark") => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      if (currentTheme === "dark") {
+        // Soft descending warm nighttime sweep
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(320, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.35);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      } else {
+        // Bright ascending cheerful morning beep
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(180, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.25);
+      }
+    } catch (err) {
+      console.warn("Could not play theme sound", err);
+    }
+  };
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+    localStorage.setItem("theme", nextTheme);
+    playThemeSound(nextTheme);
+  };
 
   const fetchSiteConfig = async () => {
     try {
@@ -31,6 +76,13 @@ export default function App() {
 
   useEffect(() => {
     fetchSiteConfig();
+    
+    // Set up rapid background polling to instantly reflect any admin modifications
+    const interval = setInterval(() => {
+      fetchSiteConfig();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [activeTab]);
   
   // Upload states
@@ -315,7 +367,7 @@ export default function App() {
                 Sınırları Olmayan Paylaşım Deneyimi
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-3 tracking-tight">
-                Neden Hızlı Resim'i Tercih Etmelisiniz?
+                Neden İnanResim'i Tercih Etmelisiniz?
               </h2>
             </div>
 
@@ -429,13 +481,15 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col font-sans" id="app-root-container">
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${theme === "dark" ? "dark bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`} id="app-root-container">
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
         onLogout={handleLogout}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Container Workspace */}

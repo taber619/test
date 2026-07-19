@@ -94,7 +94,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
         {/* Title & Desc */}
         <div className="text-center mb-6">
           <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">
-            {isLogin ? "Tekrar Hoş Geldiniz!" : "Hızlı Resim Üyesi Olun"}
+            {isLogin ? "Tekrar Hoş Geldiniz!" : "İnanResim Üyesi Olun"}
           </h3>
           <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
             {isLogin
@@ -129,7 +129,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
                 <User className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="hizli_user"
+                  placeholder="inan_user"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full text-sm bg-slate-50 border border-slate-100 rounded-xl pl-11 pr-4 py-3 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500 transition-colors"
@@ -146,7 +146,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
               <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="email"
-                placeholder="ornek@hizliresim.com"
+                placeholder="ornek@inanresim.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full text-sm bg-slate-50 border border-slate-100 rounded-xl pl-11 pr-4 py-3 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500 transition-colors"

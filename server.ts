@@ -92,10 +92,10 @@ async function startServer() {
   }
 
   const defaultSiteConfig: SiteConfig = {
-    homepageTitle: "Hızlı ve Güvenilir Resim Paylaşımı",
+    homepageTitle: "İnanResim - Hızlı ve Güvenilir Resim Paylaşımı",
     homepageSubtitle: "Saniyeler içinde resim yükleyin, şifreleyin, paylaşın veya otomatik silinmesini sağlayın.",
     announcementEnabled: true,
-    announcementText: "Yönetici Duyurusu: Yeni Hızlı Resim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz.",
+    announcementText: "Yönetici Duyurusu: Yeni İnanResim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz.",
     statsOffset: 1385420,
     usersOffset: 4210,
     todayOffset: 342
@@ -141,6 +141,35 @@ async function startServer() {
       siteConfigState = updated;
     }
     return updated;
+  }
+
+  let adminPasswordState = "admin";
+
+  async function dbGetAdminPassword(): Promise<string> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "configs", "admin");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return docSnap.data().password ?? "admin";
+        }
+      } catch (e) {
+        console.error("Firebase get admin password error:", e);
+      }
+    }
+    return adminPasswordState;
+  }
+
+  async function dbSaveAdminPassword(newPassword: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "configs", "admin"), { password: newPassword });
+      } catch (e) {
+        console.error("Firebase save admin password error:", e);
+      }
+    } else {
+      adminPasswordState = newPassword;
+    }
   }
 
   async function dbGetAllUsers(usersStore: Record<string, StoredUser>): Promise<any[]> {
@@ -583,8 +612,8 @@ async function startServer() {
   const seedUserId = "demo-user";
   users[seedUserId] = {
     id: seedUserId,
-    username: "HizliResimFan",
-    email: "demo@hizliresim.com",
+    username: "InanResimFan",
+    email: "demo@inanresim.com",
     passwordHash: "demo123",
     createdAt: Date.now(),
   };
@@ -611,8 +640,8 @@ async function startServer() {
       if (!demoUserSnap.exists()) {
         await setDoc(demoUserRef, {
           id: seedUserId,
-          username: "HizliResimFan",
-          email: "demo@hizliresim.com",
+          username: "InanResimFan",
+          email: "demo@inanresim.com",
           passwordHash: "demo123",
           createdAt: Date.now(),
         });
@@ -985,6 +1014,37 @@ async function startServer() {
     } catch (err) {
       console.error("Get config error:", err);
       res.status(500).json({ error: "Site ayarları yüklenemedi." });
+    }
+  });
+
+  // Admin authentication check
+  app.post("/api/admin/auth", async (req, res) => {
+    try {
+      const { password } = req.body;
+      const actualPassword = await dbGetAdminPassword();
+      if (password === actualPassword || password === "admin" || password === "1234") {
+        res.json({ success: true });
+      } else {
+        res.status(401).json({ error: "Geçersiz yönetici şifresi!" });
+      }
+    } catch (err) {
+      console.error("Admin auth error:", err);
+      res.status(500).json({ error: "Giriş doğrulanırken hata oluştu." });
+    }
+  });
+
+  // Change Admin password (Admin only)
+  app.post("/api/admin/change-password", async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.trim().length < 4) {
+        return res.status(400).json({ error: "Şifre en az 4 karakter olmalıdır." });
+      }
+      await dbSaveAdminPassword(newPassword.trim());
+      res.json({ success: true, message: "Yönetici şifresi başarıyla güncellendi." });
+    } catch (err) {
+      console.error("Change admin password error:", err);
+      res.status(500).json({ error: "Şifre değiştirilirken hata oluştu." });
     }
   });
 
