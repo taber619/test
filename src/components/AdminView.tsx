@@ -17,7 +17,9 @@ import {
   MessageCircle,
   Plus,
   X,
-  ShieldAlert
+  ShieldAlert,
+  Mail,
+  Send
 } from "lucide-react";
 import { SiteConfig } from "../types";
 
@@ -50,7 +52,24 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [authError, setAuthError] = useState("");
   
   // Tab states
-  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat">("settings");
+  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp">("settings");
+  
+  // SMTP Config states
+  const [smtpConfig, setSmtpConfig] = useState({
+    host: "",
+    port: 587,
+    user: "",
+    pass: "",
+    from: ""
+  });
+  const [smtpSaveSuccess, setSmtpSaveSuccess] = useState(false);
+  const [smtpSaveError, setSmtpSaveError] = useState("");
+  const [smtpIsLoading, setSmtpIsLoading] = useState(false);
+
+  // SMTP Test states
+  const [testEmail, setTestEmail] = useState("");
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testIsLoading, setTestIsLoading] = useState(false);
   
   // Loading & Action feedback
   const [isLoading, setIsLoading] = useState(false);
@@ -106,6 +125,70 @@ export default function AdminView({ onBack }: AdminViewProps) {
       }
     } catch (err) {
       setAuthError("Sunucu bağlantısı sırasında hata oluştu.");
+    }
+  };
+
+  const fetchSmtpConfig = async () => {
+    try {
+      const res = await fetch("/api/admin/smtp");
+      const data = await res.json();
+      if (res.ok) {
+        setSmtpConfig(data);
+      }
+    } catch (e) {
+      console.error("SMTP config fetch error", e);
+    }
+  };
+
+  const handleSaveSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSmtpIsLoading(true);
+    setSmtpSaveSuccess(false);
+    setSmtpSaveError("");
+    try {
+      const res = await fetch("/api/admin/smtp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(smtpConfig),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSmtpSaveSuccess(true);
+        setSmtpConfig(data.smtp);
+        setTimeout(() => setSmtpSaveSuccess(false), 3000);
+      } else {
+        setSmtpSaveError(data.error || "SMTP ayarları kaydedilemedi.");
+      }
+    } catch (err) {
+      setSmtpSaveError("Bağlantı hatası oluştu.");
+    } finally {
+      setSmtpIsLoading(false);
+    }
+  };
+
+  const handleTestSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTestIsLoading(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/admin/smtp/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...smtpConfig,
+          testEmail: testEmail.trim()
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResult({ success: true, message: data.message });
+      } else {
+        setTestResult({ success: false, message: data.error || "E-posta gönderimi başarısız oldu." });
+      }
+    } catch (err) {
+      setTestResult({ success: false, message: "Bağlantı hatası oluştu." });
+    } finally {
+      setTestIsLoading(false);
     }
   };
 
@@ -217,7 +300,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
         fetchImages(),
         fetchBannedUsers(),
         fetchChatSlowMode(),
-        fetchModerationLogs()
+        fetchModerationLogs(),
+        fetchSmtpConfig()
       ]).finally(() => {
         setIsLoading(false);
       });
@@ -495,7 +579,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
       </div>
 
       {/* Admin Tab Buttons */}
-      <div className="flex border-b border-slate-200 gap-1 mb-6" id="admin-subtabs-nav">
+      <div className="flex flex-wrap border-b border-slate-200 gap-1 mb-6" id="admin-subtabs-nav">
         <button
           onClick={() => setActiveSubTab("settings")}
           className={`px-5 py-3 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
@@ -542,6 +626,19 @@ export default function AdminView({ onBack }: AdminViewProps) {
         >
           <MessageCircle className="w-4 h-4" />
           Sohbet Moderasyonu
+        </button>
+
+        <button
+          id="admin-smtp-tab"
+          onClick={() => setActiveSubTab("smtp")}
+          className={`px-5 py-3 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeSubTab === "smtp"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <Mail className="w-4 h-4" />
+          SMTP E-Posta Ayarları
         </button>
       </div>
 
@@ -1161,6 +1258,178 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === "smtp" && (
+        <div className="space-y-6" id="admin-smtp-panel">
+          {/* SMTP Settings Card */}
+          <form onSubmit={handleSaveSmtp} className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-slate-400" />
+                  SMTP E-Posta Sunucusu Yapılandırması
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">Şifre sıfırlama kodlarının gerçek e-postalara gönderilebilmesi için SMTP sunucusu ayarlarınızı yapılandırın.</p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchSmtpConfig}
+                title="Yenile"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">SMTP Sunucusu (Host)</label>
+                <input
+                  type="text"
+                  value={smtpConfig.host}
+                  onChange={(e) => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
+                  placeholder="Örn: mail.ornek.com veya smtp.gmail.com"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/30 focus:bg-white transition-all text-slate-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">SMTP Portu</label>
+                <input
+                  type="number"
+                  value={smtpConfig.port || ""}
+                  onChange={(e) => setSmtpConfig({ ...smtpConfig, port: Number(e.target.value) })}
+                  placeholder="Örn: 587 veya 465"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/30 focus:bg-white transition-all text-slate-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">SMTP Kullanıcı Adı</label>
+                <input
+                  type="text"
+                  value={smtpConfig.user}
+                  onChange={(e) => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
+                  placeholder="Örn: bilgi@ornek.com veya Gmail adresi"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/30 focus:bg-white transition-all text-slate-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">SMTP Şifresi</label>
+                <input
+                  type="password"
+                  value={smtpConfig.pass}
+                  onChange={(e) => setSmtpConfig({ ...smtpConfig, pass: e.target.value })}
+                  placeholder="E-posta hesabınızın şifresi"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/30 focus:bg-white transition-all text-slate-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Gönderici Başlığı (From)</label>
+                <input
+                  type="text"
+                  value={smtpConfig.from}
+                  onChange={(e) => setSmtpConfig({ ...smtpConfig, from: e.target.value })}
+                  placeholder='Örn: "İnanResim Destek" <noreply@ornek.com>'
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/30 focus:bg-white transition-all text-slate-800"
+                />
+              </div>
+            </div>
+
+            {smtpSaveError && (
+              <p className="text-xs text-red-600 font-bold bg-red-50 px-3 py-2 rounded-xl border border-red-100">{smtpSaveError}</p>
+            )}
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              {smtpSaveSuccess ? (
+                <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-xl">
+                  <CheckCircle className="w-4 h-4" />
+                  SMTP ayarları başarıyla kaydedildi!
+                </p>
+              ) : (
+                <div />
+              )}
+
+              <button
+                type="submit"
+                disabled={smtpIsLoading}
+                className="px-6 py-3 bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400 font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                {smtpIsLoading ? "Kaydediliyor..." : "SMTP Ayarlarını Kaydet"}
+              </button>
+            </div>
+          </form>
+
+          {/* SMTP Test Connection Card */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+              <Send className="w-4 h-4 text-slate-400" />
+              SMTP Bağlantı ve Gönderim Testi
+            </h3>
+            <p className="text-xs text-slate-400">Yapılandırmış olduğunuz SMTP sunucusunu gerçek bir e-posta göndererek test edin.</p>
+
+            <form onSubmit={handleTestSmtp} className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 max-w-2xl">
+              <div className="flex-grow">
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Alıcı Test E-Posta Adresi</label>
+                <input
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  placeholder="Örn: test@ornek.com veya kendi e-postanız"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs text-slate-800"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={testIsLoading}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer h-[42px]"
+              >
+                {testIsLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {testIsLoading ? "Gönderiliyor..." : "Test E-postası Gönder"}
+              </button>
+            </form>
+
+            {testResult && (
+              <div className={`p-4 rounded-2xl border text-xs font-semibold animate-fade-in ${
+                testResult.success 
+                  ? "bg-emerald-50/50 border-emerald-100 text-emerald-800" 
+                  : "bg-red-50/50 border-red-100 text-red-800"
+              }`}>
+                {testResult.success ? (
+                  <div className="flex items-start gap-2.5">
+                    <CheckCircle className="w-5 h-5 shrink-0 text-emerald-500 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-emerald-950">Bağlantı Başarılı!</p>
+                      <p className="mt-1 font-medium text-emerald-800/90 leading-relaxed">{testResult.message}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-red-950">Bağlantı Hatası!</p>
+                      <p className="mt-1 font-medium text-red-850 leading-relaxed">{testResult.message}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

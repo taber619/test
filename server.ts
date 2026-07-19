@@ -57,15 +57,64 @@ async function startServer() {
   // Lazy-initialized SMTP transporter
   let transporter: any = null;
 
-  function getTransporter() {
+  interface SmtpConfig {
+    host: string;
+    port: number;
+    user: string;
+    pass: string;
+    from: string;
+  }
+
+  let smtpConfigState: SmtpConfig = {
+    host: process.env.SMTP_HOST || "",
+    port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.SMTP_FROM || "",
+  };
+
+  async function dbGetSmtpConfig(): Promise<SmtpConfig> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "configs", "smtp");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          return {
+            host: data.host ?? smtpConfigState.host,
+            port: data.port !== undefined ? Number(data.port) : smtpConfigState.port,
+            user: data.user ?? smtpConfigState.user,
+            pass: data.pass ?? smtpConfigState.pass,
+            from: data.from ?? smtpConfigState.from,
+          };
+        }
+      } catch (e) {
+        console.error("Firebase get smtp config error:", e);
+      }
+    }
+    return smtpConfigState;
+  }
+
+  async function dbSaveSmtpConfig(newSmtp: SmtpConfig): Promise<SmtpConfig> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "configs", "smtp"), newSmtp);
+      } catch (e) {
+        console.error("Firebase save smtp config error:", e);
+      }
+    }
+    smtpConfigState = newSmtp;
+    transporter = null; // reset transporter
+    return smtpConfigState;
+  }
+
+  async function getTransporter() {
     if (!transporter) {
-      const host = process.env.SMTP_HOST;
-      const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
-      const user = process.env.SMTP_USER;
-      const pass = process.env.SMTP_PASS;
+      const config = await dbGetSmtpConfig();
+      const { host, port, user, pass } = config;
 
       if (!host || !user || !pass) {
-        console.warn("SMTP credentials are not configured in environment variables. Falling back to console simulation.");
+        console.warn("SMTP credentials are not configured. Falling back to console simulation.");
         return null;
       }
 
@@ -83,15 +132,16 @@ async function startServer() {
   }
 
   async function sendResetEmail(email: string, code: string): Promise<{ success: boolean; error?: string }> {
-    const mailTransporter = getTransporter();
+    const config = await dbGetSmtpConfig();
+    const mailTransporter = await getTransporter();
     if (!mailTransporter) {
       return {
         success: false,
-        error: "SMTP ayarları eksik. Lütfen .env dosyasında SMTP_HOST, SMTP_PORT, SMTP_USER ve SMTP_PASS değişkenlerini tanımlayın.",
+        error: "SMTP ayarları eksik. Lütfen panelden SMTP_HOST, SMTP_PORT, SMTP_USER ve SMTP_PASS değerlerini girin.",
       };
     }
 
-    const fromAddress = process.env.SMTP_FROM || `"İnanResim" <${process.env.SMTP_USER}>`;
+    const fromAddress = config.from || `"İnanResim" <${config.user}>`;
 
     const mailOptions = {
       from: fromAddress,
@@ -1403,7 +1453,8 @@ async function startServer() {
     console.log(`[PASSWORD RESET CODE] Email: ${emailLower}, Code: ${code}`);
 
     // Try to send the real email
-    const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+    const smtpConfig = await dbGetSmtpConfig();
+    const smtpConfigured = !!(smtpConfig.host && smtpConfig.user && smtpConfig.pass);
     if (smtpConfigured) {
       const emailResult = await sendResetEmail(emailLower, code);
       if (!emailResult.success) {
@@ -1830,6 +1881,80 @@ async function startServer() {
     } catch (err) {
       console.error("Save config error:", err);
       res.status(500).json({ error: "Site ayarları kaydedilirken hata oluştu." });
+    }
+  });
+
+  // Get SMTP Config (Admin only)
+  app.get("/api/admin/smtp", async (req, res) => {
+    try {
+      const config = await dbGetSmtpConfig();
+      res.json(config);
+    } catch (err) {
+      console.error("Get admin SMTP config error:", err);
+      res.status(500).json({ error: "SMTP ayarları yüklenemedi." });
+    }
+  });
+
+  // Save SMTP Config (Admin only)
+  app.post("/api/admin/smtp", async (req, res) => {
+    try {
+      const { host, port, user, pass, from } = req.body;
+      const updated = await dbSaveSmtpConfig({
+        host: (host || "").trim(),
+        port: port !== undefined ? Number(port) : 587,
+        user: (user || "").trim(),
+        pass: (pass || "").trim(),
+        from: (from || "").trim(),
+      });
+      res.json({ success: true, smtp: updated });
+    } catch (err) {
+      console.error("Save admin SMTP config error:", err);
+      res.status(500).json({ error: "SMTP ayarları kaydedilemedi." });
+    }
+  });
+
+  // Test SMTP connection (Admin only)
+  app.post("/api/admin/smtp/test", async (req, res) => {
+    try {
+      const { host, port, user, pass, from, testEmail } = req.body;
+      if (!host || !user || !pass) {
+        return res.status(400).json({ error: "Lütfen tüm SMTP alanlarını (sunucu, kullanıcı adı, şifre) doldurun." });
+      }
+
+      const testTransporter = nodemailer.createTransport({
+        host: host.trim(),
+        port: Number(port) || 587,
+        secure: Number(port) === 465,
+        auth: {
+          user: user.trim(),
+          pass: pass.trim(),
+        },
+      });
+
+      const targetEmail = testEmail || user;
+      const fromAddress = from || `"İnanResim SMTP Test" <${user}>`;
+
+      await testTransporter.sendMail({
+        from: fromAddress,
+        to: targetEmail,
+        subject: "İnanResim SMTP Test E-postası",
+        text: "Merhaba,\n\nBu e-posta, İnanResim Yönetici Paneli üzerinden gönderilen başarılı bir SMTP bağlantı testidir.\n\nHer şey doğru çalışıyor!\n\nSaygılarımızla,\nİnanResim Sistem Yöneticisi",
+        html: `
+          <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+            <h2 style="color: #10b981; margin-bottom: 12px;">🎉 SMTP Testi Başarılı!</h2>
+            <p>Merhaba,</p>
+            <p>Bu e-posta, <strong>İnanResim Yönetici Paneli</strong> üzerinden yapılan SMTP testinin başarıyla tamamlandığını doğrulamaktadır.</p>
+            <p>Şu andan itibaren şifre sıfırlama taleplerinde gerçek e-postalar bu SMTP sunucusu aracılığıyla gönderilecektir.</p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+            <p style="font-size: 11px; color: #94a3b8;">Gönderen Sunucu: ${host}:${port}</p>
+          </div>
+        `
+      });
+
+      res.json({ success: true, message: `Bağlantı başarılı! ${targetEmail} adresine test e-postası gönderildi.` });
+    } catch (err: any) {
+      console.error("Test SMTP connection error:", err);
+      res.status(500).json({ error: `Bağlantı kurulamadı veya e-posta gönderilemedi: ${err.message}` });
     }
   });
 
