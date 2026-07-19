@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
 import { initializeApp } from "firebase/app";
 import { 
@@ -52,6 +53,76 @@ async function startServer() {
   const images: Record<string, StoredImage> = {};
   const users: Record<string, StoredUser> = {};
   const passwordResets: Record<string, { code: string; expiresAt: number }> = {};
+
+  // Lazy-initialized SMTP transporter
+  let transporter: any = null;
+
+  function getTransporter() {
+    if (!transporter) {
+      const host = process.env.SMTP_HOST;
+      const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
+      const user = process.env.SMTP_USER;
+      const pass = process.env.SMTP_PASS;
+
+      if (!host || !user || !pass) {
+        console.warn("SMTP credentials are not configured in environment variables. Falling back to console simulation.");
+        return null;
+      }
+
+      transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465, // true for 465, false for other ports
+        auth: {
+          user,
+          pass,
+        },
+      });
+    }
+    return transporter;
+  }
+
+  async function sendResetEmail(email: string, code: string): Promise<{ success: boolean; error?: string }> {
+    const mailTransporter = getTransporter();
+    if (!mailTransporter) {
+      return {
+        success: false,
+        error: "SMTP ayarları eksik. Lütfen .env dosyasında SMTP_HOST, SMTP_PORT, SMTP_USER ve SMTP_PASS değişkenlerini tanımlayın.",
+      };
+    }
+
+    const fromAddress = process.env.SMTP_FROM || `"İnanResim" <${process.env.SMTP_USER}>`;
+
+    const mailOptions = {
+      from: fromAddress,
+      to: email,
+      subject: `İnanResim Şifre Sıfırlama Kodu: ${code}`,
+      text: `Merhaba,\n\nİnanResim hesabınızın şifresini sıfırlamak için talepte bulundunuz.\n\nŞifre sıfırlama doğrulama kodunuz: ${code}\n\nBu kod 15 dakika geçerlidir.\n\nEğer bu talebi siz yapmadıysanız lütfen bu e-postayı dikkate almayın.\n\nSaygılarımızla,\nİnanResim Ekibi`,
+      html: `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+          <h2 style="color: #1e3a8a; font-weight: 800; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-size: 20px;">İnanResim Şifre Sıfırlama</h2>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">Merhaba,</p>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">İnanResim hesabınızın şifresini sıfırlamak için talepte bulundunuz. Aşağıdaki 6 haneli doğrulama kodunu kullanarak şifrenizi sıfırlayabilirsiniz:</p>
+          
+          <div style="background-color: #f1f5f9; padding: 16px; border-radius: 12px; text-align: center; margin: 24px 0;">
+            <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #2563eb;">${code}</span>
+          </div>
+          
+          <p style="color: #64748b; font-size: 12px; line-height: 1.6;">Bu doğrulama kodu <strong>15 dakika</strong> geçerlidir. Güvenliğiniz için bu kodu kimseyle paylaşmayın.</p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+          <p style="color: #94a3b8; font-size: 11px; text-align: center;">Bu e-posta otomatik olarak gönderilmiştir. Lütfen yanıtlamayınız.</p>
+        </div>
+      `,
+    };
+
+    try {
+      await mailTransporter.sendMail(mailOptions);
+      return { success: true };
+    } catch (err: any) {
+      console.error("Nodemailer send reset email error:", err);
+      return { success: false, error: err.message || "E-posta gönderilemedi." };
+    }
+  }
 
   // Load Firebase configuration
   let db: any = null;
@@ -1331,11 +1402,31 @@ async function startServer() {
 
     console.log(`[PASSWORD RESET CODE] Email: ${emailLower}, Code: ${code}`);
 
-    res.json({
-      success: true,
-      message: "E-posta adresinize 6 haneli sıfırlama kodu başarıyla gönderildi.",
-      debugCode: code // Send back the code so the UI can show it in a simulation alert
-    });
+    // Try to send the real email
+    const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+    if (smtpConfigured) {
+      const emailResult = await sendResetEmail(emailLower, code);
+      if (!emailResult.success) {
+        res.status(500).json({
+          error: `E-posta gönderilirken hata oluştu: ${emailResult.error || "Bilinmeyen SMTP hatası"}. Lütfen SMTP ayarlarınızı kontrol edin veya simülasyon kodunu kullanın.`,
+          debugCode: code
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: "E-posta adresinize 6 haneli sıfırlama kodu başarıyla gönderildi. Lütfen gelen kutunuzu (ve gereksiz/spam klasörünü) kontrol edin.",
+        debugCode: null // Hide debug code if SMTP was successful
+      });
+    } else {
+      // SMTP not configured yet
+      res.json({
+        success: true,
+        message: "SMTP sunucusu yapılandırılmadığı için e-posta gönderimi simüle edildi. Gerçek e-posta göndermek için lütfen panelden SMTP ayarlarınızı tanımlayın.",
+        debugCode: code
+      });
+    }
   });
 
   // Reset Password
