@@ -1266,6 +1266,30 @@ export default function AdminView({ onBack }: AdminViewProps) {
 
       {activeSubTab === "smtp" && (
         <div className="space-y-6" id="admin-smtp-panel">
+          {/* Gmail / SMTP Bilgilendirme Kılavuzu */}
+          <div className="bg-amber-50/80 border border-amber-200 rounded-3xl p-6 space-y-3">
+            <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600" />
+              Gmail & Outlook İçin Özel Şifre (Uygulama Şifresi) Gerekir!
+            </h4>
+            <div className="text-xs text-amber-800 space-y-2 leading-relaxed">
+              <p>
+                Google (Gmail) ve Microsoft (Outlook/Hotmail) yüksek güvenlik politikaları gereği, bu panele <strong>normal e-posta giriş şifrenizi yazarsanız bağlantı kurulamayacaktır</strong>. E-posta gönderebilmek için özel bir <strong>Uygulama Şifresi (App Password)</strong> almanız gerekir:
+              </p>
+              <ol className="list-decimal list-inside space-y-1.5 font-semibold pl-1 text-amber-950">
+                <li>E-posta gönderen hesabınızın <strong>Google Hesabını Yönetin</strong> sayfasına gidin.</li>
+                <li>Sol menüden <strong>Güvenlik</strong> sekmesini açın ve <strong>İki Adımlı Doğrulama</strong>'yı aktif hale getirin.</li>
+                <li>Arama kısmına <strong>"Uygulama Şifreleri"</strong> (veya <em>App Passwords</em>) yazıp bu özel sayfaya gidin.</li>
+                <li>Bir uygulama adı belirleyip (Örn: <code>İnanResim</code>) <strong>Oluştur</strong> butonuna tıklayın.</li>
+                <li>Ekranda sarı kutu içinde beliren <strong>16 haneli özel şifreyi</strong> kopyalayın.</li>
+                <li>Kopyaladığınız bu 16 haneli şifreyi aşağıdaki <strong>SMTP Şifresi</strong> alanına boşluksuz olarak yapıştırıp kaydedin.</li>
+              </ol>
+              <p className="text-[11px] text-amber-700/90 font-medium">
+                * Gmail için SMTP Sunucusu (Host): <code>smtp.gmail.com</code> ve SMTP Portu: <code>587</code> olmalıdır.
+              </p>
+            </div>
+          </div>
+
           {/* SMTP Settings Card */}
           <form onSubmit={handleSaveSmtp} className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-6">
             <div className="flex items-center justify-between">

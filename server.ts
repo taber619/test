@@ -118,15 +118,26 @@ async function startServer() {
         return null;
       }
 
-      transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465, // true for 465, false for other ports
+      const isGmail = host.toLowerCase().includes("gmail.com");
+      const transportConfig: any = {
+        connectionTimeout: 10000, // 10 seconds timeout
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
         auth: {
-          user,
-          pass,
+          user: user.trim(),
+          pass: pass.trim(),
         },
-      });
+      };
+
+      if (isGmail) {
+        transportConfig.service = "gmail";
+      } else {
+        transportConfig.host = host.trim();
+        transportConfig.port = Number(port) || 587;
+        transportConfig.secure = Number(port) === 465;
+      }
+
+      transporter = nodemailer.createTransport(transportConfig);
     }
     return transporter;
   }
@@ -1926,15 +1937,26 @@ async function startServer() {
         return res.status(400).json({ error: "Lütfen tüm SMTP alanlarını (sunucu, kullanıcı adı, şifre) doldurun." });
       }
 
-      const testTransporter = nodemailer.createTransport({
-        host: host.trim(),
-        port: Number(port) || 587,
-        secure: Number(port) === 465,
+      const isGmail = host.toLowerCase().includes("gmail.com");
+      const transportConfig: any = {
+        connectionTimeout: 10000, // 10 seconds timeout
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
         auth: {
           user: user.trim(),
           pass: pass.trim(),
         },
-      });
+      };
+
+      if (isGmail) {
+        transportConfig.service = "gmail";
+      } else {
+        transportConfig.host = host.trim();
+        transportConfig.port = Number(port) || 587;
+        transportConfig.secure = Number(port) === 465;
+      }
+
+      const testTransporter = nodemailer.createTransport(transportConfig);
 
       const targetEmail = testEmail || user;
       let fromAddress = (from || "").trim();
