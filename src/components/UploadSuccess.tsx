@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar } from "lucide-react";
+import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar, Video, Image } from "lucide-react";
 import { ClientImage } from "../types";
 
 interface UploadSuccessProps {
@@ -53,7 +53,7 @@ export default function UploadSuccess({
           <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
             🎉 Yükleme Tamamlandı!
           </h2>
-          <p className="text-sm text-slate-500 mt-1">Görselleriniz başarıyla buluta yüklendi ve paylaşıma hazır.</p>
+          <p className="text-sm text-slate-500 mt-1">Dosyalarınız başarıyla buluta yüklendi ve paylaşıma hazır.</p>
         </div>
         <button
           onClick={onReset}
@@ -61,7 +61,7 @@ export default function UploadSuccess({
           id="btn-new-upload"
         >
           <ArrowLeft className="w-4 h-4" />
-          Yeni Resim Yükle
+          Yeni Dosya Yükle
         </button>
       </div>
 
@@ -94,12 +94,21 @@ export default function UploadSuccess({
               {/* Thumbnail and Info */}
               <div className="lg:col-span-4 flex flex-col gap-4">
                 <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 group">
-                  <img
-                    src={img.directUrl}
-                    alt={img.name}
-                    className="w-full h-full object-contain"
-                    referrerPolicy="no-referrer"
-                  />
+                  {img.mimeType?.startsWith("video/") ? (
+                    <video
+                      src={img.directUrl}
+                      className="w-full h-full object-contain"
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    <img
+                      src={img.directUrl}
+                      alt={img.name}
+                      className="w-full h-full object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <a
                       href={img.previewUrl}
@@ -114,6 +123,19 @@ export default function UploadSuccess({
                 </div>
 
                 <div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    {img.mimeType?.startsWith("video/") ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-blue-50 text-blue-600 border border-blue-100">
+                        <Video className="w-3 h-3" />
+                        Video
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-emerald-50 text-emerald-600 border border-emerald-100">
+                        <Image className="w-3 h-3" />
+                        Görsel
+                      </span>
+                    )}
+                  </div>
                   <h4 className="font-bold text-slate-800 truncate text-sm" title={img.name}>
                     {img.name}
                   </h4>
@@ -133,12 +155,12 @@ export default function UploadSuccess({
                   <div>
                     <label className="text-xs font-bold text-slate-500 flex items-center gap-1.5 mb-2">
                       <Shield className="w-3.5 h-3.5 text-indigo-500" />
-                      Görseli Şifreyle Koru
+                      Dosyayı Şifreyle Koru
                     </label>
                     {lockedStatus[img.id] || img.hasPassword ? (
                       <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-100">
                         <Lock className="w-3.5 h-3.5" />
-                        Bu görsel şifre ile koruma altında!
+                        Bu dosya şifre ile koruma altında!
                       </div>
                     ) : (
                       <div className="flex gap-2">
@@ -163,14 +185,14 @@ export default function UploadSuccess({
                   <div className="pt-2">
                     <button
                       onClick={() => {
-                        if (confirm("Bu görseli sunucudan kalıcı olarak silmek istediğinize emin misiniz?")) {
+                        if (confirm("Bu dosyayı sunucudan kalıcı olarak silmek istediğinize emin misiniz?")) {
                           onDeleteImage(img.id, img.deleteToken || "");
                         }
                       }}
                       className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-bold bg-red-50 hover:bg-red-100 py-1.5 px-3 rounded-lg border border-red-100 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Görseli Şimdi Sil
+                      Dosyayı Şimdi Sil
                     </button>
                   </div>
                 </div>

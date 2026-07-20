@@ -103,10 +103,10 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
             <Grid className="w-6 h-6 text-blue-600" />
-            Görsel Galeriniz
+            Dosya Galeriniz
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Hesabınız ile yüklediğiniz tüm görselleri buradan yönetebilirsiniz.
+            Hesabınız ile yüklediğiniz tüm görsel ve videoları buradan yönetebilirsiniz.
           </p>
         </div>
 
@@ -156,18 +156,27 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
               className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative"
               id={`gallery-item-${img.id}`}
             >
-              {/* Image Preview thumbnail */}
+              {/* Image / Video Preview thumbnail */}
               <div 
                 onClick={() => onSelectImage(img.id)}
                 className="relative aspect-square bg-slate-50 border-b border-slate-50 cursor-pointer overflow-hidden flex items-center justify-center"
               >
-                <img
-                  src={img.directUrl}
-                  alt={img.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
-                />
+                {img.mimeType?.startsWith("video/") ? (
+                  <video
+                    src={img.directUrl}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    src={img.directUrl}
+                    alt={img.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
+                )}
                 
                 {img.hasPassword && (
                   <div className="absolute top-2.5 left-2.5 bg-indigo-600 text-white p-1.5 rounded-lg shadow-sm" title="Şifreli Görsel">

@@ -103,7 +103,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
     return (
       <div className="text-center py-24" id="detail-loading-state">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
-        <p className="text-slate-400 text-sm mt-4 font-bold">Görsel detayları alınıyor...</p>
+        <p className="text-slate-400 text-sm mt-4 font-bold">Dosya detayları alınıyor...</p>
       </div>
     );
   }
@@ -114,9 +114,9 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
         <div className="w-16 h-16 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-4">
           <ShieldAlert className="w-8 h-8" />
         </div>
-        <h3 className="text-xl font-bold text-slate-800">Görsel Bulunamadı veya Silindi</h3>
+        <h3 className="text-xl font-bold text-slate-800">Dosya Bulunamadı veya Silindi</h3>
         <p className="text-slate-500 text-sm mt-2">
-          Aradığınız görsel otomatik silinme süresi dolduğu için veya sahibi tarafından silinmiş olabilir.
+          Aradığınız dosya otomatik silinme süresi dolduğu için veya sahibi tarafından silinmiş olabilir.
         </p>
         <button
           onClick={onBack}
@@ -129,13 +129,19 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
     );
   }
 
+  const isVideo = meta?.mimeType?.startsWith("video/");
+
   // Generate codes
   const origin = window.location.origin;
   const directLink = `${origin}/api/images/${imageId}`;
   const previewLink = `${origin}/?view=image-detail&id=${imageId}`;
-  const bbCode = `[IMG]${directLink}[/IMG]`;
-  const htmlCode = `<a href="${previewLink}"><img src="${directLink}" alt="${meta?.name || 'Görsel'}" /></a>`;
-  const markdownCode = `![${meta?.name || 'Görsel'}](${directLink})`;
+  const bbCode = isVideo ? `[VIDEO]${directLink}[/VIDEO]` : `[IMG]${directLink}[/IMG]`;
+  const htmlCode = isVideo 
+    ? `<video src="${directLink}" controls width="100%"></video>` 
+    : `<a href="${previewLink}"><img src="${directLink}" alt="${meta?.name || 'Görsel'}" /></a>`;
+  const markdownCode = isVideo 
+    ? `[${meta?.name || 'Video'}](${directLink})` 
+    : `![${meta?.name || 'Görsel'}](${directLink})`;
 
   const getLinkValue = () => {
     switch (activeTab) {
@@ -160,9 +166,13 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
           <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Lock className="w-6 h-6" />
           </div>
-          <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">Bu Görsel Şifrelenmiştir</h3>
+          <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">
+            {isVideo ? "Bu Video Şifrelenmiştir" : "Bu Görsel Şifrelenmiştir"}
+          </h3>
           <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
-            Bu görseli görüntülemek ve paylaşım kodlarını açmak için yükleyicinin belirlediği şifreyi girmelisiniz.
+            {isVideo 
+              ? "Bu videoyu izlemek ve paylaşım kodlarını açmak için yükleyicinin belirlediği şifreyi girmelisiniz." 
+              : "Bu görseli görüntülemek ve paylaşım kodlarını açmak için yükleyicinin belirlediği şifreyi girmelisiniz."}
           </p>
 
           {error && (
@@ -183,7 +193,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer text-sm shadow-md shadow-blue-100"
             >
-              Doğrula ve Görseli Göster
+              {isVideo ? "Doğrula ve Videoyu Göster" : "Doğrula ve Görseli Göster"}
             </button>
           </form>
 
@@ -211,31 +221,40 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
         </button>
 
         <span className="text-xs bg-blue-50 text-blue-600 font-extrabold px-3 py-1 rounded-full">
-          Aktif Görsel
+          {meta?.mimeType?.startsWith("video/") ? "Aktif Video" : "Aktif Görsel"}
         </span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left column: Visual display & info */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          <div className="bg-white border border-slate-100 rounded-3xl p-4 shadow-sm relative flex items-center justify-center min-h-[300px] max-h-[550px]">
-            <img
-              src={verifiedDataUrl || ""}
-              alt={meta?.name}
-              className="max-h-[510px] w-auto rounded-2xl object-contain"
-              referrerPolicy="no-referrer"
-            />
+          <div className="bg-white border border-slate-100 rounded-3xl p-4 shadow-sm relative flex items-center justify-center min-h-[300px] max-h-[550px] w-full">
+            {meta?.mimeType?.startsWith("video/") ? (
+              <video
+                src={verifiedDataUrl || ""}
+                controls
+                autoPlay
+                className="max-h-[510px] w-full rounded-2xl object-contain"
+              />
+            ) : (
+              <img
+                src={verifiedDataUrl || ""}
+                alt={meta?.name}
+                className="max-h-[510px] w-auto rounded-2xl object-contain"
+                referrerPolicy="no-referrer"
+              />
+            )}
           </div>
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-4">
             <a
               href={verifiedDataUrl || ""}
-              download={meta?.name || "gorsel.jpg"}
+              download={meta?.name || (meta?.mimeType?.startsWith("video/") ? "video.mp4" : "gorsel.jpg")}
               className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-2xl shadow-md shadow-blue-100 transition-all cursor-pointer text-sm"
             >
               <Download className="w-4 h-4" />
-              Görseli İndir
+              {meta?.mimeType?.startsWith("video/") ? "Videoyu İndir" : "Görseli İndir"}
             </a>
 
             <a
@@ -297,7 +316,9 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
 
           {/* Share links */}
           <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm flex-1">
-            <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Görsel Paylaşım Kodları</span>
+            <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+              {meta?.mimeType?.startsWith("video/") ? "Video Paylaşım Kodları" : "Görsel Paylaşım Kodları"}
+            </span>
 
             {/* Link Selector Tabs */}
             <div className="flex flex-wrap gap-1 mt-3 border-b border-slate-100 pb-2">

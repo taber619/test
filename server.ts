@@ -51,9 +51,9 @@ async function startServer() {
   
   const SERVER_BOOT_TIME = Date.now().toString() + "_" + Math.random().toString(36).substring(2, 9);
 
-  // Enable large file uploads (Hızlı Resim max 20MB per file, max 10 files)
-  app.use(express.json({ limit: "60mb" }));
-  app.use(express.urlencoded({ limit: "60mb", extended: true }));
+  // Enable large file uploads (Hızlı Resim max 20MB per file, max 10 files, video max 100MB)
+  app.use(express.json({ limit: "150mb" }));
+  app.use(express.urlencoded({ limit: "150mb", extended: true }));
 
   // In-memory data store (fallback if Firebase is not active)
   const images: Record<string, StoredImage> = {};
@@ -1177,13 +1177,13 @@ async function startServer() {
       const { url, deleteAfter, password, userId } = req.body;
 
       if (!url) {
-        res.status(400).json({ error: "Lütfen geçerli bir resim URL'si gönderin!" });
+        res.status(400).json({ error: "Lütfen geçerli bir resim veya video URL'si gönderin!" });
         return;
       }
 
       const response = await fetch(url);
       if (!response.ok) {
-        res.status(400).json({ error: "Görsel indirilemedi. Geçerli bir URL girdiğinizden emin olun veya web sitesinin engellemediğini doğrulayın." });
+        res.status(400).json({ error: "Görsel veya video indirilemedi. Geçerli bir URL girdiğinizden emin olun veya web sitesinin engellemediğini doğrulayın." });
         return;
       }
 
@@ -1191,8 +1191,13 @@ async function startServer() {
       const buffer = Buffer.from(arrayBuffer);
       const mimeType = response.headers.get("content-type") || "image/jpeg";
 
-      if (!mimeType.startsWith("image/")) {
-        res.status(400).json({ error: "İndirilen dosya geçerli bir görsel formatı değil!" });
+      if (!mimeType.startsWith("image/") && !mimeType.startsWith("video/")) {
+        res.status(400).json({ error: "İndirilen dosya geçerli bir görsel veya video formatı değil!" });
+        return;
+      }
+
+      if (buffer.length > 100 * 1024 * 1024) {
+        res.status(400).json({ error: "İndirilen dosya 100 MB boyut sınırını aşmaktadır!" });
         return;
       }
 

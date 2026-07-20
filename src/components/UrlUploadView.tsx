@@ -19,7 +19,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
     setErrorMsg(null);
 
     if (!url) {
-      setErrorMsg("Lütfen geçerli bir resim URL'si giriniz.");
+      setErrorMsg("Lütfen geçerli bir resim veya video URL'si giriniz.");
       return;
     }
 
@@ -48,7 +48,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
 
       onUploadSuccess(data);
     } catch (err: any) {
-      setErrorMsg(err.message || "Görsel indirilirken hata oluştu. URL'nin doğrudan bir resme yönlendirdiğinden emin olun.");
+      setErrorMsg(err.message || "Dosya indirilirken hata oluştu. URL'nin doğrudan bir resme veya videoya yönlendirdiğinden emin olun.");
     } finally {
       setLoading(false);
     }
@@ -76,9 +76,9 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
             <Link className="w-6 h-6" />
           </div>
-          <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">İnternetten Resim Yükle</h3>
+          <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">İnternetten Resim veya Video Yükle</h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed">
-            Web üzerindeki herhangi bir görsel adresini yapıştırarak hızlıca kendi sunucunuza aktarın.
+            Web üzerindeki herhangi bir görsel veya video adresini yapıştırarak hızlıca kendi sunucunuza aktarın.
           </p>
         </div>
 
@@ -93,7 +93,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
           {/* URL Input */}
           <div>
             <label className="block text-xs font-extrabold text-slate-600 uppercase mb-2 pl-0.5">
-              Görsel Linki (URL)
+              Görsel veya Video Linki (URL)
             </label>
             <input
               type="url"
@@ -134,7 +134,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
               </label>
               <input
                 type="password"
-                placeholder="Görseli kilitlemek için şifre..."
+                placeholder="Dosyayı kilitlemek için şifre..."
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}

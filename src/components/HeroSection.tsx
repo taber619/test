@@ -18,7 +18,8 @@ import {
   FolderOpen,
   ShieldCheck,
   Zap,
-  Clock
+  Clock,
+  Play
 } from "lucide-react";
 import { processImage } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
@@ -82,15 +83,18 @@ export default function HeroSection({
 
       const newFiles: SelectedFile[] = [];
       for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf("image") !== -1) {
+        if (items[i].type.indexOf("image") !== -1 || items[i].type.indexOf("video") !== -1) {
           const file = items[i].getAsFile();
           if (file) {
             if (selectedFiles.length + newFiles.length >= 10) {
-              setErrorMsg("Aynı anda en fazla 10 görsel yükleyebilirsiniz.");
+              setErrorMsg("Aynı anda en fazla 10 dosya yükleyebilirsiniz.");
               continue;
             }
-            if (file.size > 20 * 1024 * 1024) {
-              setErrorMsg("Görsel boyutu 20 MB sınırını aşamaz.");
+            const isVideo = file.type.startsWith("video/");
+            const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
+            const maxSizeLabel = isVideo ? "100 MB" : "20 MB";
+            if (file.size > maxSize) {
+              setErrorMsg(`Dosya boyutu ${maxSizeLabel} sınırını aşamaz.`);
               continue;
             }
             newFiles.push({
@@ -147,22 +151,26 @@ export default function HeroSection({
   };
 
   const processFiles = (files: File[]) => {
-    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
-    if (imageFiles.length === 0) {
-      setErrorMsg("Lütfen geçerli bir görsel formatı (JPG, PNG, GIF, WEBP) yükleyin.");
+    const validFiles = files.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (validFiles.length === 0) {
+      setErrorMsg("Lütfen geçerli bir görsel (JPG, PNG, GIF, WEBP) veya video (MP4, WEBM, vb.) yükleyin.");
       return;
     }
 
     const currentCount = selectedFiles.length;
     const incoming: SelectedFile[] = [];
 
-    for (const f of imageFiles) {
+    for (const f of validFiles) {
       if (currentCount + incoming.length >= 10) {
-        setErrorMsg("Aynı anda en fazla 10 görsel yükleyebilirsiniz.");
+        setErrorMsg("Aynı anda en fazla 10 dosya yükleyebilirsiniz.");
         break;
       }
-      if (f.size > 20 * 1024 * 1024) {
-        setErrorMsg(`${f.name} boyutu 20 MB sınırını aştığı için eklenmedi.`);
+      const isVideo = f.type.startsWith("video/");
+      const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
+      const sizeLabel = isVideo ? "100 MB" : "20 MB";
+      
+      if (f.size > maxSize) {
+        setErrorMsg(`${f.name} boyutu ${sizeLabel} sınırını aştığı için eklenmedi.`);
         continue;
       }
       incoming.push({
@@ -199,8 +207,8 @@ export default function HeroSection({
     try {
       const processedFiles = await Promise.all(
         selectedFiles.map(async (item) => {
-          // Skip WebP processing on raw GIF files to preserve animations
-          if (item.file.type === "image/gif") {
+          // Skip WebP processing on raw GIF files or video files to preserve animations/video formats
+          if (item.file.type === "image/gif" || item.file.type.startsWith("video/")) {
             return item.file;
           }
           try {
@@ -369,7 +377,7 @@ export default function HeroSection({
           ref={fileInputRef}
           onChange={handleFileChange}
           multiple
-          accept="image/*"
+          accept="image/*,video/*"
           className="hidden"
           id="hidden-file-input"
         />
@@ -552,9 +560,9 @@ export default function HeroSection({
               </div>
 
               <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider relative z-10">
-                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">JPG, PNG, GIF, WEBP</span>
+                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">JPG, PNG, GIF, WEBP, MP4, WEBM</span>
                 <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
-                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">MAKS. 20 MB / 10 DOSYA</span>
+                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">GÖRSEL: MAKS. 20 MB / VİDEO: MAKS. 100 MB</span>
                 <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
                 <button
                   type="button"
@@ -607,29 +615,51 @@ export default function HeroSection({
                       className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-2xl relative group flex flex-col justify-between hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 shadow-sm"
                     >
                       <div className="aspect-square rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-950 relative flex items-center justify-center border border-slate-100 dark:border-slate-850">
-                        <img
-                          src={item.previewUrl}
-                          alt={item.file.name}
-                          className="w-full h-full object-cover"
-                        />
+                        {item.file.type.startsWith("video/") ? (
+                          <div className="w-full h-full relative">
+                            <video
+                              src={item.previewUrl}
+                              className="w-full h-full object-cover"
+                              muted
+                              playsInline
+                            />
+                            {/* Video Play Icon Overlay */}
+                            <div className="absolute inset-0 bg-black/25 flex items-center justify-center pointer-events-none">
+                              <div className="p-2 bg-white/90 dark:bg-slate-900/90 rounded-full shadow-lg text-blue-600">
+                                <Play className="w-4 h-4 fill-current" />
+                              </div>
+                            </div>
+                            <span className="absolute bottom-1.5 left-1.5 text-[8px] font-extrabold bg-blue-600 text-white px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                              VIDEO
+                            </span>
+                          </div>
+                        ) : (
+                          <img
+                            src={item.previewUrl}
+                            alt={item.file.name}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
                         
                         {/* Floating Delete Button */}
                         <button
                           onClick={() => removeFile(item.id)}
                           className="absolute top-1.5 right-1.5 p-1 bg-black/60 text-white hover:bg-black/80 rounded-full transition-colors cursor-pointer z-10"
-                          title="Görseli Kaldır"
+                          title={item.file.type.startsWith("video/") ? "Videoyu Kaldır" : "Görseli Kaldır"}
                         >
                           <X className="w-3 h-3" />
                         </button>
 
                         {/* Floating Edit Button (Pencil Icon) */}
-                        <button
-                          onClick={() => setEditingFile(item)}
-                          className="absolute bottom-1.5 right-1.5 p-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-full transition-colors cursor-pointer z-10 shadow-md shadow-blue-500/20 flex items-center justify-center"
-                          title="Görseli Düzenle (Kırp, Filtrele, Döndür)"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                        </button>
+                        {!item.file.type.startsWith("video/") && (
+                          <button
+                            onClick={() => setEditingFile(item)}
+                            className="absolute bottom-1.5 right-1.5 p-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-full transition-colors cursor-pointer z-10 shadow-md shadow-blue-500/20 flex items-center justify-center"
+                            title="Görseli Düzenle (Kırp, Filtrele, Döndür)"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                       <div className="mt-1.5 px-1">
                         <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate" title={item.file.name}>
