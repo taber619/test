@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar } from "lucide-react";
+import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar, QrCode, Sparkles } from "lucide-react";
 import { ClientImage } from "../types";
 
 interface UploadSuccessProps {
@@ -7,6 +7,7 @@ interface UploadSuccessProps {
   onReset: () => void;
   onDeleteImage: (id: string, deleteToken: string) => Promise<void>;
   onSetPassword: (id: string, password: string) => Promise<boolean>;
+  onOpenQRCode: (url: string) => void;
 }
 
 export default function UploadSuccess({
@@ -14,6 +15,7 @@ export default function UploadSuccess({
   onReset,
   onDeleteImage,
   onSetPassword,
+  onOpenQRCode,
 }: UploadSuccessProps) {
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
   const [passwords, setPasswords] = useState<Record<string, string>>({});
@@ -160,14 +162,22 @@ export default function UploadSuccess({
                   </div>
 
                   {/* Manual Delete Button */}
-                  <div className="pt-2">
+                  <div className="pt-2 flex flex-col gap-2">
+                    <button
+                      onClick={() => onOpenQRCode(img.previewUrl)}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 py-2 px-3 rounded-lg border border-blue-100 transition-colors cursor-pointer"
+                    >
+                      <QrCode className="w-3.5 h-3.5 text-blue-500" />
+                      Görselin QR Kodunu Al
+                    </button>
+
                     <button
                       onClick={() => {
                         if (confirm("Bu görseli sunucudan kalıcı olarak silmek istediğinize emin misiniz?")) {
                           onDeleteImage(img.id, img.deleteToken || "");
                         }
                       }}
-                      className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-bold bg-red-50 hover:bg-red-100 py-1.5 px-3 rounded-lg border border-red-100 transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-bold bg-red-50 hover:bg-red-100 py-2 px-3 rounded-lg border border-red-100 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       Görseli Şimdi Sil

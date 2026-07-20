@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Download, Eye, Calendar, HardDrive, ShieldAlert, Key, Copy, Check, ArrowLeft, ExternalLink, Lock } from "lucide-react";
+import { Download, Eye, Calendar, HardDrive, ShieldAlert, Key, Copy, Check, ArrowLeft, ExternalLink, Lock, QrCode } from "lucide-react";
 import { ClientImage } from "../types";
 
 interface ImageDetailViewProps {
   imageId: string;
   onBack: () => void;
+  onOpenQRCode: (url: string) => void;
 }
 
 interface ImageMeta {
@@ -18,7 +19,7 @@ interface ImageMeta {
   hasPassword: boolean;
 }
 
-export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProps) {
+export default function ImageDetailView({ imageId, onBack, onOpenQRCode }: ImageDetailViewProps) {
   const [meta, setMeta] = useState<ImageMeta | null>(null);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(true);
@@ -238,6 +239,14 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
               Görseli İndir
             </a>
 
+            <button
+              onClick={() => onOpenQRCode(previewLink)}
+              className="flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold py-3 px-5 rounded-2xl transition-all cursor-pointer text-sm border border-indigo-100/50"
+            >
+              <QrCode className="w-4 h-4" />
+              QR Kod Al
+            </button>
+
             <a
               href={verifiedDataUrl || ""}
               target="_blank"
@@ -245,7 +254,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
               className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-5 rounded-2xl transition-all cursor-pointer text-sm"
             >
               <ExternalLink className="w-4 h-4" />
-              Orijinal Boyutta Aç
+              Aç
             </a>
           </div>
         </div>

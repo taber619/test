@@ -11,6 +11,7 @@ import ImageDetailView from "./components/ImageDetailView";
 import UrlUploadView from "./components/UrlUploadView";
 import AdminView from "./components/AdminView";
 import MiniChat from "./components/MiniChat";
+import QRCodeModal from "./components/QRCodeModal";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -137,6 +138,10 @@ export default function App() {
   const [uploadedImages, setUploadedImages] = useState<ClientImage[]>([]);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
 
+  // QR Code Modal states
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrModalUrl, setQrModalUrl] = useState("");
+
   // Parse custom parameters on mount (to support shareable preview links: /?view=image-detail&id=xyz)
   useEffect(() => {
     // Load local auth session if any
@@ -207,11 +212,10 @@ export default function App() {
   // Handle local files uploads
   const handleLocalUpload = async (files: File[], deleteAfter: string, password?: string) => {
     setIsUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(0);
 
-    const progressInterval = setInterval(() => {
-      setUploadProgress((prev) => (prev < 90 ? prev + 10 : prev));
-    }, 150);
+    const totalFilesSize = files.reduce((acc, file) => acc + file.size, 0) || 1;
+    let uploadedBytesPriorFiles = 0;
 
     try {
       const results: ClientImage[] = [];
@@ -228,36 +232,73 @@ export default function App() {
           userId: currentUser?.id || undefined,
         };
 
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+        // Create an XMLHttpRequest to support real upload progress tracking
+        const uploadResult = await new Promise<any>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "/api/upload");
+          xhr.setRequestHeader("Content-Type", "application/json");
+
+          // Track progress of the current file being sent over the network
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const currentFileRatio = event.loaded / event.total;
+              const currentFileUploadedBytes = currentFileRatio * file.size;
+              const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
+              
+              const percent = Math.min(99, Math.round((totalUploaded / totalFilesSize) * 100));
+              setUploadProgress(percent);
+            }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                resolve(JSON.parse(xhr.responseText));
+              } catch (e) {
+                reject(new Error("Sunucudan geçersiz yanıt alındı."));
+              }
+            } else {
+              try {
+                const errData = JSON.parse(xhr.responseText);
+                reject(new Error(errData.error || "Görsel yüklenemedi."));
+              } catch (e) {
+                reject(new Error(`Yükleme başarısız (Kod: ${xhr.status})`));
+              }
+            }
+          };
+
+          xhr.onerror = () => {
+            reject(new Error("Sunucuya bağlanırken bir ağ hatası oluştu."));
+          };
+
+          xhr.send(JSON.stringify(payload));
         });
 
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || "Görsel yüklenemedi.");
-        }
-
+        // Add this file's full size to the accumulated total of prior uploaded files
+        uploadedBytesPriorFiles += file.size;
+        
         const origin = window.location.origin;
         results.push({
-          id: data.id,
-          name: data.name,
-          size: data.size,
+          id: uploadResult.id,
+          name: uploadResult.name,
+          size: uploadResult.size,
           mimeType: file.type,
-          uploadedAt: data.uploadedAt,
+          uploadedAt: uploadResult.uploadedAt,
           deleteAfter: deleteAfter as any,
           views: 0,
-          deleteToken: data.deleteToken,
-          directUrl: `${origin}/api/images/${data.id}`,
-          previewUrl: `${origin}/?view=image-detail&id=${data.id}`,
-          bbCode: `[IMG]${origin}/api/images/${data.id}[/IMG]`,
-          htmlCode: `<a href="${origin}/?view=image-detail&id=${data.id}"><img src="${origin}/api/images/${data.id}" alt="${data.name}" /></a>`,
-          markdownCode: `![${data.name}](${origin}/api/images/${data.id})`,
+          deleteToken: uploadResult.deleteToken,
+          directUrl: `${origin}/api/images/${uploadResult.id}`,
+          previewUrl: `${origin}/?view=image-detail&id=${uploadResult.id}`,
+          bbCode: `[IMG]${origin}/api/images/${uploadResult.id}[/IMG]`,
+          htmlCode: `<a href="${origin}/?view=image-detail&id=${uploadResult.id}"><img src="${origin}/api/images/${uploadResult.id}" alt="${uploadResult.name}" /></a>`,
+          markdownCode: `![${uploadResult.name}](${origin}/api/images/${uploadResult.id})`,
         });
+
+        // Keep the progress updated smoothly between sequential file uploads
+        const immediatePercent = Math.min(99, Math.round((uploadedBytesPriorFiles / totalFilesSize) * 100));
+        setUploadProgress(immediatePercent);
       }
 
-      clearInterval(progressInterval);
       setUploadProgress(100);
       setTimeout(() => {
         setUploadedImages(results);
@@ -265,7 +306,6 @@ export default function App() {
       }, 300);
 
     } catch (err: any) {
-      clearInterval(progressInterval);
       setIsUploading(false);
       alert(err.message || "Görseller yüklenirken bir hata oluştu.");
     }
@@ -331,9 +371,14 @@ export default function App() {
     }
   };
 
+  const handleOpenQRCode = (url: string) => {
+    setQrModalUrl(url);
+    setQrModalOpen(true);
+  };
+
   const renderContent = () => {
     if (activeTab === "image-detail" && selectedDetailId) {
-      return <ImageDetailView imageId={selectedDetailId} onBack={navigateBack} />;
+      return <ImageDetailView imageId={selectedDetailId} onBack={navigateBack} onOpenQRCode={handleOpenQRCode} />;
     }
 
     if (activeTab === "url-upload") {
@@ -372,6 +417,7 @@ export default function App() {
           onReset={navigateBack}
           onDeleteImage={handleDeleteImage}
           onSetPassword={handleLockImage}
+          onOpenQRCode={handleOpenQRCode}
         />
       );
     }
@@ -673,6 +719,7 @@ export default function App() {
         onLogout={handleLogout}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onOpenQRCode={handleOpenQRCode}
       />
 
       {/* Main Container Workspace */}
@@ -682,6 +729,13 @@ export default function App() {
 
       {/* Floating Chat Panel */}
       <MiniChat />
+
+      {/* Standalone customizable QR Code Modal */}
+      <QRCodeModal
+        isOpen={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        defaultUrl={qrModalUrl}
+      />
 
       {/* Live Update Toast */}
       {showUpdateToast && (
