@@ -118,8 +118,10 @@ async function startServer() {
         return null;
       }
 
-      const isGmail = host.toLowerCase().includes("gmail.com");
       const transportConfig: any = {
+        host: host.trim(),
+        port: Number(port) || 587,
+        secure: Number(port) === 465,
         connectionTimeout: 10000, // 10 seconds timeout
         greetingTimeout: 10000,
         socketTimeout: 10000,
@@ -127,15 +129,10 @@ async function startServer() {
           user: user.trim(),
           pass: pass.trim(),
         },
+        tls: {
+          rejectUnauthorized: false // Prevents SSL/TLS handshake issues on cloud containers
+        }
       };
-
-      if (isGmail) {
-        transportConfig.service = "gmail";
-      } else {
-        transportConfig.host = host.trim();
-        transportConfig.port = Number(port) || 587;
-        transportConfig.secure = Number(port) === 465;
-      }
 
       transporter = nodemailer.createTransport(transportConfig);
     }
@@ -1937,8 +1934,10 @@ async function startServer() {
         return res.status(400).json({ error: "Lütfen tüm SMTP alanlarını (sunucu, kullanıcı adı, şifre) doldurun." });
       }
 
-      const isGmail = host.toLowerCase().includes("gmail.com");
       const transportConfig: any = {
+        host: host.trim(),
+        port: Number(port) || 587,
+        secure: Number(port) === 465,
         connectionTimeout: 10000, // 10 seconds timeout
         greetingTimeout: 10000,
         socketTimeout: 10000,
@@ -1946,15 +1945,10 @@ async function startServer() {
           user: user.trim(),
           pass: pass.trim(),
         },
+        tls: {
+          rejectUnauthorized: false // Prevents SSL/TLS handshake issues on cloud containers
+        }
       };
-
-      if (isGmail) {
-        transportConfig.service = "gmail";
-      } else {
-        transportConfig.host = host.trim();
-        transportConfig.port = Number(port) || 587;
-        transportConfig.secure = Number(port) === 465;
-      }
 
       const testTransporter = nodemailer.createTransport(transportConfig);
 
