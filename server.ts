@@ -35,6 +35,11 @@ interface StoredImage {
   deleteToken: string;
   views: number;
   userId?: string;
+  watermarkText?: string;
+  watermarkOpacity?: number;
+  watermarkColor?: string;
+  watermarkSize?: number;
+  watermarkPosition?: string;
 }
 
 interface StoredUser {
@@ -710,6 +715,11 @@ async function startServer() {
           views: image.views,
           userId: image.userId || null,
           chunkCount: chunks.length,
+          watermarkText: image.watermarkText || null,
+          watermarkOpacity: image.watermarkOpacity !== undefined ? image.watermarkOpacity : null,
+          watermarkColor: image.watermarkColor || null,
+          watermarkSize: image.watermarkSize !== undefined ? image.watermarkSize : null,
+          watermarkPosition: image.watermarkPosition || null,
         };
 
         // Save metadata
@@ -763,6 +773,11 @@ async function startServer() {
             deleteToken: meta.deleteToken,
             views: meta.views || 0,
             userId: meta.userId || undefined,
+            watermarkText: meta.watermarkText || undefined,
+            watermarkOpacity: meta.watermarkOpacity !== null && meta.watermarkOpacity !== undefined ? Number(meta.watermarkOpacity) : undefined,
+            watermarkColor: meta.watermarkColor || undefined,
+            watermarkSize: meta.watermarkSize !== null && meta.watermarkSize !== undefined ? Number(meta.watermarkSize) : undefined,
+            watermarkPosition: meta.watermarkPosition || undefined,
           };
         }
       } catch (e) {
@@ -795,6 +810,11 @@ async function startServer() {
             views: newViews,
             hasPassword: !!meta.password,
             userId: meta.userId || undefined,
+            watermarkText: meta.watermarkText || undefined,
+            watermarkOpacity: meta.watermarkOpacity !== null && meta.watermarkOpacity !== undefined ? Number(meta.watermarkOpacity) : undefined,
+            watermarkColor: meta.watermarkColor || undefined,
+            watermarkSize: meta.watermarkSize !== null && meta.watermarkSize !== undefined ? Number(meta.watermarkSize) : undefined,
+            watermarkPosition: meta.watermarkPosition || undefined,
           };
         }
       } catch (e) {
@@ -815,6 +835,11 @@ async function startServer() {
         views: image.views,
         hasPassword: !!image.password,
         userId: image.userId,
+        watermarkText: image.watermarkText,
+        watermarkOpacity: image.watermarkOpacity,
+        watermarkColor: image.watermarkColor,
+        watermarkSize: image.watermarkSize,
+        watermarkPosition: image.watermarkPosition,
       };
     }
     return null;
@@ -1125,7 +1150,20 @@ async function startServer() {
   // Handle Image Upload
   app.post("/api/upload", async (req, res) => {
     try {
-      const { name, mimeType, size, data, deleteAfter, password, userId } = req.body;
+      const { 
+        name, 
+        mimeType, 
+        size, 
+        data, 
+        deleteAfter, 
+        password, 
+        userId,
+        watermarkText,
+        watermarkOpacity,
+        watermarkColor,
+        watermarkSize,
+        watermarkPosition 
+      } = req.body;
 
       if (!data || !mimeType || !name) {
         res.status(400).json({ error: "Eksik resim verisi!" });
@@ -1153,6 +1191,11 @@ async function startServer() {
         deleteToken,
         views: 0,
         userId: userId || undefined,
+        watermarkText: watermarkText || undefined,
+        watermarkOpacity: watermarkOpacity !== undefined ? Number(watermarkOpacity) : undefined,
+        watermarkColor: watermarkColor || undefined,
+        watermarkSize: watermarkSize !== undefined ? Number(watermarkSize) : undefined,
+        watermarkPosition: watermarkPosition || undefined,
       };
 
       await dbSaveImage(img, base64Data, images);
@@ -1174,7 +1217,17 @@ async function startServer() {
   // Handle Remote URL Upload
   app.post("/api/upload-url", async (req, res) => {
     try {
-      const { url, deleteAfter, password, userId } = req.body;
+      const { 
+        url, 
+        deleteAfter, 
+        password, 
+        userId,
+        watermarkText,
+        watermarkOpacity,
+        watermarkColor,
+        watermarkSize,
+        watermarkPosition 
+      } = req.body;
 
       if (!url) {
         res.status(400).json({ error: "Lütfen geçerli bir resim veya video URL'si gönderin!" });
@@ -1227,6 +1280,11 @@ async function startServer() {
         deleteToken,
         views: 0,
         userId: userId || undefined,
+        watermarkText: watermarkText || undefined,
+        watermarkOpacity: watermarkOpacity !== undefined ? Number(watermarkOpacity) : undefined,
+        watermarkColor: watermarkColor || undefined,
+        watermarkSize: watermarkSize !== undefined ? Number(watermarkSize) : undefined,
+        watermarkPosition: watermarkPosition || undefined,
       };
 
       await dbSaveImage(img, buffer.toString("base64"), images);
@@ -1774,6 +1832,28 @@ async function startServer() {
     } catch (err) {
       console.error("Ban user error:", err);
       res.status(500).json({ error: "Kullanıcı yasaklanamadı." });
+    }
+  });
+
+  // Mute user temporarily (Admin Only)
+  app.post("/api/admin/chat/mute", async (req, res) => {
+    try {
+      const { userId, username, durationMinutes } = req.body;
+      if (!userId || !durationMinutes) {
+        return res.status(400).json({ error: "Eksik parametreler (userId, durationMinutes)." });
+      }
+
+      const mins = Number(durationMinutes);
+      const mod = await dbGetUserModeration(userId, username || "Kullanıcı");
+      mod.mutedUntil = Date.now() + mins * 60 * 1000;
+      await dbSaveUserModeration(mod);
+
+      await logModAction(userId, mod.username, "MUTE_MANUAL", `Yönetici tarafından doğrudan ${mins} dakika geçici olarak susturuldu.`);
+
+      res.json({ success: true, message: `Kullanıcı ${mins} dakika geçici olarak engellendi.` });
+    } catch (err) {
+      console.error("Mute user error:", err);
+      res.status(500).json({ error: "Kullanıcı geçici olarak engellenemedi/susturulamadı." });
     }
   });
 

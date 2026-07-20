@@ -31,7 +31,19 @@ interface SelectedFile {
 }
 
 interface HeroSectionProps {
-  onUploadStart: (files: File[], deleteAfter: string, password?: string) => Promise<void>;
+  onUploadStart: (
+    files: File[], 
+    deleteAfter: string, 
+    password?: string,
+    watermarkOptions?: {
+      addWatermark: boolean;
+      watermarkText: string;
+      watermarkOpacity: number;
+      watermarkColor: string;
+      watermarkSize: number;
+      watermarkPosition: string;
+    }
+  ) => Promise<void>;
   onSwitchToUrlUpload: () => void;
   isUploading: boolean;
   uploadProgress: number;
@@ -229,7 +241,19 @@ export default function HeroSection({
         })
       );
       setIsOptimizing(false);
-      await onUploadStart(processedFiles, deleteAfter, password || undefined);
+      await onUploadStart(
+        processedFiles, 
+        deleteAfter, 
+        password || undefined,
+        addWatermark ? {
+          addWatermark,
+          watermarkText,
+          watermarkOpacity,
+          watermarkColor,
+          watermarkSize,
+          watermarkPosition,
+        } : undefined
+      );
       clearAll();
     } catch (err) {
       setIsOptimizing(false);

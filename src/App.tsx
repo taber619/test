@@ -205,7 +205,19 @@ export default function App() {
   };
 
   // Handle local files uploads
-  const handleLocalUpload = async (files: File[], deleteAfter: string, password?: string) => {
+  const handleLocalUpload = async (
+    files: File[], 
+    deleteAfter: string, 
+    password?: string,
+    watermarkOptions?: {
+      addWatermark: boolean;
+      watermarkText: string;
+      watermarkOpacity: number;
+      watermarkColor: string;
+      watermarkSize: number;
+      watermarkPosition: string;
+    }
+  ) => {
     setIsUploading(true);
     setUploadProgress(0);
 
@@ -225,6 +237,11 @@ export default function App() {
           deleteAfter,
           password,
           userId: currentUser?.id || undefined,
+          watermarkText: watermarkOptions?.watermarkText,
+          watermarkOpacity: watermarkOptions?.watermarkOpacity,
+          watermarkColor: watermarkOptions?.watermarkColor,
+          watermarkSize: watermarkOptions?.watermarkSize,
+          watermarkPosition: watermarkOptions?.watermarkPosition,
         };
 
         // Create an XMLHttpRequest to support real upload progress tracking
@@ -282,6 +299,11 @@ export default function App() {
           deleteAfter: deleteAfter as any,
           views: 0,
           deleteToken: uploadResult.deleteToken,
+          watermarkText: watermarkOptions?.watermarkText,
+          watermarkOpacity: watermarkOptions?.watermarkOpacity,
+          watermarkColor: watermarkOptions?.watermarkColor,
+          watermarkSize: watermarkOptions?.watermarkSize,
+          watermarkPosition: watermarkOptions?.watermarkPosition,
           directUrl: `${origin}/api/images/${uploadResult.id}`,
           previewUrl: `${origin}/?view=image-detail&id=${uploadResult.id}`,
           bbCode: `[IMG]${origin}/api/images/${uploadResult.id}[/IMG]`,

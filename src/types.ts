@@ -14,6 +14,11 @@ export interface ClientImage {
   views: number;
   hasPassword?: boolean;
   deleteToken?: string;
+  watermarkText?: string;
+  watermarkOpacity?: number;
+  watermarkColor?: string;
+  watermarkSize?: number;
+  watermarkPosition?: string;
   // Dynamic links calculated on client
   directUrl: string;
   previewUrl: string;

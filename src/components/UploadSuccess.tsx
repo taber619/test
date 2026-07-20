@@ -95,12 +95,35 @@ export default function UploadSuccess({
               <div className="lg:col-span-4 flex flex-col gap-4">
                 <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 group">
                   {img.mimeType?.startsWith("video/") ? (
-                    <video
-                      src={img.directUrl}
-                      className="w-full h-full object-contain"
-                      muted
-                      playsInline
-                    />
+                    <div className="relative w-full h-full flex items-center justify-center">
+                      <video
+                        src={img.directUrl}
+                        className="w-full h-full object-contain"
+                        muted
+                        playsInline
+                      />
+                      {img.watermarkText && (
+                        <div 
+                          className="absolute pointer-events-none select-none font-extrabold tracking-wide px-2 py-1 rounded-md bg-black/10 backdrop-blur-[0.5px]"
+                          style={{
+                            opacity: img.watermarkOpacity !== undefined ? img.watermarkOpacity : 0.5,
+                            color: img.watermarkColor || "#ffffff",
+                            fontSize: img.watermarkSize ? `${Math.max(8, Math.round(180 * img.watermarkSize))}px` : "10px",
+                            textShadow: "1px 1px 2px rgba(0,0,0,0.8)",
+                            ...(() => {
+                              const pos = img.watermarkPosition || "bottom-right";
+                              if (pos === "bottom-left") return { bottom: "10px", left: "10px" };
+                              if (pos === "top-right") return { top: "10px", right: "10px" };
+                              if (pos === "top-left") return { top: "10px", left: "10px" };
+                              if (pos === "center") return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
+                              return { bottom: "10px", right: "10px" }; // bottom-right
+                            })()
+                          }}
+                        >
+                          {img.watermarkText}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <img
                       src={img.directUrl}
