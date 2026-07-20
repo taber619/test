@@ -39,4 +39,6 @@ export interface SiteConfig {
   usersOffset: number;
   todayOffset: number;
   appVersion?: string;
+  maintenanceModeEnabled?: boolean;
+  miniChatEnabled?: boolean;
 }

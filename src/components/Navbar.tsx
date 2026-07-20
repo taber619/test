@@ -35,6 +35,34 @@ export default function Navbar({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
+  const [logoClicks, setLogoClicks] = useState(0);
+  const [showAdminEntry, setShowAdminEntry] = useState(() => localStorage.getItem("inanresim_admin_visible") === "true");
+
+  const handleLogoClick = () => {
+    const clicks = logoClicks + 1;
+    setLogoClicks(clicks);
+    if (clicks >= 5) {
+      const currentVisibility = !showAdminEntry;
+      setShowAdminEntry(currentVisibility);
+      localStorage.setItem("inanresim_admin_visible", currentVisibility ? "true" : "false");
+      setLogoClicks(0);
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      } catch (e) {}
+      alert(currentVisibility ? "🔓 Gizli Yönetici Girişi Aktif Edildi! Artık menüde Yönetici butonlarını görebilirsiniz." : "🔒 Gizli Yönetici Girişi Devre Dışı Bırakıldı! Menüdeki Yönetici butonları gizlendi.");
+    }
+  };
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -62,7 +90,10 @@ export default function Navbar({
     >
       {/* Brand Logo */}
       <div 
-        onClick={() => setActiveTab("home")} 
+        onClick={() => {
+          setActiveTab("home");
+          handleLogoClick();
+        }} 
         className="flex items-center space-x-2.5 cursor-pointer select-none group"
         id="logo-container"
       >
@@ -164,17 +195,19 @@ export default function Navbar({
                     Benim Galerim
                   </button>
 
-                  <button
-                    onClick={() => handleMenuClick("admin")}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
-                      activeTab === "admin"
-                        ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850"
-                    }`}
-                  >
-                    <Shield className="w-4 h-4 text-indigo-500" />
-                    Yönetici Paneli
-                  </button>
+                  {showAdminEntry && (
+                    <button
+                      onClick={() => handleMenuClick("admin")}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
+                        activeTab === "admin"
+                          ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850"
+                      }`}
+                    >
+                      <Shield className="w-4 h-4 text-indigo-500" />
+                      Yönetici Paneli
+                    </button>
+                  )}
                 </div>
 
                 {/* Logout Action Footer */}
@@ -196,18 +229,20 @@ export default function Navbar({
         ) : (
           /* Beautiful Unified Guest Controls Capsule */
           <div className="flex items-center bg-slate-50/80 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800/80 p-1.5 rounded-2xl gap-1" id="nav-guest-actions">
-            <button
-              id="nav-btn-admin-guest"
-              onClick={() => handleMenuClick("admin")}
-              className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer flex items-center gap-2 tracking-wide uppercase ${
-                activeTab === "admin"
-                  ? "bg-white dark:bg-slate-850 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200/30 dark:border-slate-800/30"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Yönetici</span>
-            </button>
+            {showAdminEntry && (
+              <button
+                id="nav-btn-admin-guest"
+                onClick={() => handleMenuClick("admin")}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer flex items-center gap-2 tracking-wide uppercase ${
+                  activeTab === "admin"
+                    ? "bg-white dark:bg-slate-850 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200/30 dark:border-slate-800/30"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Yönetici</span>
+              </button>
+            )}
 
             <button
               id="nav-btn-auth"

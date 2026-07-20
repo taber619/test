@@ -239,6 +239,8 @@ async function startServer() {
     statsOffset: number;
     usersOffset: number;
     todayOffset: number;
+    maintenanceModeEnabled?: boolean;
+    miniChatEnabled?: boolean;
   }
 
   interface ChatMessage {
@@ -247,6 +249,7 @@ async function startServer() {
     username: string;
     text: string;
     createdAt: number;
+    isMod?: boolean;
   }
 
   interface UserModeration {
@@ -282,7 +285,9 @@ async function startServer() {
     announcements: ["Yönetici Duyurusu: Yeni İnanResim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz."],
     statsOffset: 0,
     usersOffset: 0,
-    todayOffset: 0
+    todayOffset: 0,
+    maintenanceModeEnabled: false,
+    miniChatEnabled: true
   };
 
   let siteConfigState = { ...defaultSiteConfig };
@@ -303,6 +308,8 @@ async function startServer() {
             statsOffset: data.statsOffset !== undefined ? Number(data.statsOffset) : defaultSiteConfig.statsOffset,
             usersOffset: data.usersOffset !== undefined ? Number(data.usersOffset) : defaultSiteConfig.usersOffset,
             todayOffset: data.todayOffset !== undefined ? Number(data.todayOffset) : defaultSiteConfig.todayOffset,
+            maintenanceModeEnabled: data.maintenanceModeEnabled ?? defaultSiteConfig.maintenanceModeEnabled,
+            miniChatEnabled: data.miniChatEnabled ?? defaultSiteConfig.miniChatEnabled,
           };
         }
       } catch (e) {
@@ -1698,7 +1705,7 @@ async function startServer() {
   // Post message
   app.post("/api/chat/messages", async (req, res) => {
     try {
-      const { userId, username, text } = req.body;
+      const { userId, username, text, isMod } = req.body;
 
       if (!userId || !username || !text || text.trim() === "") {
         return res.status(400).json({ error: "Eksik parametre." });
@@ -1769,6 +1776,7 @@ async function startServer() {
         username,
         text: cleanText,
         createdAt: now,
+        isMod: !!isMod,
       };
 
       await dbSaveChatMessage(msg);
@@ -1968,7 +1976,9 @@ async function startServer() {
         announcements,
         statsOffset,
         usersOffset,
-        todayOffset
+        todayOffset,
+        maintenanceModeEnabled,
+        miniChatEnabled
       } = req.body;
 
       const updated = await dbSaveConfig({
@@ -1979,7 +1989,9 @@ async function startServer() {
         announcements: announcements || (announcementText ? [announcementText] : []),
         statsOffset: statsOffset !== undefined ? Number(statsOffset) : undefined,
         usersOffset: usersOffset !== undefined ? Number(usersOffset) : undefined,
-        todayOffset: todayOffset !== undefined ? Number(todayOffset) : undefined
+        todayOffset: todayOffset !== undefined ? Number(todayOffset) : undefined,
+        maintenanceModeEnabled: maintenanceModeEnabled !== undefined ? !!maintenanceModeEnabled : undefined,
+        miniChatEnabled: miniChatEnabled !== undefined ? !!miniChatEnabled : undefined
       });
 
       res.json({ success: true, config: updated });

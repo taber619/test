@@ -41,6 +41,7 @@ interface ChatMessage {
   username: string;
   text: string;
   createdAt: number;
+  isMod?: boolean;
 }
 
 export default function MiniChat() {
@@ -366,6 +367,7 @@ export default function MiniChat() {
       userId,
       username,
       text: messageText.trim(),
+      isMod: isModerator,
     };
 
     try {
@@ -855,13 +857,18 @@ export default function MiniChat() {
                           {/* Speech Bubble Column */}
                           <div className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
                             {/* Sender name & Time */}
-                            <div className="flex items-center gap-1.5 mb-1 px-1">
+                            <div className="flex items-center gap-1.5 mb-1 px-1 flex-wrap">
                               <span 
                                 onClick={() => !isMe && handleReplyUser(msg.username)}
                                 className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors"
                               >
                                 {msg.username}
                               </span>
+                              {msg.isMod && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-red-500 via-amber-500 to-yellow-500 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-amber-500/10 border border-yellow-400/20">
+                                  <span>🛡️</span> Moderatör
+                                </span>
+                              )}
                               <span className="text-[9px] text-slate-400 font-medium tabular-nums">
                                 {timeStr}
                               </span>

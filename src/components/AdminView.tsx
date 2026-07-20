@@ -47,7 +47,7 @@ interface AdminViewProps {
 }
 
 export default function AdminView({ onBack }: AdminViewProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("inanresim_admin_token") === "true");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   
@@ -88,7 +88,9 @@ export default function AdminView({ onBack }: AdminViewProps) {
     announcementText: "",
     statsOffset: 0,
     usersOffset: 0,
-    todayOffset: 0
+    todayOffset: 0,
+    maintenanceModeEnabled: false,
+    miniChatEnabled: true
   });
 
   const [announcements, setAnnouncements] = useState<string[]>([]);
@@ -120,6 +122,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
       if (res.ok && data.success) {
         setIsAuthenticated(true);
         setAuthError("");
+        localStorage.setItem("inanresim_admin_token", "true");
+        localStorage.setItem("inanresim_admin_visible", "true");
       } else {
         setAuthError(data.error || "Geçersiz yönetici şifresi! (Örn: 'admin' deneyin)");
       }
@@ -534,13 +538,25 @@ export default function AdminView({ onBack }: AdminViewProps) {
           <p className="text-xs text-slate-400 mt-1">Görselleri denetleyin, kullanıcı istatistiklerini izleyin ve ana sayfayı canlı düzenleyin.</p>
         </div>
 
-        <button
-          id="admin-exit-btn"
-          onClick={onBack}
-          className="px-4 py-2 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold transition-all cursor-pointer"
-        >
-          Ana Sayfaya Dön
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              localStorage.removeItem("inanresim_admin_token");
+              setIsAuthenticated(false);
+              onBack();
+            }}
+            className="px-4 py-2 border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold transition-all cursor-pointer"
+          >
+            Yönetici Çıkışı 🔒
+          </button>
+          <button
+            id="admin-exit-btn"
+            onClick={onBack}
+            className="px-4 py-2 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold transition-all cursor-pointer"
+          >
+            Ana Sayfaya Dön
+          </button>
+        </div>
       </div>
 
       {/* Admin Quick Metrics Stats */}
@@ -780,6 +796,45 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     {tpl.label}
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-6">
+            <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-4">Sistem Fonksiyonları & Çalışma Modları</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Maintenance Mode */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-2xl">
+                <div>
+                  <h5 className="text-xs font-extrabold text-slate-700 dark:text-slate-300">🔧 Bakım Modu (Maintenance Mode)</h5>
+                  <p className="text-[10px] text-slate-400 mt-1 max-w-[280px]">Aktif edildiğinde sıradan ziyaretçiler güzel bir bakım ekranı ile karşılaşır, sadece yöneticiler siteyi kullanabilir.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={!!siteConfig.maintenanceModeEnabled}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, maintenanceModeEnabled: e.target.checked })}
+                    className="sr-only peer" 
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Chat Toggle */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-2xl">
+                <div>
+                  <h5 className="text-xs font-extrabold text-slate-700 dark:text-slate-300">💬 Mini Sohbet Kutusu (Mini Chat)</h5>
+                  <p className="text-[10px] text-slate-400 mt-1 max-w-[280px]">Sohbet panelini tamamen kapatıp açmanıza olanak tanır. Kapatıldığında sohbet arayüzü gizlenir.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={siteConfig.miniChatEnabled !== false}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, miniChatEnabled: e.target.checked })}
+                    className="sr-only peer" 
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
               </div>
             </div>
           </div>

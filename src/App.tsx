@@ -151,7 +151,12 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       const view = params.get("view");
       const id = params.get("id");
-      if (view === "image-detail" && id) {
+      const adminParam = params.get("admin");
+
+      if (adminParam === "true" || view === "admin") {
+        localStorage.setItem("inanresim_admin_visible", "true");
+        setActiveTab("admin");
+      } else if (view === "image-detail" && id) {
         setSelectedDetailId(id);
         setActiveTab("image-detail");
       } else {
@@ -720,6 +725,55 @@ export default function App() {
     );
   };
 
+  const isAdmin = localStorage.getItem("inanresim_admin_token") === "true";
+  const isMaintenanceActive = siteConfig?.maintenanceModeEnabled && !isAdmin;
+
+  if (isMaintenanceActive) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative font-sans select-none overflow-hidden" id="maintenance-overlay">
+        {/* Subtle background graphics */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full filter blur-[100px] animate-pulse"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full filter blur-[100px] animate-pulse"></div>
+
+        <div className="max-w-md w-full text-center space-y-6 z-10">
+          <div className="inline-flex w-20 h-20 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-3xl items-center justify-center text-4xl animate-bounce">
+            🔧
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 bg-clip-text text-transparent">
+              Sistem Bakımda
+            </h1>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              İnanResim'i daha kararlı ve hızlı hale getirmek için planlı bakım çalışması yapıyoruz. Kısa süre sonra tekrar çevrimiçi olacağız!
+            </p>
+          </div>
+
+          <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-2xl text-xs text-slate-400 flex items-center gap-3 justify-center">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            Tahmini tamamlanma süresi: ~15 dakika
+          </div>
+        </div>
+
+        {/* Footer with a secret click-to-login for developers */}
+        <div className="absolute bottom-8 left-0 right-0 text-center">
+          <p className="text-[10px] text-slate-600">© 2026 İnanResim. Tüm hakları saklıdır.</p>
+          <button 
+            onClick={() => {
+              // Secretly bypass or show admin entry
+              localStorage.setItem("inanresim_admin_visible", "true");
+              setActiveTab("admin");
+              window.location.reload(); // Refresh to enter admin tab
+            }}
+            className="mt-3 text-[10px] text-slate-800 hover:text-slate-500 transition-colors cursor-pointer"
+          >
+            Yönetici Girişi 🔐
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen max-w-full overflow-x-hidden flex flex-col font-sans transition-colors duration-300 ${theme === "dark" ? "dark bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`} id="app-root-container">
       {/* Navigation Header */}
@@ -738,7 +792,7 @@ export default function App() {
       </main>
 
       {/* Floating Chat Panel */}
-      <MiniChat />
+      {siteConfig?.miniChatEnabled !== false && <MiniChat />}
 
       {/* Live Update Toast */}
       {showUpdateToast && (
