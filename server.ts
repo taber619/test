@@ -2,6 +2,12 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import nodemailer from "nodemailer";
+import dns from "dns";
+
+// Force IPv4 as default DNS resolution order to prevent ENETUNREACH on containers without IPv6
+if (dns && typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 import { createServer as createViteServer } from "vite";
 import { initializeApp } from "firebase/app";
 import { 
@@ -131,7 +137,8 @@ async function startServer() {
         },
         tls: {
           rejectUnauthorized: false // Prevents SSL/TLS handshake issues on cloud containers
-        }
+        },
+        family: 4 // Force IPv4 to avoid ENETUNREACH on systems with broken IPv6 routing
       };
 
       transporter = nodemailer.createTransport(transportConfig);
@@ -1947,7 +1954,8 @@ async function startServer() {
         },
         tls: {
           rejectUnauthorized: false // Prevents SSL/TLS handshake issues on cloud containers
-        }
+        },
+        family: 4 // Force IPv4 to avoid ENETUNREACH on systems with broken IPv6 routing
       };
 
       const testTransporter = nodemailer.createTransport(transportConfig);
