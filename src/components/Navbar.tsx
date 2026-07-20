@@ -22,7 +22,6 @@ interface NavbarProps {
   onLogout: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
-  onOpenQRCode: (url: string) => void;
 }
 
 export default function Navbar({ 
@@ -31,8 +30,7 @@ export default function Navbar({
   currentUser, 
   onLogout, 
   theme, 
-  onToggleTheme,
-  onOpenQRCode
+  onToggleTheme 
 }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -95,16 +93,6 @@ export default function Navbar({
           }`}
         >
           Ana Sayfa
-        </button>
-
-        <button
-          id="nav-btn-qrcode"
-          onClick={() => onOpenQRCode(window.location.origin)}
-          className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/60 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 cursor-pointer flex items-center gap-1.5"
-          title="Tek Tıkla QR Kod Oluşturucu"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-          <span>QR Kod Oluştur</span>
         </button>
 
         {/* Separator */}

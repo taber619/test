@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { 
   UploadCloud, 
   Camera, 
@@ -47,6 +48,7 @@ export default function HeroSection({
 }: HeroSectionProps) {
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [deleteAfter, setDeleteAfter] = useState<string>("never");
   const [password, setPassword] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -115,6 +117,13 @@ export default function HeroSection({
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
       setDragActive(true);
+      if (e.currentTarget) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMousePos({
+          x: e.clientX - rect.left - rect.width / 2,
+          y: e.clientY - rect.top - rect.height / 2,
+        });
+      }
     } else if (e.type === "dragleave") {
       setDragActive(false);
     }
@@ -348,11 +357,11 @@ export default function HeroSection({
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
         onDrop={handleDrop}
-        className={`relative w-full bg-white dark:bg-slate-900/40 rounded-3xl border-2 border-dashed p-2 transition-all ${
+        className={`relative w-full bg-white dark:bg-slate-900/40 rounded-3xl border-2 transition-all duration-300 p-2 ${
           dragActive
             ? "border-blue-600 dark:border-blue-500 scale-[0.99] shadow-inner"
             : "border-slate-300 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500"
-        } shadow-sm`}
+        } border-dashed shadow-sm`}
         id="drag-drop-zone"
       >
         <input
@@ -365,188 +374,275 @@ export default function HeroSection({
           id="hidden-file-input"
         />
 
-        {selectedFiles.length === 0 ? (
-          /* Empty drop zone state - matches the Sleek Design */
-          <div className="bg-gradient-to-b from-blue-50/40 to-blue-50/10 dark:from-slate-900/40 dark:to-slate-950/20 rounded-[22px] py-16 px-6 sm:px-12 flex flex-col items-center text-center border border-white/60 dark:border-slate-800/40 relative overflow-hidden" id="drop-zone-empty">
-            {/* Dynamic Grid Background Pattern inside the card */}
-            <div 
-              className="absolute inset-0 opacity-[0.03] dark:opacity-[0.015] pointer-events-none"
-              style={{
-                backgroundImage: "radial-gradient(#2563eb 1.5px, transparent 1.5px)",
-                backgroundSize: "24px 24px"
-              }}
-            />
+        {/* Interactive Drag and Drop Visual Feedback Overlay */}
+        <AnimatePresence>
+          {dragActive && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-blue-600/10 dark:bg-blue-950/20 backdrop-blur-[6px] rounded-3xl z-30 flex flex-col items-center justify-center p-6 overflow-hidden pointer-events-none"
+            >
+              {/* Pulsing radar rings in background */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-96 h-96 border border-blue-500/20 rounded-full animate-ping opacity-60" style={{ animationDuration: '3s' }} />
+                <div className="w-64 h-64 border-2 border-dashed border-blue-500/10 rounded-full animate-spin-slow" />
+              </div>
 
-            {/* Top Technology Badge */}
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-500/10 dark:bg-blue-400/10 border border-blue-500/20 dark:border-blue-400/20 mb-6 animate-fade-in relative z-10">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 animate-pulse" />
-              <span className="text-[10px] font-black tracking-wider text-blue-600 dark:text-blue-400 uppercase">
-                Hızlı & Güvenli Paylaşım
-              </span>
-            </div>
+              {/* Centered Floating Mock Photo Frame following the cursor */}
+              <motion.div
+                animate={{
+                  x: mousePos.x * 0.35,
+                  y: mousePos.y * 0.35,
+                  rotateX: -mousePos.y * 0.04,
+                  rotateY: mousePos.x * 0.04,
+                }}
+                transition={{ type: "spring", damping: 15, stiffness: 120 }}
+                className="relative bg-white/95 dark:bg-slate-900/95 border border-slate-100 dark:border-slate-800/80 p-4 rounded-3xl shadow-2xl flex flex-col items-center gap-3 w-64 max-w-full transform-gpu"
+                style={{ perspective: 1000 }}
+              >
+                {/* Photo mockup with a dynamic landscape illustration */}
+                <div className="relative w-full aspect-square rounded-2xl bg-gradient-to-br from-blue-500/20 via-indigo-500/20 to-purple-500/20 border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col items-center justify-center">
+                  
+                  {/* Glowing core icon */}
+                  <motion.div 
+                    animate={{ scale: [1, 1.08, 1], rotate: [0, 5, -5, 0] }}
+                    transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                    className="p-4 bg-blue-600/15 text-blue-600 dark:text-blue-400 rounded-2xl shadow-inner relative z-10"
+                  >
+                    <UploadCloud className="w-8 h-8" />
+                  </motion.div>
 
-            {/* Glowing animated Upload Cloud Icon wrapper */}
-            <div className="relative group mb-6 relative z-10">
-              {/* Pulsing ring */}
-              <div className="absolute -inset-2 bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full blur-md opacity-25 group-hover:opacity-40 transition-opacity duration-300 animate-pulse" />
-              
-              {/* Custom stacked visual container */}
-              <div className="relative w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-blue-500 dark:to-indigo-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-200 dark:shadow-none transform group-hover:scale-105 transition-all duration-300">
-                <UploadCloud className="h-11 w-11 transform group-hover:-translate-y-1 transition-transform duration-300" />
+                  {/* Little shiny star sparkles */}
+                  <div className="absolute top-3 right-3 text-amber-500 animate-pulse">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  
+                  {/* Supported formats layout */}
+                  <div className="absolute inset-x-3 bottom-3 flex gap-1 justify-center z-10">
+                    <span className="text-[9px] bg-blue-600/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider">PNG</span>
+                    <span className="text-[9px] bg-indigo-600/10 dark:bg-indigo-400/10 text-indigo-600 dark:text-indigo-400 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider">JPG</span>
+                    <span className="text-[9px] bg-purple-600/10 dark:bg-purple-400/10 text-purple-600 dark:text-purple-400 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider">WEBP</span>
+                    <span className="text-[9px] bg-emerald-600/10 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider">GIF</span>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <span className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider block">Görsel Algılandı</span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mt-1 block">Yüklemek İçin Bırakın</span>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait">
+          {selectedFiles.length === 0 ? (
+            /* Empty drop zone state - matches the Sleek Design */
+            <motion.div
+              key="empty-state"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.25 }}
+              className="bg-gradient-to-b from-blue-50/40 to-blue-50/10 dark:from-slate-900/40 dark:to-slate-950/20 rounded-[22px] py-16 px-6 sm:px-12 flex flex-col items-center text-center border border-white/60 dark:border-slate-800/40 relative overflow-hidden"
+              id="drop-zone-empty"
+            >
+              {/* Dynamic Grid Background Pattern inside the card */}
+              <div 
+                className="absolute inset-0 opacity-[0.03] dark:opacity-[0.015] pointer-events-none"
+                style={{
+                  backgroundImage: "radial-gradient(#2563eb 1.5px, transparent 1.5px)",
+                  backgroundSize: "24px 24px"
+                }}
+              />
+
+              {/* Top Technology Badge */}
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-500/10 dark:bg-blue-400/10 border border-blue-500/20 dark:border-blue-400/20 mb-6 animate-fade-in relative z-10">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 animate-pulse" />
+                <span className="text-[10px] font-black tracking-wider text-blue-600 dark:text-blue-400 uppercase">
+                  Hızlı & Güvenli Paylaşım
+                </span>
+              </div>
+
+              {/* Glowing animated Upload Cloud Icon wrapper */}
+              <div className="relative group mb-6 relative z-10">
+                {/* Pulsing ring */}
+                <div className="absolute -inset-2 bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full blur-md opacity-25 group-hover:opacity-40 transition-opacity duration-300 animate-pulse" />
                 
-                {/* Secondary tiny upload indicator */}
-                <div className="absolute bottom-1 right-1 bg-emerald-500 text-white p-1 rounded-full border-2 border-white dark:border-slate-900">
-                  <ShieldCheck className="w-3 h-3" />
-                </div>
-              </div>
-            </div>
-
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-2.5 tracking-tight relative z-10">
-              Resimlerinizi Sürükleyip Bırakın 👋
-            </h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-8 max-w-lg leading-relaxed text-sm relative z-10">
-              Dilerseniz görsel dosyalarınızı bu alana bırakabilir, dilerseniz de panodan kopyaladığınız resimleri doğrudan <span className="font-mono bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md text-xs text-slate-800 dark:text-slate-200 font-bold border border-slate-300/40 dark:border-slate-700/60 shadow-sm">Ctrl + V</span> ile yapıştırabilirsiniz.
-            </p>
-
-            {/* Core Feature Benefits Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-2xl mb-8 relative z-10">
-              <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
-                <div className="p-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-xs font-black text-slate-800 dark:text-white block">WebP Sıkıştırma</span>
-                  <span className="text-[10px] text-slate-400 block leading-tight">Otomatik boyut optimizasyonu</span>
+                {/* Custom stacked visual container */}
+                <div className="relative w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-blue-500 dark:to-indigo-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-200 dark:shadow-none transform group-hover:scale-105 transition-all duration-300">
+                  <UploadCloud className="h-11 w-11 transform group-hover:-translate-y-1 transition-transform duration-300" />
+                  
+                  {/* Secondary tiny upload indicator */}
+                  <div className="absolute bottom-1 right-1 bg-emerald-500 text-white p-1 rounded-full border-2 border-white dark:border-slate-900">
+                    <ShieldCheck className="w-3 h-3" />
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
-                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-xl shrink-0">
-                  <Shield className="w-4 h-4" />
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-2.5 tracking-tight relative z-10">
+                Resimlerinizi Sürükleyip Bırakın 👋
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 mb-8 max-w-lg leading-relaxed text-sm relative z-10">
+                Dilerseniz görsel dosyalarınızı bu alana bırakabilir, dilerseniz de panodan kopyaladığınız resimleri doğrudan <span className="font-mono bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md text-xs text-slate-800 dark:text-slate-200 font-bold border border-slate-300/40 dark:border-slate-700/60 shadow-sm">Ctrl + V</span> ile yapıştırabilirsiniz.
+              </p>
+
+              {/* Core Feature Benefits Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-2xl mb-8 relative z-10">
+                <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
+                  <div className="p-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-slate-800 dark:text-white block">WebP Sıkıştırma</span>
+                    <span className="text-[10px] text-slate-400 block leading-tight">Otomatik boyut optimizasyonu</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-xs font-black text-slate-800 dark:text-white block">EXIF Gizliliği</span>
-                  <span className="text-[10px] text-slate-400 block leading-tight">Kamera ve konum verisini temizleme</span>
+
+                <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
+                  <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-xl shrink-0">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-slate-800 dark:text-white block">EXIF Gizliliği</span>
+                    <span className="text-[10px] text-slate-400 block leading-tight">Kamera ve konum verisini temizleme</span>
+                  </div>
+                </div>
+
+                <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
+                  <div className="p-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-xl shrink-0">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-slate-800 dark:text-white block">Otomatik Silinme</span>
+                    <span className="text-[10px] text-slate-400 block leading-tight">İstediğiniz sürede kendi kendini silme</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
-                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-xl shrink-0">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-xs font-black text-slate-800 dark:text-white block">Otomatik Silinme</span>
-                  <span className="text-[10px] text-slate-400 block leading-tight">İstediğiniz sürede kendi kendini silme</span>
-                </div>
+              {/* Divider element */}
+              <div className="flex items-center gap-4 w-full max-w-md mb-8 relative z-10">
+                <div className="h-[1px] bg-slate-200 dark:bg-slate-800/80 flex-grow" />
+                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">veya</span>
+                <div className="h-[1px] bg-slate-200 dark:bg-slate-800/80 flex-grow" />
               </div>
-            </div>
 
-            {/* Divider element */}
-            <div className="flex items-center gap-4 w-full max-w-md mb-8 relative z-10">
-              <div className="h-[1px] bg-slate-200 dark:bg-slate-800/80 flex-grow" />
-              <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">veya</span>
-              <div className="h-[1px] bg-slate-200 dark:bg-slate-800/80 flex-grow" />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full relative z-10">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-10 py-4 rounded-xl font-bold text-base transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-blue-500/25 dark:shadow-none flex items-center justify-center gap-2.5 cursor-pointer"
-                id="btn-select-file"
-              >
-                <FolderOpen className="w-5 h-5" />
-                Dosya Seç
-              </button>
-
-              <button
-                type="button"
-                onClick={startCamera}
-                className="w-full sm:w-auto bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-8 py-4 rounded-xl font-bold text-base hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-sm"
-                id="btn-take-cam"
-              >
-                <Camera className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                Kamerayla Çek
-              </button>
-            </div>
-
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider relative z-10">
-              <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">JPG, PNG, GIF, WEBP</span>
-              <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
-              <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">MAKS. 20 MB / 10 DOSYA</span>
-              <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
-              <button
-                type="button"
-                onClick={onSwitchToUrlUpload}
-                className="text-blue-600 dark:text-blue-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline cursor-pointer lowercase font-extrabold flex items-center gap-1"
-                id="btn-url-mode"
-              >
-                <Link className="w-3.5 h-3.5" />
-                url'den yükle
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* File queue review state - matches original structure embedded in sleek card */
-          <div className="bg-slate-50/40 dark:bg-slate-900/30 rounded-[22px] py-8 px-6 sm:px-8 text-left border border-white/60 dark:border-slate-800/40" id="drop-zone-has-files">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 mb-6">
-              <h3 className="font-extrabold text-slate-800 dark:text-white text-base flex items-center gap-1.5">
-                <ImageIcon className="w-5 h-5 text-blue-600" />
-                Seçilen Görseller ({selectedFiles.length}/10)
-              </h3>
-              <button
-                onClick={clearAll}
-                className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Tümünü Kaldır
-              </button>
-            </div>
-
-            {/* Thumbnails grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6" id="selected-thumbnails-grid">
-              {selectedFiles.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-2xl relative group flex flex-col justify-between hover:border-blue-400 dark:hover:border-blue-500 transition-colors shadow-sm"
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full relative z-10">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-10 py-4 rounded-xl font-bold text-base transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-blue-500/25 dark:shadow-none flex items-center justify-center gap-2.5 cursor-pointer"
+                  id="btn-select-file"
                 >
-                  <div className="aspect-square rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-950 relative flex items-center justify-center border border-slate-100 dark:border-slate-850">
-                    <img
-                      src={item.previewUrl}
-                      alt={item.file.name}
-                      className="w-full h-full object-cover"
-                    />
-                    
-                    {/* Floating Delete Button */}
-                    <button
-                      onClick={() => removeFile(item.id)}
-                      className="absolute top-1.5 right-1.5 p-1 bg-black/60 text-white hover:bg-black/80 rounded-full transition-colors cursor-pointer z-10"
-                      title="Görseli Kaldır"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+                  <FolderOpen className="w-5 h-5" />
+                  Dosya Seç
+                </button>
 
-                    {/* Floating Edit Button (Pencil Icon) */}
-                    <button
-                      onClick={() => setEditingFile(item)}
-                      className="absolute bottom-1.5 right-1.5 p-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-full transition-colors cursor-pointer z-10 shadow-md shadow-blue-500/20 flex items-center justify-center"
-                      title="Görseli Düzenle (Kırp, Filtrele, Döndür)"
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="w-full sm:w-auto bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-8 py-4 rounded-xl font-bold text-base hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-sm"
+                  id="btn-take-cam"
+                >
+                  <Camera className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                  Kamerayla Çek
+                </button>
+              </div>
+
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider relative z-10">
+                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">JPG, PNG, GIF, WEBP</span>
+                <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
+                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">MAKS. 20 MB / 10 DOSYA</span>
+                <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
+                <button
+                  type="button"
+                  onClick={onSwitchToUrlUpload}
+                  className="text-blue-600 dark:text-blue-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline cursor-pointer lowercase font-extrabold flex items-center gap-1"
+                  id="btn-url-mode"
+                >
+                  <Link className="w-3.5 h-3.5" />
+                  url'den yükle
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            /* File queue review state - matches original structure embedded in sleek card */
+            <motion.div
+              key="has-files-state"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.25 }}
+              className="bg-slate-50/40 dark:bg-slate-900/30 rounded-[22px] py-8 px-6 sm:px-8 text-left border border-white/60 dark:border-slate-800/40"
+              id="drop-zone-has-files"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 mb-6">
+                <h3 className="font-extrabold text-slate-800 dark:text-white text-base flex items-center gap-1.5">
+                  <ImageIcon className="w-5 h-5 text-blue-600" />
+                  Seçilen Görseller ({selectedFiles.length}/10)
+                </h3>
+                <button
+                  onClick={clearAll}
+                  className="text-xs text-red-500 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Tümünü Kaldır
+                </button>
+              </div>
+
+              {/* Thumbnails grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6" id="selected-thumbnails-grid">
+                <AnimatePresence>
+                  {selectedFiles.map((item) => (
+                    <motion.div
+                      key={item.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.85, y: 15 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.85, y: -15 }}
+                      transition={{ type: "spring", damping: 20, stiffness: 150 }}
+                      whileHover={{ scale: 1.02 }}
+                      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-2xl relative group flex flex-col justify-between hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 shadow-sm"
                     >
-                      <Edit3 className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="mt-1.5 px-1">
-                    <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate" title={item.file.name}>
-                      {item.file.name}
-                    </p>
-                    <p className="text-[9px] text-slate-400 dark:text-slate-500 font-medium">
-                      {formatSize(item.file.size)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                      <div className="aspect-square rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-950 relative flex items-center justify-center border border-slate-100 dark:border-slate-850">
+                        <img
+                          src={item.previewUrl}
+                          alt={item.file.name}
+                          className="w-full h-full object-cover"
+                        />
+                        
+                        {/* Floating Delete Button */}
+                        <button
+                          onClick={() => removeFile(item.id)}
+                          className="absolute top-1.5 right-1.5 p-1 bg-black/60 text-white hover:bg-black/80 rounded-full transition-colors cursor-pointer z-10"
+                          title="Görseli Kaldır"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+
+                        {/* Floating Edit Button (Pencil Icon) */}
+                        <button
+                          onClick={() => setEditingFile(item)}
+                          className="absolute bottom-1.5 right-1.5 p-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-full transition-colors cursor-pointer z-10 shadow-md shadow-blue-500/20 flex items-center justify-center"
+                          title="Görseli Düzenle (Kırp, Filtrele, Döndür)"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="mt-1.5 px-1">
+                        <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate" title={item.file.name}>
+                          {item.file.name}
+                        </p>
+                        <p className="text-[9px] text-slate-400 dark:text-slate-500 font-medium">
+                          {formatSize(item.file.size)}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
 
             {/* Extra Settings & Configurations panel */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 shadow-sm">
@@ -735,26 +831,27 @@ export default function HeroSection({
               </div>
             </div>
 
-            {/* Execute trigger */}
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="px-5 py-2.5 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-850 font-bold text-xs rounded-xl transition-all cursor-pointer bg-white dark:bg-slate-900"
-              >
-                Daha Fazla Ekle
-              </button>
+              {/* Execute trigger */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-5 py-2.5 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-850 font-bold text-xs rounded-xl transition-all cursor-pointer bg-white dark:bg-slate-900"
+                >
+                  Daha Fazla Ekle
+                </button>
 
-              <button
-                onClick={triggerUpload}
-                disabled={isUploading || isOptimizing}
-                className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-100 dark:shadow-none transition-all flex items-center gap-1.5 cursor-pointer"
-                id="btn-start-upload"
-              >
-                Görselleri Yükle ({selectedFiles.length})
-              </button>
-            </div>
-          </div>
-        )}
+                <button
+                  onClick={triggerUpload}
+                  disabled={isUploading || isOptimizing}
+                  className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-100 dark:shadow-none transition-all flex items-center gap-1.5 cursor-pointer"
+                  id="btn-start-upload"
+                >
+                  Görselleri Yükle ({selectedFiles.length})
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Optimizing files overlay */}

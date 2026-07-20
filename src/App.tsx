@@ -11,7 +11,6 @@ import ImageDetailView from "./components/ImageDetailView";
 import UrlUploadView from "./components/UrlUploadView";
 import AdminView from "./components/AdminView";
 import MiniChat from "./components/MiniChat";
-import QRCodeModal from "./components/QRCodeModal";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -137,10 +136,6 @@ export default function App() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedImages, setUploadedImages] = useState<ClientImage[]>([]);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
-
-  // QR Code Modal states
-  const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [qrModalUrl, setQrModalUrl] = useState("");
 
   // Parse custom parameters on mount (to support shareable preview links: /?view=image-detail&id=xyz)
   useEffect(() => {
@@ -371,14 +366,9 @@ export default function App() {
     }
   };
 
-  const handleOpenQRCode = (url: string) => {
-    setQrModalUrl(url);
-    setQrModalOpen(true);
-  };
-
   const renderContent = () => {
     if (activeTab === "image-detail" && selectedDetailId) {
-      return <ImageDetailView imageId={selectedDetailId} onBack={navigateBack} onOpenQRCode={handleOpenQRCode} />;
+      return <ImageDetailView imageId={selectedDetailId} onBack={navigateBack} />;
     }
 
     if (activeTab === "url-upload") {
@@ -417,7 +407,6 @@ export default function App() {
           onReset={navigateBack}
           onDeleteImage={handleDeleteImage}
           onSetPassword={handleLockImage}
-          onOpenQRCode={handleOpenQRCode}
         />
       );
     }
@@ -719,7 +708,6 @@ export default function App() {
         onLogout={handleLogout}
         theme={theme}
         onToggleTheme={toggleTheme}
-        onOpenQRCode={handleOpenQRCode}
       />
 
       {/* Main Container Workspace */}
@@ -729,13 +717,6 @@ export default function App() {
 
       {/* Floating Chat Panel */}
       <MiniChat />
-
-      {/* Standalone customizable QR Code Modal */}
-      <QRCodeModal
-        isOpen={qrModalOpen}
-        onClose={() => setQrModalOpen(false)}
-        defaultUrl={qrModalUrl}
-      />
 
       {/* Live Update Toast */}
       {showUpdateToast && (
