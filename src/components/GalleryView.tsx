@@ -178,8 +178,29 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
                   />
                 )}
                 
+                {img.watermarkText && (
+                  <div 
+                    className="absolute pointer-events-none select-none font-bold text-[9px] px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-[0.5px] z-10"
+                    style={{
+                      opacity: img.watermarkOpacity !== undefined ? img.watermarkOpacity : 0.6,
+                      color: img.watermarkColor || "#ffffff",
+                      textShadow: "0px 1px 2px rgba(0,0,0,0.9)",
+                      ...(() => {
+                        const pos = img.watermarkPosition || "bottom-right";
+                        if (pos === "bottom-left") return { bottom: "8px", left: "8px" };
+                        if (pos === "top-right") return { top: "8px", right: "8px" };
+                        if (pos === "top-left") return { top: "8px", left: "8px" };
+                        if (pos === "center") return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
+                        return { bottom: "8px", right: "8px" };
+                      })()
+                    }}
+                  >
+                    {img.watermarkText}
+                  </div>
+                )}
+
                 {img.hasPassword && (
-                  <div className="absolute top-2.5 left-2.5 bg-indigo-600 text-white p-1.5 rounded-lg shadow-sm" title="Şifreli Görsel">
+                  <div className="absolute top-2.5 left-2.5 bg-indigo-600 text-white p-1.5 rounded-lg shadow-sm z-10" title="Şifreli Görsel">
                     <Key className="w-3.5 h-3.5" />
                   </div>
                 )}

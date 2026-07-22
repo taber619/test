@@ -21,7 +21,7 @@ import {
   Clock,
   Play
 } from "lucide-react";
-import { processImage, processVideo } from "../utils/imageProcessor";
+import { processImage } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
 
 interface SelectedFile {
@@ -219,28 +219,8 @@ export default function HeroSection({
     try {
       const processedFiles = await Promise.all(
         selectedFiles.map(async (item) => {
-          // Skip WebP processing on raw GIF files
-          if (item.file.type === "image/gif") {
-            return item.file;
-          }
-          if (item.file.type.startsWith("video/")) {
-            if (addWatermark) {
-              try {
-                return await processVideo(item.file, {
-                  compressionMode,
-                  stripMetadata,
-                  addWatermark,
-                  watermarkText,
-                  watermarkOpacity,
-                  watermarkColor,
-                  watermarkSize,
-                  watermarkPosition,
-                });
-              } catch (err) {
-                console.error("Video filigran işleme başarısız, orijinal video kullanılıyor:", item.file.name, err);
-                return item.file;
-              }
-            }
+          // Skip WebP / canvas processing on raw GIF files or video files to preserve quality and video playback
+          if (item.file.type === "image/gif" || item.file.type.startsWith("video/")) {
             return item.file;
           }
           try {
