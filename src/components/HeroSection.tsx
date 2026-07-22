@@ -21,7 +21,7 @@ import {
   Clock,
   Play
 } from "lucide-react";
-import { processImage } from "../utils/imageProcessor";
+import { processImage, processVideo } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
 
 interface SelectedFile {
@@ -219,8 +219,28 @@ export default function HeroSection({
     try {
       const processedFiles = await Promise.all(
         selectedFiles.map(async (item) => {
-          // Skip WebP processing on raw GIF files or video files to preserve animations/video formats
-          if (item.file.type === "image/gif" || item.file.type.startsWith("video/")) {
+          // Skip WebP processing on raw GIF files
+          if (item.file.type === "image/gif") {
+            return item.file;
+          }
+          if (item.file.type.startsWith("video/")) {
+            if (addWatermark) {
+              try {
+                return await processVideo(item.file, {
+                  compressionMode,
+                  stripMetadata,
+                  addWatermark,
+                  watermarkText,
+                  watermarkOpacity,
+                  watermarkColor,
+                  watermarkSize,
+                  watermarkPosition,
+                });
+              } catch (err) {
+                console.error("Video filigran işleme başarısız, orijinal video kullanılıyor:", item.file.name, err);
+                return item.file;
+              }
+            }
             return item.file;
           }
           try {
@@ -777,10 +797,10 @@ export default function HeroSection({
                   <div>
                     <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                      Görsel Üzerine Filigran (Watermark)
+                      Görsel ve Video Üzerine Filigran (Watermark)
                     </h4>
                     <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 leading-tight">
-                      Yükleyeceğiniz görsellerin üzerine dilediğiniz gibi kapatıp açılabilen özel bir telif yazısı veya filigran ekleyin.
+                      Yükleyeceğiniz görsel veya videoların üzerine dilediğiniz gibi özel telif yazısı veya filigran ekleyin.
                     </p>
                   </div>
                   <label className="inline-flex items-center gap-2 cursor-pointer self-start sm:self-center">

@@ -11,6 +11,11 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
   const [url, setUrl] = useState("");
   const [deleteAfter, setDeleteAfter] = useState("never");
   const [password, setPassword] = useState("");
+  const [addWatermark, setAddWatermark] = useState(false);
+  const [watermarkText, setWatermarkText] = useState("© HızlıResim");
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.5);
+  const [watermarkColor, setWatermarkColor] = useState("#ffffff");
+  const [watermarkPosition, setWatermarkPosition] = useState<"bottom-right" | "bottom-left" | "top-right" | "top-left" | "center">("bottom-right");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -38,6 +43,10 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
           deleteAfter,
           password: password || undefined,
           userId,
+          watermarkText: addWatermark ? watermarkText : undefined,
+          watermarkOpacity: addWatermark ? watermarkOpacity : undefined,
+          watermarkColor: addWatermark ? watermarkColor : undefined,
+          watermarkPosition: addWatermark ? watermarkPosition : undefined,
         }),
       });
 
@@ -141,6 +150,50 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
                 className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
+          </div>
+
+          {/* Filigran / Watermark Section */}
+          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5 cursor-pointer">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                Görsel ve Video Üzerine Filigran (Watermark)
+              </label>
+              <input
+                type="checkbox"
+                checked={addWatermark}
+                onChange={(e) => setAddWatermark(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+              />
+            </div>
+
+            {addWatermark && (
+              <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Filigran Metni</label>
+                  <input
+                    type="text"
+                    value={watermarkText}
+                    onChange={(e) => setWatermarkText(e.target.value)}
+                    className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Konum</label>
+                  <select
+                    value={watermarkPosition}
+                    onChange={(e) => setWatermarkPosition(e.target.value as any)}
+                    className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700"
+                  >
+                    <option value="bottom-right">Sağ Alt</option>
+                    <option value="bottom-left">Sol Alt</option>
+                    <option value="top-right">Sağ Üst</option>
+                    <option value="top-left">Sol Üst</option>
+                    <option value="center">Orta</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action button */}

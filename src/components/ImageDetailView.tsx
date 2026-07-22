@@ -235,7 +235,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
         <div className="lg:col-span-7 flex flex-col gap-6">
           <div className="bg-white border border-slate-100 rounded-3xl p-4 shadow-sm relative flex items-center justify-center min-h-[300px] max-h-[550px] w-full">
             {meta?.mimeType?.startsWith("video/") ? (
-              <div className="relative w-full h-full flex items-center justify-center">
+              <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl">
                 <video
                   src={verifiedDataUrl || ""}
                   controls
@@ -244,19 +244,19 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
                 />
                 {meta?.watermarkText && (
                   <div 
-                    className="absolute pointer-events-none select-none font-extrabold tracking-wide px-3 py-1.5 rounded-lg bg-black/10 backdrop-blur-[0.5px]"
+                    className="absolute pointer-events-none select-none font-extrabold tracking-wide px-3 py-1.5 rounded-lg bg-black/20 backdrop-blur-[0.5px] z-10"
                     style={{
-                      opacity: meta.watermarkOpacity !== undefined ? meta.watermarkOpacity : 0.5,
+                      opacity: meta.watermarkOpacity !== undefined ? meta.watermarkOpacity : 0.6,
                       color: meta.watermarkColor || "#ffffff",
                       fontSize: meta.watermarkSize ? `${Math.max(12, Math.round(400 * meta.watermarkSize))}px` : "16px",
-                      textShadow: "1px 1px 3px rgba(0,0,0,0.8)",
+                      textShadow: "0px 2px 4px rgba(0,0,0,0.9), 0px 0px 8px rgba(0,0,0,0.7)",
                       ...(() => {
                         const pos = meta.watermarkPosition || "bottom-right";
-                        if (pos === "bottom-left") return { bottom: "24px", left: "24px" };
+                        if (pos === "bottom-left") return { bottom: "52px", left: "24px" };
                         if (pos === "top-right") return { top: "24px", right: "24px" };
                         if (pos === "top-left") return { top: "24px", left: "24px" };
                         if (pos === "center") return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
-                        return { bottom: "24px", right: "24px" }; // bottom-right
+                        return { bottom: "52px", right: "24px" }; // bottom-right
                       })()
                     }}
                   >

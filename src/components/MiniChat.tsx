@@ -363,7 +363,16 @@ export default function MiniChat() {
       badges: [],
     });
     try {
-      const res = await fetch(`/api/chat/profile/${encodeURIComponent(uId)}?username=${encodeURIComponent(uName)}&isMod=${isModerator}&isAdmin=${isAdmin}`);
+      let myId = localStorage.getItem("inanresim_guest_id") || "guest_unknown";
+      const storedUser = localStorage.getItem("hizli_resim_user");
+      if (storedUser) {
+        try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+      }
+      const isTargetMe = uId === myId;
+      const targetIsAdmin = isTargetMe ? isAdmin : false;
+      const targetIsMod = isTargetMe ? isModerator : false;
+
+      const res = await fetch(`/api/chat/profile/${encodeURIComponent(uId)}?username=${encodeURIComponent(uName)}&isMod=${targetIsMod}&isAdmin=${targetIsAdmin}`);
       const data = await res.json();
       if (res.ok) {
         setUserProfileModal(data);
@@ -1443,11 +1452,11 @@ export default function MiniChat() {
                               >
                                 {msg.username}
                               </span>
-                              {(msg.isAdmin || (isAdmin && isMe)) ? (
+                              {(isMe ? isAdmin : msg.isAdmin) ? (
                                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-indigo-500/20 border border-indigo-400/30">
                                   <span>👑</span> Admin
                                 </span>
-                              ) : (msg.isMod || (isModerator && isMe)) ? (
+                              ) : (isMe ? isModerator : msg.isMod) ? (
                                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-amber-500/10 border border-yellow-400/20">
                                   <span>🛡️</span> Moderatör
                                 </span>

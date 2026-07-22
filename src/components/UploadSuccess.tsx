@@ -95,7 +95,7 @@ export default function UploadSuccess({
               <div className="lg:col-span-4 flex flex-col gap-4">
                 <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 group">
                   {img.mimeType?.startsWith("video/") ? (
-                    <div className="relative w-full h-full flex items-center justify-center">
+                    <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-xl">
                       <video
                         src={img.directUrl}
                         className="w-full h-full object-contain"
@@ -104,12 +104,12 @@ export default function UploadSuccess({
                       />
                       {img.watermarkText && (
                         <div 
-                          className="absolute pointer-events-none select-none font-extrabold tracking-wide px-2 py-1 rounded-md bg-black/10 backdrop-blur-[0.5px]"
+                          className="absolute pointer-events-none select-none font-extrabold tracking-wide px-2 py-0.5 rounded-md bg-black/20 backdrop-blur-[0.5px] z-10"
                           style={{
-                            opacity: img.watermarkOpacity !== undefined ? img.watermarkOpacity : 0.5,
+                            opacity: img.watermarkOpacity !== undefined ? img.watermarkOpacity : 0.6,
                             color: img.watermarkColor || "#ffffff",
-                            fontSize: img.watermarkSize ? `${Math.max(8, Math.round(180 * img.watermarkSize))}px` : "10px",
-                            textShadow: "1px 1px 2px rgba(0,0,0,0.8)",
+                            fontSize: img.watermarkSize ? `${Math.max(9, Math.round(180 * img.watermarkSize))}px` : "11px",
+                            textShadow: "0px 1px 3px rgba(0,0,0,0.9)",
                             ...(() => {
                               const pos = img.watermarkPosition || "bottom-right";
                               if (pos === "bottom-left") return { bottom: "10px", left: "10px" };
