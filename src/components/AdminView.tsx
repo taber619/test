@@ -79,6 +79,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [newAdminPassword, setNewAdminPassword] = useState("");
   const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
   const [changePasswordError, setChangePasswordError] = useState("");
+
+  // New mod password variables
+  const [newModPassword, setNewModPassword] = useState("");
+  const [changeModPasswordSuccess, setChangeModPasswordSuccess] = useState(false);
+  const [changeModPasswordError, setChangeModPasswordError] = useState("");
   
   // Data states
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({
@@ -219,6 +224,32 @@ export default function AdminView({ onBack }: AdminViewProps) {
       }
     } catch (err) {
       setChangePasswordError("Bağlantı hatası oluştu.");
+    }
+  };
+
+  const handleChangeModPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangeModPasswordError("");
+    setChangeModPasswordSuccess(false);
+    if (newModPassword.trim().length < 4) {
+      setChangeModPasswordError("Moderatör şifresi en az 4 karakter olmalıdır.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/change-mod-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: newModPassword.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setChangeModPasswordSuccess(true);
+        setNewModPassword("");
+      } else {
+        setChangeModPasswordError(data.error || "Moderatör şifresi güncellenemedi.");
+      }
+    } catch (err) {
+      setChangeModPasswordError("Bağlantı hatası oluştu.");
     }
   };
 
@@ -903,45 +934,114 @@ export default function AdminView({ onBack }: AdminViewProps) {
       )}
 
       {activeSubTab === "settings" && (
-        <div className="mt-6 bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8" id="admin-password-card">
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-4">
-            <Lock className="w-4 h-4 text-slate-400" />
-            Yönetici Şifresini Güncelle
-          </h3>
-          <p className="text-xs text-slate-400 mb-4">Yönetici panelinin giriş şifresini güvenli bir şifreyle güncelleyin.</p>
-          
-          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" id="admin-passwords-container">
+          {/* Admin Password Card */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 flex flex-col justify-between" id="admin-password-card">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Yeni Yönetici Şifresi</label>
-              <input
-                type="password"
-                value={newAdminPassword}
-                onChange={(e) => setNewAdminPassword(e.target.value)}
-                placeholder="Yeni şifrenizi girin (Min 4 karakter)"
-                className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
-                required
-              />
+              <div className="flex items-center gap-2 mb-2">
+                <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Lock className="w-5 h-5" />
+                </span>
+                <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-widest">
+                  👑 Yönetici (Admin) Şifresi
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+                Yönetici kontrol panelinin tam yetkili giriş şifresini belirleyin ve güncelleyin.
+              </p>
+              
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Yeni Yönetici Şifresi</label>
+                  <input
+                    type="password"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    placeholder="Yeni yönetici şifreniz (Min 4 karakter)..."
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold"
+                    required
+                  />
+                </div>
+
+                {changePasswordError && (
+                  <p className="text-xs text-rose-500 font-semibold">{changePasswordError}</p>
+                )}
+
+                {changePasswordSuccess && (
+                  <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1 bg-emerald-50 p-2.5 rounded-xl">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                    <span>Yönetici şifresi güncellendi!</span>
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Yönetici Şifresini Kaydet</span>
+                </button>
+              </form>
+            </div>
+            
+            <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400">
+              <span className="font-bold text-slate-500">Varsayılan:</span> admin / 1234
+            </div>
+          </div>
+
+          {/* Moderator Password Card */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 flex flex-col justify-between" id="mod-password-card">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <Lock className="w-5 h-5 text-amber-500" />
+                </span>
+                <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-widest">
+                  ⚡ Özel Üye / Moderatör Şifresi
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+                Sohbet odasında üyeleri susturma, engelleme ve mesaj temizleme yetkisi veren ayrı Moderatör şifresi.
+              </p>
+              
+              <form onSubmit={handleChangeModPassword} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Yeni Moderatör Şifresi</label>
+                  <input
+                    type="password"
+                    value={newModPassword}
+                    onChange={(e) => setNewModPassword(e.target.value)}
+                    placeholder="Yeni moderatör şifreniz (Min 4 karakter)..."
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-semibold"
+                    required
+                  />
+                </div>
+
+                {changeModPasswordError && (
+                  <p className="text-xs text-rose-500 font-semibold">{changeModPasswordError}</p>
+                )}
+
+                {changeModPasswordSuccess && (
+                  <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1 bg-emerald-50 p-2.5 rounded-xl">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                    <span>Moderatör şifresi güncellendi!</span>
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Moderatör Şifresini Kaydet</span>
+                </button>
+              </form>
             </div>
 
-            {changePasswordError && (
-              <p className="text-xs text-red-500 font-semibold">{changePasswordError}</p>
-            )}
-
-            {changePasswordSuccess && (
-              <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5" />
-                Şifre başarıyla güncellendi! Yeni girişlerinizde bu şifre geçerli olacaktır.
-              </p>
-            )}
-
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-            >
-              <Save className="w-4 h-4" />
-              Şifreyi Değiştir
-            </button>
-          </form>
+            <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400">
+              <span className="font-bold text-slate-500">Varsayılan:</span> mod123
+            </div>
+          </div>
         </div>
       )}
 

@@ -298,8 +298,8 @@ async function startServer() {
     const level = Math.floor(xp / 100) + 1;
     const badges: string[] = [];
 
-    if (isAdmin) badges.push("🌟 VIP Üye");
-    else if (isMod) badges.push("⚡ Özel Üye");
+    if (isAdmin) badges.push("👑 Admin");
+    else if (isMod) badges.push("🛡️ Moderatör");
 
     if (level >= 25) badges.push("💎 Efsane");
     else if (level >= 10) badges.push("🥇 Usta");
@@ -649,6 +649,7 @@ async function startServer() {
   }
 
   let adminPasswordState = "admin";
+  let modPasswordState = "mod123";
 
   async function dbGetAdminPassword(): Promise<string> {
     if (useFirebase && db) {
@@ -674,6 +675,33 @@ async function startServer() {
       }
     } else {
       adminPasswordState = newPassword;
+    }
+  }
+
+  async function dbGetModPassword(): Promise<string> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "configs", "mod");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return docSnap.data().password ?? "mod123";
+        }
+      } catch (e) {
+        console.error("Firebase get mod password error:", e);
+      }
+    }
+    return modPasswordState;
+  }
+
+  async function dbSaveModPassword(newPassword: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "configs", "mod"), { password: newPassword });
+      } catch (e) {
+        console.error("Firebase save mod password error:", e);
+      }
+    } else {
+      modPasswordState = newPassword;
     }
   }
 
@@ -2274,6 +2302,27 @@ async function startServer() {
     }
   });
 
+  // Moderator / Özel Üye authentication check
+  app.post("/api/mod/auth", async (req, res) => {
+    try {
+      const { password } = req.body;
+      const actualModPassword = await dbGetModPassword();
+      const actualAdminPassword = await dbGetAdminPassword();
+      
+      const isModMatch = (password === actualModPassword) || (actualModPassword === "mod123" && (password === "mod123" || password === "mod"));
+      const isAdminMatch = (password === actualAdminPassword) || (actualAdminPassword === "admin" && (password === "admin" || password === "1234"));
+
+      if (isModMatch || isAdminMatch) {
+        res.json({ success: true, isMod: true, isAdmin: isAdminMatch });
+      } else {
+        res.status(401).json({ error: "Geçersiz moderatör / özel üye şifresi!" });
+      }
+    } catch (err) {
+      console.error("Mod auth error:", err);
+      res.status(500).json({ error: "Moderatör girişi doğrulanırken hata oluştu." });
+    }
+  });
+
   // Change Admin password (Admin only)
   app.post("/api/admin/change-password", async (req, res) => {
     try {
@@ -2286,6 +2335,21 @@ async function startServer() {
     } catch (err) {
       console.error("Change admin password error:", err);
       res.status(500).json({ error: "Şifre değiştirilirken hata oluştu." });
+    }
+  });
+
+  // Change Moderator password (Admin only)
+  app.post("/api/admin/change-mod-password", async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.trim().length < 4) {
+        return res.status(400).json({ error: "Şifre en az 4 karakter olmalıdır." });
+      }
+      await dbSaveModPassword(newPassword.trim());
+      res.json({ success: true, message: "Moderatör şifresi başarıyla güncellendi." });
+    } catch (err) {
+      console.error("Change mod password error:", err);
+      res.status(500).json({ error: "Moderatör şifresi değiştirilirken hata oluştu." });
     }
   });
 

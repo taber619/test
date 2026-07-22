@@ -92,7 +92,9 @@ export default function MiniChat() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Moderator & Blocking State Variables
-  const isAdmin = typeof window !== "undefined" && localStorage.getItem("inanresim_admin_token") === "true";
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return typeof window !== "undefined" && (localStorage.getItem("inanresim_admin_token") === "true" || localStorage.getItem("inanresim_admin_visible") === "true");
+  });
   const [isModerator, setIsModerator] = useState(false);
   const canModerate = isModerator || isAdmin;
   const [showModLogin, setShowModLogin] = useState(false);
@@ -101,6 +103,21 @@ export default function MiniChat() {
   const [selectedUserToBlock, setSelectedUserToBlock] = useState<{ userId: string; username: string } | null>(null);
   const [blockDuration, setBlockDuration] = useState("5"); // default 5 minutes
   const [blockLoading, setBlockLoading] = useState(false);
+
+  // Auto-hide 5-second chat cleared notice state & ref
+  const [chatClearedNotice, setChatClearedNotice] = useState<string | null>(null);
+  const clearNoticeTimerRef = useRef<any>(null);
+  const prevMessagesLengthRef = useRef<number>(0);
+
+  const triggerChatClearedNotice = (msgText = "🧹 Tüm sohbet geçmişi yetkili tarafından temizlendi.") => {
+    setChatClearedNotice(msgText);
+    if (clearNoticeTimerRef.current) {
+      clearTimeout(clearNoticeTimerRef.current);
+    }
+    clearNoticeTimerRef.current = setTimeout(() => {
+      setChatClearedNotice(null);
+    }, 5000); // Automatically clears info text after 5 seconds
+  };
 
   // DM (Direct Messages) & Level/XP States
   const [activeChatTab, setActiveChatTab] = useState<"public" | "dm">("public");
@@ -151,6 +168,21 @@ export default function MiniChat() {
     }
   }, []);
 
+  // Sync Admin status from localStorage dynamically
+  useEffect(() => {
+    const checkAdminState = () => {
+      const isAd = typeof window !== "undefined" && (localStorage.getItem("inanresim_admin_token") === "true" || localStorage.getItem("inanresim_admin_visible") === "true");
+      setIsAdmin(isAd);
+    };
+    checkAdminState();
+    window.addEventListener("storage", checkAdminState);
+    const interval = setInterval(checkAdminState, 1500);
+    return () => {
+      window.removeEventListener("storage", checkAdminState);
+      clearInterval(interval);
+    };
+  }, []);
+
   // Fetch messages and slowmode status
   const fetchMessages = () => {
     fetch("/api/chat/messages")
@@ -169,6 +201,13 @@ export default function MiniChat() {
               playSoundNotification();
             }
           }
+
+          // Detect if chat was cleared remotely
+          if (prevMessagesLengthRef.current > 0 && data.length === 0) {
+            triggerChatClearedNotice("🧹 Tüm sohbet geçmişi yetkili tarafından başarıyla temizlendi.");
+          }
+          prevMessagesLengthRef.current = data.length;
+
           setMessages(data);
         }
       })
@@ -451,7 +490,7 @@ export default function MiniChat() {
     e.preventDefault();
     setModLoginError(null);
     try {
-      const res = await fetch("/api/admin/auth", {
+      const res = await fetch("/api/mod/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: modPassword }),
@@ -464,7 +503,7 @@ export default function MiniChat() {
         localStorage.setItem("chat_moderator_session", "true");
         playSoundNotification();
       } else {
-        setModLoginError(data.error || "Geçersiz moderatör/yönetici şifresi!");
+        setModLoginError(data.error || "Geçersiz moderatör / özel üye şifresi!");
       }
     } catch (err) {
       setModLoginError("Bağlantı hatası oluştu.");
@@ -595,10 +634,14 @@ export default function MiniChat() {
       const res = await fetch("/api/admin/chat/clear", { method: "POST" });
       if (res.ok) {
         setMessages([]);
-        setError("Tüm sohbet temizlendi.");
-        setTimeout(() => setError(null), 3000);
+        prevMessagesLengthRef.current = 0;
+        triggerChatClearedNotice("🧹 Tüm sohbet geçmişi yetkili tarafından başarıyla temizlendi.");
+      } else {
+        setError("Sohbet temizlenemedi.");
       }
-    } catch (e) {}
+    } catch (e) {
+      setError("Bağlantı hatası oluştu.");
+    }
   };
 
   // Extract active chatters from loaded messages (active in last 30 minutes)
@@ -647,14 +690,14 @@ export default function MiniChat() {
       userId = localStorage.getItem("inanresim_guest_id") || "guest_unknown";
     }
 
-    const isAdmin = typeof window !== "undefined" && localStorage.getItem("inanresim_admin_token") === "true";
+    const checkIsAdmin = typeof window !== "undefined" && (localStorage.getItem("inanresim_admin_token") === "true" || localStorage.getItem("inanresim_admin_visible") === "true");
 
     const payload = {
       userId,
       username,
       text: messageText.trim(),
-      isMod: isModerator || isAdmin,
-      isAdmin: isAdmin,
+      isMod: isModerator || checkIsAdmin || isAdmin,
+      isAdmin: checkIsAdmin || isAdmin,
     };
 
     try {
@@ -1318,7 +1361,13 @@ export default function MiniChat() {
             ) : (
               <>
                 {/* Message Feed Stream */}
-                <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50/50 dark:bg-slate-900/10 scrollbar-thin">
+                <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-50/50 dark:bg-slate-900/10 scrollbar-thin relative">
+                  {chatClearedNotice && (
+                    <div className="sticky top-0 z-30 my-1 mx-1 p-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl text-xs font-black text-center shadow-xl flex items-center justify-center gap-2 animate-bounce border border-white/20">
+                      <span className="text-sm">📢</span>
+                      <span>{chatClearedNotice}</span>
+                    </div>
+                  )}
                   {filteredMessages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center opacity-70 py-16">
                       <div className="w-12 h-12 bg-slate-100 dark:bg-slate-900 rounded-2xl flex items-center justify-center text-slate-400 mb-3 border border-slate-200/50 dark:border-slate-800/50">
@@ -1388,11 +1437,11 @@ export default function MiniChat() {
                               </span>
                               {(msg.isAdmin || (isAdmin && isMe)) ? (
                                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-indigo-500/20 border border-indigo-400/30">
-                                  <span>🌟</span> VIP Üye
+                                  <span>👑</span> Admin
                                 </span>
                               ) : (msg.isMod || (isModerator && isMe)) ? (
                                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-amber-500/10 border border-yellow-400/20">
-                                  <span>⚡</span> Özel Üye
+                                  <span>🛡️</span> Moderatör
                                 </span>
                               ) : null}
                               <span className="text-[9px] text-slate-400 font-medium tabular-nums">
@@ -1730,9 +1779,9 @@ export default function MiniChat() {
                 <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
                   <Shield className="w-6 h-6 animate-pulse" />
                 </div>
-                <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight">Moderatör Girişi</h4>
+                <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight">Özel Üye / Moderatör Girişi</h4>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 mb-4 leading-relaxed">
-                  Sohbet odasını denetlemek ve kullanıcı engellemek için sistem yönetici şifrenizi girin.
+                  Sohbet odasını denetlemek ve kullanıcı engellemek için Moderatör şifrenizi girin.
                 </p>
                 
                 <form onSubmit={handleModLogin} className="flex flex-col gap-2.5">
@@ -1740,7 +1789,7 @@ export default function MiniChat() {
                     type="password"
                     required
                     autoFocus
-                    placeholder="Yönetici Şifresi..."
+                    placeholder="Moderatör Şifresi..."
                     value={modPassword}
                     onChange={(e) => setModPassword(e.target.value)}
                     className="w-full px-3.5 py-2.5 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-semibold"
