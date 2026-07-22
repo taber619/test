@@ -725,8 +725,42 @@ export default function App() {
     );
   };
 
-  const isAdmin = localStorage.getItem("inanresim_admin_token") === "true";
-  const isMaintenanceActive = siteConfig?.maintenanceModeEnabled && !isAdmin;
+  const [isAdminState, setIsAdminState] = useState<boolean>(
+    () => localStorage.getItem("inanresim_admin_token") === "true"
+  );
+  const [showMaintenanceAdminModal, setShowMaintenanceAdminModal] = useState(false);
+  const [maintPassword, setMaintPassword] = useState("");
+  const [maintError, setMaintError] = useState<string | null>(null);
+  const [maintLoading, setMaintLoading] = useState(false);
+
+  const handleMaintLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMaintLoading(true);
+    setMaintError(null);
+    try {
+      const res = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: maintPassword }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem("inanresim_admin_token", "true");
+        localStorage.setItem("inanresim_admin_visible", "true");
+        setIsAdminState(true);
+        setActiveTab("admin");
+        setShowMaintenanceAdminModal(false);
+      } else {
+        setMaintError(data.error || "Hatalı yönetici şifresi!");
+      }
+    } catch (err) {
+      setMaintError("Bağlantı hatası oluştu.");
+    } finally {
+      setMaintLoading(false);
+    }
+  };
+
+  const isMaintenanceActive = siteConfig?.maintenanceModeEnabled && !isAdminState;
 
   if (isMaintenanceActive) {
     return (
@@ -755,21 +789,71 @@ export default function App() {
           </div>
         </div>
 
-        {/* Footer with a secret click-to-login for developers */}
-        <div className="absolute bottom-8 left-0 right-0 text-center">
+        {/* Footer with a working secret click-to-login for administrators */}
+        <div className="absolute bottom-8 left-0 right-0 text-center z-10">
           <p className="text-[10px] text-slate-600">© 2026 İnanResim. Tüm hakları saklıdır.</p>
           <button 
             onClick={() => {
-              // Secretly bypass or show admin entry
-              localStorage.setItem("inanresim_admin_visible", "true");
-              setActiveTab("admin");
-              window.location.reload(); // Refresh to enter admin tab
+              setShowMaintenanceAdminModal(true);
+              setMaintError(null);
             }}
-            className="mt-3 text-[10px] text-slate-800 hover:text-slate-500 transition-colors cursor-pointer"
+            className="mt-3 text-xs text-amber-500/80 hover:text-amber-400 font-bold transition-colors cursor-pointer px-3 py-1.5 rounded-xl bg-slate-900/80 border border-amber-500/20 hover:border-amber-500/40 inline-flex items-center gap-1.5"
           >
-            Yönetici Girişi 🔐
+            <span>🔐</span> Yönetici Girişi
           </button>
         </div>
+
+        {/* Admin Login Modal for Maintenance Mode */}
+        {showMaintenanceAdminModal && (
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl animate-fade-in">
+              <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto text-xl border border-amber-500/20">
+                🔐
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">Yönetici Paneli Girişi</h3>
+                <p className="text-xs text-slate-400 mt-1">Bakım modunu geçmek ve yönetim paneline erişmek için şifrenizi girin.</p>
+              </div>
+
+              <form onSubmit={handleMaintLoginSubmit} className="space-y-3">
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  placeholder="Yönetici Şifresi..."
+                  value={maintPassword}
+                  onChange={(e) => setMaintPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
+                />
+
+                {maintError && (
+                  <p className="text-xs font-bold text-rose-400">{maintError}</p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMaintenanceAdminModal(false);
+                      setMaintPassword("");
+                      setMaintError(null);
+                    }}
+                    className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={maintLoading}
+                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {maintLoading ? "Giriş yapılıyor..." : "Giriş Yap 🚀"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

@@ -525,6 +525,42 @@ async function startServer() {
     }
   }
 
+  async function dbDeleteChatMessage(messageId: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await deleteDoc(doc(db, "chat_messages", messageId));
+      } catch (e) {
+        console.error("Firebase delete chat message error:", e);
+      }
+    } else {
+      const idx = inMemoryChatMessages.findIndex(m => m.id === messageId);
+      if (idx !== -1) {
+        inMemoryChatMessages.splice(idx, 1);
+      }
+    }
+  }
+
+  async function dbDeleteUserMessages(userId: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        const chatRef = collection(db, "chat_messages");
+        const snap = await getDocs(chatRef);
+        const promises = snap.docs
+          .filter(d => d.data().userId === userId)
+          .map(d => deleteDoc(d.ref));
+        await Promise.all(promises);
+      } catch (e) {
+        console.error("Firebase delete user chat messages error:", e);
+      }
+    } else {
+      for (let i = inMemoryChatMessages.length - 1; i >= 0; i--) {
+        if (inMemoryChatMessages[i].userId === userId) {
+          inMemoryChatMessages.splice(i, 1);
+        }
+      }
+    }
+  }
+
   let adminPasswordState = "admin";
 
   async function dbGetAdminPassword(): Promise<string> {
@@ -1899,6 +1935,34 @@ async function startServer() {
     } catch (err) {
       console.error("Clear chat error:", err);
       res.status(500).json({ error: "Sohbet temizlenirken bir hata oluştu." });
+    }
+  });
+
+  // Delete Single Message (Admin / Moderator)
+  app.post("/api/admin/chat/delete-message", async (req, res) => {
+    try {
+      const { messageId } = req.body;
+      if (!messageId) return res.status(400).json({ error: "Eksik mesaj ID." });
+      await dbDeleteChatMessage(messageId);
+      await logModAction("mod", "Moderatör", "DELETE_MSG", `Mesaj silindi: ${messageId}`);
+      res.json({ success: true, message: "Mesaj silindi." });
+    } catch (err) {
+      console.error("Delete message error:", err);
+      res.status(500).json({ error: "Mesaj silinemedi." });
+    }
+  });
+
+  // Delete All Messages Of A User (Admin / Moderator)
+  app.post("/api/admin/chat/delete-user-messages", async (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) return res.status(400).json({ error: "Eksik kullanıcı ID." });
+      await dbDeleteUserMessages(userId);
+      await logModAction("mod", "Moderatör", "DELETE_USER_MSGS", `Kullanıcının tüm mesajları temizlendi: ${userId}`);
+      res.json({ success: true, message: "Kullanıcının tüm mesajları silindi." });
+    } catch (err) {
+      console.error("Delete user messages error:", err);
+      res.status(500).json({ error: "Kullanıcının mesajları silinemedi." });
     }
   });
 

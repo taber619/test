@@ -32,7 +32,8 @@ import {
   Ban,
   ShieldCheck,
   Lock,
-  Unlock
+  Unlock,
+  Trash2
 } from "lucide-react";
 
 interface ChatMessage {
@@ -315,6 +316,81 @@ export default function MiniChat() {
     } finally {
       setBlockLoading(false);
     }
+  };
+
+  // Delete Single Message Call
+  const handleDeleteSingleMessage = async (msgId: string) => {
+    try {
+      const res = await fetch("/api/admin/chat/delete-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: msgId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== msgId));
+        setError("Mesaj silindi.");
+        setTimeout(() => setError(null), 3000);
+      } else {
+        setError(data.error || "Mesaj silinemedi.");
+      }
+    } catch (err) {
+      setError("Bağlantı hatası.");
+    }
+  };
+
+  // Delete All Messages Of A User Call
+  const handleDeleteUserAllMessages = async (uId: string, uName: string) => {
+    if (!uId) return;
+    if (!window.confirm(`@${uName} adlı kullanıcının TÜM mesajlarını silmek istediğinizden emin misiniz?`)) return;
+    try {
+      const res = await fetch("/api/admin/chat/delete-user-messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: uId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessages((prev) => prev.filter((m) => m.userId !== uId));
+        setSelectedUserToBlock(null);
+        setError(`@${uName} adlı kullanıcının tüm mesajları temizlendi.`);
+        setTimeout(() => setError(null), 3000);
+      } else {
+        setError(data.error || "Mesajlar silinemedi.");
+      }
+    } catch (err) {
+      setError("Bağlantı hatası.");
+    }
+  };
+
+  // Toggle Slowmode
+  const handleToggleSlowmode = async () => {
+    try {
+      const nextMode = !slowMode;
+      const res = await fetch("/api/admin/chat/slowmode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slowMode: nextMode }),
+      });
+      if (res.ok) {
+        setSlowMode(nextMode);
+        setError(`Yavaş mod ${nextMode ? "aktif edildi" : "pasif edildi"}.`);
+        setTimeout(() => setError(null), 3000);
+      }
+    } catch (e) {}
+  };
+
+  // Clear All Chat Messages
+  const handleClearAllChat = async () => {
+    if (!window.confirm("TÜM sohbet geçmişini temizlemek istediğinizden emin misiniz?")) return;
+    try {
+      const res = await fetch("/api/admin/chat/clear", { method: "POST" });
+      if (res.ok) {
+        setMessages([]);
+        setError("Tüm sohbet temizlendi.");
+        setTimeout(() => setError(null), 3000);
+      }
+    } catch (e) {}
   };
 
   // Extract active chatters from loaded messages (active in last 30 minutes)
@@ -708,6 +784,59 @@ export default function MiniChat() {
               </div>
             )}
 
+            {/* Moderator Active Banner Bar */}
+            {isModerator && (
+              <div className="px-3.5 py-2 bg-slate-900 border-b border-amber-500/30 text-white flex items-center justify-between gap-2 shrink-0 animate-fade-in shadow-sm">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                  <span className="text-[10px] font-extrabold tracking-wider uppercase text-amber-300 truncate">
+                    🛡️ Moderatör Modu
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setSelectedUserToBlock({ userId: "", username: "" })}
+                    className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/40 text-rose-300 rounded-lg text-[9px] font-extrabold cursor-pointer transition-all flex items-center gap-1"
+                    title="Kullanıcı Engelle / Sustur"
+                  >
+                    <Ban className="w-3 h-3 text-rose-400" />
+                    <span>Sustur / Ban</span>
+                  </button>
+
+                  <button
+                    onClick={handleToggleSlowmode}
+                    className={`px-2 py-1 rounded-lg text-[9px] font-extrabold cursor-pointer transition-all border flex items-center gap-1 ${
+                      slowMode
+                        ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                        : "bg-white/10 border-white/20 text-slate-300 hover:bg-white/20"
+                    }`}
+                    title="Yavaş Mod Ayarını Değiştir"
+                  >
+                    <Clock className="w-3 h-3 text-amber-400" />
+                    <span>{slowMode ? "Yavaş Mod AÇIK" : "Yavaş Mod KAPALI"}</span>
+                  </button>
+
+                  <button
+                    onClick={handleClearAllChat}
+                    className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 border border-red-500/40 text-red-200 rounded-lg text-[9px] font-extrabold cursor-pointer transition-all flex items-center gap-1"
+                    title="Tüm Sohbetti Temizle"
+                  >
+                    <Trash2 className="w-3 h-3 text-red-300" />
+                    <span>Temizle</span>
+                  </button>
+
+                  <button
+                    onClick={handleModLogout}
+                    className="p-1 bg-white/10 hover:bg-white/20 text-slate-300 rounded-lg cursor-pointer transition-all"
+                    title="Moderatör Oturumunu Kapat"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Quick Interactive Tool Bar: Zar, Yazı-Tura, Fal Buttons */}
             {isJoined && (
               <div className="px-3.5 py-1.5 bg-slate-100/60 dark:bg-slate-900/40 border-b border-slate-200/40 dark:border-slate-800/30 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
@@ -864,7 +993,7 @@ export default function MiniChat() {
                               >
                                 {msg.username}
                               </span>
-                              {msg.isMod && (
+                              {(msg.isMod || (isModerator && isMe)) && (
                                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-red-500 via-amber-500 to-yellow-500 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-amber-500/10 border border-yellow-400/20">
                                   <span>🛡️</span> Moderatör
                                 </span>
@@ -872,6 +1001,16 @@ export default function MiniChat() {
                               <span className="text-[9px] text-slate-400 font-medium tabular-nums">
                                 {timeStr}
                               </span>
+                              {isModerator && !isMe && (
+                                <button
+                                  onClick={() => setSelectedUserToBlock({ userId: msg.userId, username: msg.username })}
+                                  className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 dark:text-rose-400 rounded-md text-[9px] font-extrabold cursor-pointer transition-all"
+                                  title="Kullanıcıyı Yönet / Banla / Sustur"
+                                >
+                                  <Ban className="w-2.5 h-2.5 text-rose-500" />
+                                  <span>Yönet / Ban</span>
+                                </button>
+                              )}
                             </div>
 
                             {/* Bubble Container */}
@@ -961,6 +1100,15 @@ export default function MiniChat() {
                                     title="Kullanıcıyı Engelle / Yasakla"
                                   >
                                     <Ban className="w-3 h-3 text-rose-500" />
+                                  </button>
+                                )}
+                                {isModerator && (
+                                  <button
+                                    onClick={() => handleDeleteSingleMessage(msg.id)}
+                                    className="p-1 bg-white dark:bg-slate-800 hover:bg-red-50 hover:border-red-200 dark:hover:bg-red-950 border border-slate-200 dark:border-slate-700 rounded-lg text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 shadow-sm cursor-pointer"
+                                    title="Bu Mesajı Sil"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-red-500" />
                                   </button>
                                 )}
                               </div>
@@ -1229,12 +1377,28 @@ export default function MiniChat() {
                 <div className="w-12 h-12 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
                   <Ban className="w-6 h-6 text-rose-500 animate-bounce" />
                 </div>
-                <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight">Kullanıcıyı Engelle</h4>
+                <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight">Kullanıcı Moderasyonu</h4>
                 <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 mb-4 font-bold">
-                  @{selectedUserToBlock.username} adlı kullanıcıyı engelliyorsunuz.
+                  {selectedUserToBlock.username ? `@${selectedUserToBlock.username} kullanıcısını yönetiyorsunuz.` : "Modere edilecek kullanıcı bilgilerini seçin."}
                 </p>
                 
                 <form onSubmit={handleBlockUserSubmit} className="flex flex-col gap-3">
+                  {!selectedUserToBlock.username && (
+                    <div className="text-left">
+                      <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 pl-1">
+                        Kullanıcı Adı
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Örn: HızlıKedi42"
+                        value={selectedUserToBlock.username}
+                        onChange={(e) => setSelectedUserToBlock({ ...selectedUserToBlock, username: e.target.value })}
+                        className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  )}
+
                   <div className="text-left">
                     <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 pl-1">
                       Engel Süresi / Türü
@@ -1252,7 +1416,7 @@ export default function MiniChat() {
                     </select>
                   </div>
                   
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2 mt-1">
                     <button
                       type="button"
                       disabled={blockLoading}
@@ -1268,9 +1432,20 @@ export default function MiniChat() {
                     >
                       {blockLoading ? (
                         <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                      ) : "Engelle"}
+                      ) : "Uygula"}
                     </button>
                   </div>
+
+                  {selectedUserToBlock.userId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteUserAllMessages(selectedUserToBlock.userId, selectedUserToBlock.username)}
+                      className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-600 dark:text-rose-400 font-extrabold text-[10px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 mt-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Kullanıcının Tüm Mesajlarını Sil</span>
+                    </button>
+                  )}
                 </form>
               </div>
             </div>
