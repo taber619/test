@@ -20,7 +20,8 @@ import {
   collection, 
   query, 
   where, 
-  getDocs 
+  getDocs,
+  addDoc 
 } from "firebase/firestore";
 
 interface StoredImage {
@@ -250,6 +251,7 @@ async function startServer() {
     text: string;
     createdAt: number;
     isMod?: boolean;
+    isAdmin?: boolean;
   }
 
   interface UserModeration {
@@ -267,6 +269,89 @@ async function startServer() {
     action: string;
     details: string;
     createdAt: number;
+  }
+
+  interface DirectMessage {
+    id: string;
+    senderId: string;
+    senderName: string;
+    receiverId: string;
+    receiverName: string;
+    text: string;
+    createdAt: number;
+    read?: boolean;
+  }
+
+  interface UserXPProfile {
+    userId: string;
+    username: string;
+    xp: number;
+    messageCount: number;
+    gameCount: number;
+  }
+
+  const inMemoryDMs: DirectMessage[] = [];
+  const inMemoryUserXPProfiles: Record<string, UserXPProfile> = {};
+
+  function getUserLevelAndBadges(profile: UserXPProfile, isMod?: boolean, isAdmin?: boolean) {
+    const xp = profile.xp || 0;
+    const level = Math.floor(xp / 100) + 1;
+    const badges: string[] = [];
+
+    if (isAdmin) badges.push("🌟 VIP Üye");
+    else if (isMod) badges.push("⚡ Özel Üye");
+
+    if (level >= 25) badges.push("💎 Efsane");
+    else if (level >= 10) badges.push("🥇 Usta");
+    else if (level >= 5) badges.push("🥈 Sohbetçi");
+    else badges.push("🥉 Çaylak");
+
+    if (profile.messageCount >= 50) badges.push("🔥 Sosyal Kelebek");
+    if (profile.gameCount >= 10) badges.push("🎲 Şanslı Oyuncu");
+
+    return { xp, level, messageCount: profile.messageCount || 0, gameCount: profile.gameCount || 0, badges };
+  }
+
+  async function dbAddUserXP(userId: string, username: string, xpAmount: number, isGame = false) {
+    let p = inMemoryUserXPProfiles[userId];
+    if (!p) {
+      p = { userId, username, xp: 0, messageCount: 0, gameCount: 0 };
+      inMemoryUserXPProfiles[userId] = p;
+    }
+    p.username = username;
+    p.xp += xpAmount;
+    if (isGame) {
+      p.gameCount = (p.gameCount || 0) + 1;
+    } else {
+      p.messageCount = (p.messageCount || 0) + 1;
+    }
+
+    if (useFirebase && db) {
+      try {
+        const uRef = doc(db, "user_xp_profiles", userId);
+        await setDoc(uRef, p, { merge: true });
+      } catch (e) {
+        console.error("Firebase save XP profile error", e);
+      }
+    }
+  }
+
+  async function dbGetUserXPProfile(userId: string, username: string): Promise<UserXPProfile> {
+    if (useFirebase && db) {
+      try {
+        const uRef = doc(db, "user_xp_profiles", userId);
+        const snap = await getDoc(uRef);
+        if (snap.exists()) {
+          return snap.data() as UserXPProfile;
+        }
+      } catch (e) {
+        console.error("Firebase get XP profile error", e);
+      }
+    }
+    if (!inMemoryUserXPProfiles[userId]) {
+      inMemoryUserXPProfiles[userId] = { userId, username, xp: 0, messageCount: 0, gameCount: 0 };
+    }
+    return inMemoryUserXPProfiles[userId];
   }
 
   const activeSessions: Record<string, number> = {};
@@ -378,6 +463,8 @@ async function startServer() {
             username: data.username,
             text: data.text,
             createdAt: data.createdAt,
+            isMod: data.isMod,
+            isAdmin: data.isAdmin,
           };
         });
         return msgs.sort((a, b) => a.createdAt - b.createdAt);
@@ -1741,7 +1828,7 @@ async function startServer() {
   // Post message
   app.post("/api/chat/messages", async (req, res) => {
     try {
-      const { userId, username, text, isMod } = req.body;
+      const { userId, username, text, isMod, isAdmin } = req.body;
 
       if (!userId || !username || !text || text.trim() === "") {
         return res.status(400).json({ error: "Eksik parametre." });
@@ -1812,10 +1899,14 @@ async function startServer() {
         username,
         text: cleanText,
         createdAt: now,
-        isMod: !!isMod,
+        isMod: !!isMod || !!isAdmin,
+        isAdmin: !!isAdmin,
       };
 
       await dbSaveChatMessage(msg);
+      // Award XP for chat activity
+      await dbAddUserXP(userId, username, 15, false);
+
       res.json(msg);
     } catch (err) {
       console.error("Post chat message error:", err);
@@ -1908,6 +1999,175 @@ async function startServer() {
       res.json({ slowMode });
     } catch (err) {
       res.status(500).json({ error: "Yavaş mod bilgisi alınamadı." });
+    }
+  });
+
+  // Get User Profile & XP / Level / Badges
+  app.get("/api/chat/profile/:userId", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const username = (req.query.username as string) || "Kullanıcı";
+      const isMod = req.query.isMod === "true";
+      const isAdmin = req.query.isAdmin === "true";
+
+      const profile = await dbGetUserXPProfile(userId, username);
+      const data = getUserLevelAndBadges(profile, isMod, isAdmin);
+      res.json({ userId, username, ...data });
+    } catch (err) {
+      console.error("Get user profile error:", err);
+      res.status(500).json({ error: "Profil bilgisi alınamadı." });
+    }
+  });
+
+  // Award XP for Mini-Game activity
+  app.post("/api/chat/xp/game", async (req, res) => {
+    try {
+      const { userId, username } = req.body;
+      if (!userId || !username) return res.status(400).json({ error: "Eksik bilgi." });
+      await dbAddUserXP(userId, username, 10, true);
+      const profile = await dbGetUserXPProfile(userId, username);
+      const data = getUserLevelAndBadges(profile);
+      res.json({ success: true, ...data });
+    } catch (err) {
+      res.status(500).json({ error: "XP eklenemedi." });
+    }
+  });
+
+  // Send Direct Message (DM)
+  app.post("/api/chat/dm/send", async (req, res) => {
+    try {
+      const { senderId, senderName, receiverId, receiverName, text } = req.body;
+      if (!senderId || !senderName || !receiverId || !receiverName || !text || !text.trim()) {
+        return res.status(400).json({ error: "Eksik parametre." });
+      }
+
+      const cleanText = text.trim();
+      const now = Date.now();
+
+      const dm: DirectMessage = {
+        id: "dm_" + generateId(10),
+        senderId,
+        senderName,
+        receiverId,
+        receiverName,
+        text: cleanText,
+        createdAt: now,
+        read: false,
+      };
+
+      inMemoryDMs.push(dm);
+
+      if (useFirebase && db) {
+        try {
+          await addDoc(collection(db, "direct_messages"), dm);
+        } catch (e) {
+          console.error("Firebase DM save error:", e);
+        }
+      }
+
+      // Award +5 XP for sending DM
+      await dbAddUserXP(senderId, senderName, 5, false);
+
+      res.json(dm);
+    } catch (err) {
+      console.error("Send DM error:", err);
+      res.status(500).json({ error: "Özel mesaj gönderilemedi." });
+    }
+  });
+
+  // Get DM Messages between two users
+  app.get("/api/chat/dm/messages", async (req, res) => {
+    try {
+      const { userId, targetId } = req.query;
+      if (!userId || !targetId) return res.status(400).json({ error: "Eksik kullanıcı bilgisi." });
+
+      const uId = String(userId);
+      const tId = String(targetId);
+
+      let dms: DirectMessage[] = [];
+
+      if (useFirebase && db) {
+        try {
+          const dmRef = collection(db, "direct_messages");
+          const snap = await getDocs(dmRef);
+          dms = snap.docs
+            .map(d => d.data() as DirectMessage)
+            .filter(
+              d =>
+                (d.senderId === uId && d.receiverId === tId) ||
+                (d.senderId === tId && d.receiverId === uId)
+            );
+        } catch (e) {
+          console.error("Firebase DM get error:", e);
+          dms = inMemoryDMs.filter(
+            d =>
+              (d.senderId === uId && d.receiverId === tId) ||
+              (d.senderId === tId && d.receiverId === uId)
+          );
+        }
+      } else {
+        dms = inMemoryDMs.filter(
+          d =>
+            (d.senderId === uId && d.receiverId === tId) ||
+            (d.senderId === tId && d.receiverId === uId)
+        );
+      }
+
+      dms.sort((a, b) => a.createdAt - b.createdAt);
+      res.json(dms);
+    } catch (err) {
+      res.status(500).json({ error: "Özel mesajlar alınamadı." });
+    }
+  });
+
+  // Get active DM conversations list for a user
+  app.get("/api/chat/dm/conversations", async (req, res) => {
+    try {
+      const userId = String(req.query.userId || "");
+      if (!userId) return res.status(400).json({ error: "Eksik kullanıcı ID." });
+
+      let allDms: DirectMessage[] = [];
+
+      if (useFirebase && db) {
+        try {
+          const dmRef = collection(db, "direct_messages");
+          const snap = await getDocs(dmRef);
+          allDms = snap.docs.map(d => d.data() as DirectMessage);
+        } catch (e) {
+          allDms = [...inMemoryDMs];
+        }
+      } else {
+        allDms = [...inMemoryDMs];
+      }
+
+      const userDms = allDms.filter(d => d.senderId === userId || d.receiverId === userId);
+
+      // Group by target user
+      const conversationsMap: Record<
+        string,
+        { targetId: string; targetName: string; lastMessage: string; lastTime: number; unreadCount: number }
+      > = {};
+
+      userDms.forEach(d => {
+        const isMeSender = d.senderId === userId;
+        const targetId = isMeSender ? d.receiverId : d.senderId;
+        const targetName = isMeSender ? d.receiverName : d.senderName;
+
+        if (!conversationsMap[targetId] || conversationsMap[targetId].lastTime < d.createdAt) {
+          conversationsMap[targetId] = {
+            targetId,
+            targetName,
+            lastMessage: d.text,
+            lastTime: d.createdAt,
+            unreadCount: 0,
+          };
+        }
+      });
+
+      const convList = Object.values(conversationsMap).sort((a, b) => b.lastTime - a.lastTime);
+      res.json(convList);
+    } catch (err) {
+      res.status(500).json({ error: "Konuşmalar alınamadı." });
     }
   });
 

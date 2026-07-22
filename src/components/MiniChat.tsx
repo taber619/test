@@ -33,7 +33,13 @@ import {
   ShieldCheck,
   Lock,
   Unlock,
-  Trash2
+  Trash2,
+  Mail,
+  Award,
+  Trophy,
+  Zap,
+  Star,
+  UserPlus
 } from "lucide-react";
 
 interface ChatMessage {
@@ -43,6 +49,27 @@ interface ChatMessage {
   text: string;
   createdAt: number;
   isMod?: boolean;
+  isAdmin?: boolean;
+}
+
+interface DirectMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  receiverId: string;
+  receiverName: string;
+  text: string;
+  createdAt: number;
+}
+
+interface UserProfileData {
+  userId: string;
+  username: string;
+  xp: number;
+  level: number;
+  messageCount: number;
+  gameCount: number;
+  badges: string[];
 }
 
 export default function MiniChat() {
@@ -65,13 +92,30 @@ export default function MiniChat() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Moderator & Blocking State Variables
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("inanresim_admin_token") === "true";
   const [isModerator, setIsModerator] = useState(false);
+  const canModerate = isModerator || isAdmin;
   const [showModLogin, setShowModLogin] = useState(false);
   const [modPassword, setModPassword] = useState("");
   const [modLoginError, setModLoginError] = useState<string | null>(null);
   const [selectedUserToBlock, setSelectedUserToBlock] = useState<{ userId: string; username: string } | null>(null);
   const [blockDuration, setBlockDuration] = useState("5"); // default 5 minutes
   const [blockLoading, setBlockLoading] = useState(false);
+
+  // DM (Direct Messages) & Level/XP States
+  const [activeChatTab, setActiveChatTab] = useState<"public" | "dm">("public");
+  const [dmConversations, setDmConversations] = useState<
+    { targetId: string; targetName: string; lastMessage: string; lastTime: number }[]
+  >([]);
+  const [activeDMTarget, setActiveDMTarget] = useState<{ id: string; name: string } | null>(null);
+  const [dmMessages, setDmMessages] = useState<DirectMessage[]>([]);
+  const [dmText, setDmText] = useState("");
+  const [sendingDm, setSendingDm] = useState(false);
+
+  // User Profile Card & XP / Badges
+  const [userProfileModal, setUserProfileModal] = useState<UserProfileData | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [myProfile, setMyProfile] = useState<UserProfileData | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -143,10 +187,174 @@ export default function MiniChat() {
   useEffect(() => {
     if (isOpen) {
       fetchMessages();
-      const interval = setInterval(fetchMessages, 3000);
+      fetchMyProfile();
+      if (activeChatTab === "dm") {
+        fetchDMConversations();
+        if (activeDMTarget) {
+          fetchDMMessages(activeDMTarget.id);
+        }
+      }
+      const interval = setInterval(() => {
+        fetchMessages();
+        if (activeChatTab === "dm") {
+          fetchDMConversations();
+          if (activeDMTarget) {
+            fetchDMMessages(activeDMTarget.id);
+          }
+        }
+      }, 3000);
       return () => clearInterval(interval);
     }
-  }, [isOpen, messages.length]);
+  }, [isOpen, activeChatTab, activeDMTarget?.id, messages.length]);
+
+  // Fetch DM Conversations
+  const fetchDMConversations = () => {
+    let myId = localStorage.getItem("inanresim_guest_id") || "";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+    if (!myId) return;
+
+    fetch(`/api/chat/dm/conversations?userId=${encodeURIComponent(myId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setDmConversations(data);
+        }
+      })
+      .catch(() => {});
+  };
+
+  // Fetch DM Messages
+  const fetchDMMessages = (targetId: string) => {
+    let myId = localStorage.getItem("inanresim_guest_id") || "";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+    if (!myId || !targetId) return;
+
+    fetch(`/api/chat/dm/messages?userId=${encodeURIComponent(myId)}&targetId=${encodeURIComponent(targetId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          if (soundEnabled && dmMessages.length > 0 && data.length > dmMessages.length) {
+            playSoundNotification();
+          }
+          setDmMessages(data);
+        }
+      })
+      .catch(() => {});
+  };
+
+  // Fetch My XP Profile
+  const fetchMyProfile = () => {
+    let myId = localStorage.getItem("inanresim_guest_id") || "";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+    if (!myId) return;
+
+    fetch(`/api/chat/profile/${encodeURIComponent(myId)}?username=${encodeURIComponent(username)}&isMod=${isModerator}&isAdmin=${isAdmin}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.level) {
+          setMyProfile(data);
+        }
+      })
+      .catch(() => {});
+  };
+
+  // Send Direct Message (DM)
+  const handleSendDM = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeDMTarget || !dmText.trim() || sendingDm) return;
+
+    let myId = localStorage.getItem("inanresim_guest_id") || "guest_unknown";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+
+    setSendingDm(true);
+    try {
+      const res = await fetch("/api/chat/dm/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderId: myId,
+          senderName: username || "Kullanıcı",
+          receiverId: activeDMTarget.id,
+          receiverName: activeDMTarget.name,
+          text: dmText.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDmMessages((prev) => [...prev, data]);
+        setDmText("");
+        fetchDMConversations();
+        fetchMyProfile();
+      } else {
+        setError(data.error || "Özel mesaj gönderilemedi.");
+      }
+    } catch (err) {
+      setError("Bağlantı hatası.");
+    } finally {
+      setSendingDm(false);
+    }
+  };
+
+  // Open User Profile Card
+  const openUserProfile = async (uId: string, uName: string) => {
+    setLoadingProfile(true);
+    setUserProfileModal({
+      userId: uId,
+      username: uName,
+      xp: 0,
+      level: 1,
+      messageCount: 0,
+      gameCount: 0,
+      badges: [],
+    });
+    try {
+      const res = await fetch(`/api/chat/profile/${encodeURIComponent(uId)}?username=${encodeURIComponent(uName)}&isMod=${isModerator}&isAdmin=${isAdmin}`);
+      const data = await res.json();
+      if (res.ok) {
+        setUserProfileModal(data);
+      }
+    } catch (e) {
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  // Start DM with User
+  const startDMWithUser = (uId: string, uName: string) => {
+    setActiveDMTarget({ id: uId, name: uName });
+    setActiveChatTab("dm");
+    setUserProfileModal(null);
+    fetchDMMessages(uId);
+  };
+
+  // Mini Game XP Grant
+  const handleMiniGameXP = () => {
+    let myId = localStorage.getItem("inanresim_guest_id") || "guest_unknown";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+    fetch("/api/chat/xp/game", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: myId, username }),
+    })
+      .then((res) => res.json())
+      .then(() => fetchMyProfile())
+      .catch(() => {});
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -439,11 +647,14 @@ export default function MiniChat() {
       userId = localStorage.getItem("inanresim_guest_id") || "guest_unknown";
     }
 
+    const isAdmin = typeof window !== "undefined" && localStorage.getItem("inanresim_admin_token") === "true";
+
     const payload = {
       userId,
       username,
       text: messageText.trim(),
-      isMod: isModerator,
+      isMod: isModerator || isAdmin,
+      isAdmin: isAdmin,
     };
 
     try {
@@ -751,6 +962,57 @@ export default function MiniChat() {
               </div>
             </div>
 
+            {/* Room & DM Tab Navigation Bar */}
+            {isJoined && (
+              <div className="px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-1 shrink-0">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setActiveChatTab("public")}
+                    className={`px-3 py-1 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      activeChatTab === "public"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Genel Oda</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveChatTab("dm");
+                      fetchDMConversations();
+                    }}
+                    className={`px-3 py-1 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer relative ${
+                      activeChatTab === "dm"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <Mail className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Özel DM</span>
+                    {dmConversations.length > 0 && (
+                      <span className="px-1.5 py-0.2 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                        {dmConversations.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* My Level / XP Badge Button */}
+                {myProfile && (
+                  <button
+                    onClick={() => openUserProfile(myProfile.userId, username)}
+                    className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[10px] font-black flex items-center gap-1 hover:scale-103 transition-all cursor-pointer shadow-xs border border-yellow-300/40"
+                    title="Benim Seviyem ve Rozetlerim"
+                  >
+                    <Trophy className="w-3 h-3 text-slate-950" />
+                    <span>Lv.{myProfile.level} ({myProfile.xp} XP)</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Live Search Bar inside Body if enabled */}
             {showSearch && (
               <div className="px-4 py-2 bg-indigo-50 dark:bg-slate-900/60 border-b border-indigo-100 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0 animate-fade-in">
@@ -785,12 +1047,12 @@ export default function MiniChat() {
             )}
 
             {/* Moderator Active Banner Bar */}
-            {isModerator && (
+            {canModerate && (
               <div className="px-3.5 py-2 bg-slate-900 border-b border-amber-500/30 text-white flex items-center justify-between gap-2 shrink-0 animate-fade-in shadow-sm">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                   <span className="text-[10px] font-extrabold tracking-wider uppercase text-amber-300 truncate">
-                    🛡️ Moderatör Modu
+                    {isAdmin ? "🌟 VIP Yetki Modu" : "⚡ Özel Denetim Modu"}
                   </span>
                 </div>
 
@@ -889,7 +1151,7 @@ export default function MiniChat() {
                 </div>
                 <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-base tracking-tight">Sohbete Katılın</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 mb-6 max-w-[260px] leading-relaxed">
-                  Diğer kullanıcılarla gerçek zamanlı sohbet edin, anında resim veya video yükleyip paylaşın!
+                  Diğer kullanıcılarla gerçek zamanlı sohbet edin, özel mesajlaşın (DM) ve seviye kazanıp rozetler toplayın!
                 </p>
                 
                 <form onSubmit={handleJoin} className="w-full max-w-[260px] flex flex-col gap-3">
@@ -921,6 +1183,137 @@ export default function MiniChat() {
                     Sohbete Başla 🚀
                   </button>
                 </form>
+              </div>
+            ) : activeChatTab === "dm" ? (
+              /* Direct Messaging (DM) Screen */
+              <div className="flex flex-col flex-grow overflow-hidden bg-slate-50/50 dark:bg-slate-900/20">
+                {activeDMTarget ? (
+                  <>
+                    {/* Active DM Header */}
+                    <div className="px-3.5 py-2 bg-indigo-50/80 dark:bg-slate-900 border-b border-indigo-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setActiveDMTarget(null)}
+                          className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[10px] font-extrabold text-slate-700 dark:text-slate-300 hover:bg-slate-100 cursor-pointer shadow-2xs"
+                        >
+                          ← Konuşmalar
+                        </button>
+                        <div
+                          onClick={() => openUserProfile(activeDMTarget.id, activeDMTarget.name)}
+                          className="flex items-center gap-2 cursor-pointer hover:opacity-80"
+                        >
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black uppercase text-white shadow-xs bg-gradient-to-br ${getAvatarColor(activeDMTarget.name)}`}>
+                            {getInitials(activeDMTarget.name)}
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-xs text-slate-800 dark:text-slate-100 block">
+                              @{activeDMTarget.name}
+                            </span>
+                            <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold">Özel DM Sohbeti</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* DM Messages Feed */}
+                    <div className="flex-grow overflow-y-auto p-3.5 space-y-3 scrollbar-thin">
+                      {dmMessages.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center opacity-70 py-12">
+                          <Mail className="w-8 h-8 text-indigo-400 mb-2 animate-bounce" />
+                          <p className="text-xs text-slate-600 dark:text-slate-300 font-bold">
+                            @{activeDMTarget.name} ile özel mesajlaşmayı başlatın.
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">İlk mesajınızı aşağıya yazıp gönderin!</p>
+                        </div>
+                      ) : (
+                        dmMessages.map((dm) => {
+                          const isMyDm = dm.senderName === username;
+                          const dmTime = new Date(dm.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+
+                          return (
+                            <div key={dm.id} className={`flex flex-col max-w-[85%] ${isMyDm ? "ml-auto items-end" : "mr-auto items-start"}`}>
+                              <div className="flex items-center gap-1 mb-0.5 px-1">
+                                <span className="text-[9px] font-bold text-slate-400">{dm.senderName}</span>
+                                <span className="text-[8px] text-slate-400">{dmTime}</span>
+                              </div>
+                              <div className={`p-2.5 rounded-2xl text-xs font-semibold leading-relaxed border shadow-2xs ${
+                                isMyDm
+                                  ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-tr-none border-indigo-500/20"
+                                  : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-tl-none border-slate-200 dark:border-slate-800"
+                              }`}>
+                                {dm.text}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* DM Send Input Form */}
+                    <form onSubmit={handleSendDM} className="p-3 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2 shrink-0">
+                      <input
+                        type="text"
+                        required
+                        placeholder={`@${activeDMTarget.name} kullanıcısına mesaj...`}
+                        value={dmText}
+                        onChange={(e) => setDmText(e.target.value)}
+                        className="flex-grow px-3 py-2 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingDm || !dmText.trim()}
+                        className="p-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl transition-all cursor-pointer shadow-sm"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  /* Conversations List */
+                  <div className="p-3.5 flex flex-col flex-grow overflow-y-auto space-y-2">
+                    <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-1">
+                      Özel Mesaj Konuşmaları ({dmConversations.length})
+                    </div>
+
+                    {dmConversations.length === 0 ? (
+                      <div className="flex-grow flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                        <Mail className="w-8 h-8 mb-2 text-indigo-400/60" />
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Henüz özel mesajınız yok.</p>
+                        <p className="text-[10px] text-slate-400 mt-1 max-w-[220px]">
+                          Genel odadaki herhangi bir kullanıcının adına tıklayıp "DM Gönder" butonunu kullanabilirsiniz!
+                        </p>
+                      </div>
+                    ) : (
+                      dmConversations.map((c) => (
+                        <div
+                          key={c.targetId}
+                          onClick={() => {
+                            setActiveDMTarget({ id: c.targetId, name: c.targetName });
+                            fetchDMMessages(c.targetId);
+                          }}
+                          className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition-all hover:shadow-xs"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black uppercase text-white shrink-0 bg-gradient-to-br ${getAvatarColor(c.targetName)}`}>
+                              {getInitials(c.targetName)}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-extrabold text-xs text-slate-800 dark:text-slate-100 block truncate">
+                                @{c.targetName}
+                              </span>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                {c.lastMessage}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 shrink-0 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                            Aç 💬
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <>
@@ -974,11 +1367,11 @@ export default function MiniChat() {
                         >
                           {/* Circle Initials Avatar */}
                           <div
-                            onClick={() => !isMe && handleReplyUser(msg.username)}
+                            onClick={() => openUserProfile(msg.userId, msg.username)}
                             className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-black uppercase tracking-wider shrink-0 shadow-sm border border-white/15 bg-gradient-to-br cursor-pointer hover:scale-105 active:scale-95 transition-all ${getAvatarColor(
                               msg.username
                             )}`}
-                            title={`${msg.username} (Etiketlemek için tıkla)`}
+                            title={`${msg.username} Profil Kartını Görmek İçin Tıkla`}
                           >
                             {getInitials(msg.username)}
                           </div>
@@ -988,20 +1381,24 @@ export default function MiniChat() {
                             {/* Sender name & Time */}
                             <div className="flex items-center gap-1.5 mb-1 px-1 flex-wrap">
                               <span 
-                                onClick={() => !isMe && handleReplyUser(msg.username)}
-                                className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors"
+                                onClick={() => openUserProfile(msg.userId, msg.username)}
+                                className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors flex items-center gap-1"
                               >
                                 {msg.username}
                               </span>
-                              {(msg.isMod || (isModerator && isMe)) && (
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-red-500 via-amber-500 to-yellow-500 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-amber-500/10 border border-yellow-400/20">
-                                  <span>🛡️</span> Moderatör
+                              {(msg.isAdmin || (isAdmin && isMe)) ? (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-indigo-500/20 border border-indigo-400/30">
+                                  <span>🌟</span> VIP Üye
                                 </span>
-                              )}
+                              ) : (msg.isMod || (isModerator && isMe)) ? (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500 text-[8px] font-black uppercase text-white tracking-wider animate-pulse shadow-sm shadow-amber-500/10 border border-yellow-400/20">
+                                  <span>⚡</span> Özel Üye
+                                </span>
+                              ) : null}
                               <span className="text-[9px] text-slate-400 font-medium tabular-nums">
                                 {timeStr}
                               </span>
-                              {isModerator && !isMe && (
+                              {canModerate && !isMe && (
                                 <button
                                   onClick={() => setSelectedUserToBlock({ userId: msg.userId, username: msg.username })}
                                   className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 dark:text-rose-400 rounded-md text-[9px] font-extrabold cursor-pointer transition-all"
@@ -1085,15 +1482,24 @@ export default function MiniChat() {
                                   {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                                 </button>
                                 {!isMe && (
-                                  <button
-                                    onClick={() => handleReplyUser(msg.username)}
-                                    className="p-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 hover:border-indigo-200 dark:hover:bg-indigo-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 shadow-sm cursor-pointer"
-                                    title="Yanıtla"
-                                  >
-                                    <MessageSquare className="w-3 h-3" />
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => startDMWithUser(msg.userId, msg.username)}
+                                      className="p-1 bg-white dark:bg-slate-800 hover:bg-amber-50 hover:border-amber-200 dark:hover:bg-amber-950 border border-slate-200 dark:border-slate-700 rounded-lg text-amber-500 dark:text-amber-400 hover:text-amber-600 shadow-sm cursor-pointer"
+                                      title="Özel Mesaj (DM) Gönder"
+                                    >
+                                      <Mail className="w-3 h-3 text-amber-500" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleReplyUser(msg.username)}
+                                      className="p-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 hover:border-indigo-200 dark:hover:bg-indigo-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 shadow-sm cursor-pointer"
+                                      title="Yanıtla"
+                                    >
+                                      <MessageSquare className="w-3 h-3" />
+                                    </button>
+                                  </>
                                 )}
-                                {isModerator && !isMe && (
+                                {canModerate && !isMe && (
                                   <button
                                     onClick={() => setSelectedUserToBlock({ userId: msg.userId, username: msg.username })}
                                     className="p-1 bg-white dark:bg-slate-800 hover:bg-rose-50 hover:border-rose-200 dark:hover:bg-rose-950 border border-slate-200 dark:border-slate-700 rounded-lg text-rose-500 dark:text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 shadow-sm cursor-pointer"
@@ -1102,7 +1508,7 @@ export default function MiniChat() {
                                     <Ban className="w-3 h-3 text-rose-500" />
                                   </button>
                                 )}
-                                {isModerator && (
+                                {canModerate && (
                                   <button
                                     onClick={() => handleDeleteSingleMessage(msg.id)}
                                     className="p-1 bg-white dark:bg-slate-800 hover:bg-red-50 hover:border-red-200 dark:hover:bg-red-950 border border-slate-200 dark:border-slate-700 rounded-lg text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 shadow-sm cursor-pointer"
@@ -1447,6 +1853,95 @@ export default function MiniChat() {
                     </button>
                   )}
                 </form>
+              </div>
+            </div>
+          )}
+          {/* User Profile Card & Badges Modal */}
+          {userProfileModal && (
+            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in pointer-events-auto">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 max-w-[310px] w-full shadow-2xl relative text-center">
+                {/* Close button */}
+                <button
+                  onClick={() => setUserProfileModal(null)}
+                  className="absolute top-3.5 right-3.5 p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                {/* Avatar */}
+                <div className={`w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-lg font-black uppercase text-white shadow-md border-2 border-white/20 bg-gradient-to-br ${getAvatarColor(userProfileModal.username)}`}>
+                  {getInitials(userProfileModal.username)}
+                </div>
+
+                <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base mt-2.5 tracking-tight flex items-center justify-center gap-1.5">
+                  @{userProfileModal.username}
+                </h3>
+
+                {/* Level & XP Progress Bar */}
+                <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5">
+                    <span className="flex items-center gap-1 text-amber-500">
+                      <Trophy className="w-3.5 h-3.5 text-amber-500" /> Seviye {userProfileModal.level}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold">{userProfileModal.xp} XP</span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-400 to-yellow-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (userProfileModal.xp % 100))}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-slate-400 font-semibold block mt-1">
+                    Sonraki Seviyeye: {100 - (userProfileModal.xp % 100)} XP
+                  </span>
+                </div>
+
+                {/* Badges List */}
+                <div className="mt-3 text-left">
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1.5">
+                    Kazanılan Rozetler ({userProfileModal.badges?.length || 0}):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                    {userProfileModal.badges && userProfileModal.badges.length > 0 ? (
+                      userProfileModal.badges.map((b) => (
+                        <span key={b} className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/50 dark:border-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg text-[10px] font-extrabold shadow-2xs">
+                          {b}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[10px] text-slate-400 italic">Henüz özel rozet kazanılmadı</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Statistics */}
+                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                  <div className="p-2 bg-slate-50 dark:bg-slate-950/40 rounded-xl">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase block">Mesajlar</span>
+                    <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                      {userProfileModal.messageCount || 0}
+                    </span>
+                  </div>
+                  <div className="p-2 bg-slate-50 dark:bg-slate-950/40 rounded-xl">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase block">Aktivite/Oyun</span>
+                    <span className="text-xs font-black text-amber-500">
+                      {userProfileModal.gameCount || 0}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Direct Message Action Button */}
+                {userProfileModal.username !== username && (
+                  <button
+                    onClick={() => startDMWithUser(userProfileModal.userId, userProfileModal.username)}
+                    className="mt-4 w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Özel Mesaj (DM) Gönder</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
