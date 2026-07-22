@@ -93,7 +93,7 @@ export default function MiniChat() {
 
   // Moderator & Blocking State Variables
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return typeof window !== "undefined" && (localStorage.getItem("inanresim_admin_token") === "true" || localStorage.getItem("inanresim_admin_visible") === "true");
+    return typeof window !== "undefined" && localStorage.getItem("inanresim_admin_token") === "true";
   });
   const [isModerator, setIsModerator] = useState(false);
   const canModerate = isModerator || isAdmin;
@@ -168,15 +168,19 @@ export default function MiniChat() {
     }
   }, []);
 
-  // Sync Admin status from localStorage dynamically
+  // Sync Admin & Moderator status from localStorage dynamically
   useEffect(() => {
     const checkAdminState = () => {
-      const isAd = typeof window !== "undefined" && (localStorage.getItem("inanresim_admin_token") === "true" || localStorage.getItem("inanresim_admin_visible") === "true");
+      if (typeof window === "undefined") return;
+      const isAd = localStorage.getItem("inanresim_admin_token") === "true";
+      const isModSession = localStorage.getItem("chat_moderator_session") === "true";
+      
       setIsAdmin(isAd);
+      setIsModerator(isModSession);
     };
     checkAdminState();
     window.addEventListener("storage", checkAdminState);
-    const interval = setInterval(checkAdminState, 1500);
+    const interval = setInterval(checkAdminState, 1000);
     return () => {
       window.removeEventListener("storage", checkAdminState);
       clearInterval(interval);
@@ -510,10 +514,14 @@ export default function MiniChat() {
     }
   };
 
-  // Moderator Logout
+  // Moderator / Admin Logout
   const handleModLogout = () => {
     setIsModerator(false);
+    setIsAdmin(false);
     localStorage.removeItem("chat_moderator_session");
+    localStorage.removeItem("inanresim_admin_token");
+    localStorage.removeItem("inanresim_admin_visible");
+    window.dispatchEvent(new Event("storage"));
     playSoundNotification();
   };
 

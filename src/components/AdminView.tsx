@@ -573,6 +573,9 @@ export default function AdminView({ onBack }: AdminViewProps) {
           <button
             onClick={() => {
               localStorage.removeItem("inanresim_admin_token");
+              localStorage.removeItem("inanresim_admin_visible");
+              localStorage.removeItem("chat_moderator_session");
+              window.dispatchEvent(new Event("storage"));
               setIsAuthenticated(false);
               onBack();
             }}
