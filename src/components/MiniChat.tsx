@@ -39,7 +39,13 @@ import {
   Trophy,
   Zap,
   Star,
-  UserPlus
+  UserPlus,
+  Pin,
+  PinOff,
+  BarChart2,
+  Vote,
+  CheckCircle2,
+  Plus
 } from "lucide-react";
 
 interface ChatMessage {
@@ -50,6 +56,29 @@ interface ChatMessage {
   createdAt: number;
   isMod?: boolean;
   isAdmin?: boolean;
+}
+
+interface PinnedMessage {
+  id?: string;
+  text: string;
+  pinnedBy: string;
+  createdAt: number;
+}
+
+interface PollOption {
+  id: string;
+  text: string;
+  votes: string[];
+}
+
+interface ChatPoll {
+  id: string;
+  question: string;
+  options: PollOption[];
+  createdBy: string;
+  createdById: string;
+  createdAt: number;
+  isActive: boolean;
 }
 
 interface DirectMessage {
@@ -133,6 +162,20 @@ export default function MiniChat() {
   const [userProfileModal, setUserProfileModal] = useState<UserProfileData | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [myProfile, setMyProfile] = useState<UserProfileData | null>(null);
+
+  // Pinned Message States
+  const [pinnedMessage, setPinnedMessage] = useState<PinnedMessage | null>(null);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [customPinText, setCustomPinText] = useState("");
+  const [pinningLoading, setPinningLoading] = useState(false);
+
+  // Poll States
+  const [activePoll, setActivePoll] = useState<ChatPoll | null>(null);
+  const [showCreatePollModal, setShowCreatePollModal] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptionsInput, setPollOptionsInput] = useState<string[]>(["", ""]);
+  const [creatingPoll, setCreatingPoll] = useState(false);
+  const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -227,10 +270,150 @@ export default function MiniChat() {
       .catch((err) => console.log("Fetch slowmode error", err));
   };
 
+  const fetchPinnedMessage = () => {
+    fetch("/api/chat/pinned")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.pinnedMessage !== undefined) {
+          setPinnedMessage(data.pinnedMessage);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const fetchActivePoll = () => {
+    fetch("/api/chat/poll/active")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.poll !== undefined) {
+          setActivePoll(data.poll);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const handlePinMessage = async (msgText: string) => {
+    if (!canModerate) return;
+    setPinningLoading(true);
+    try {
+      const res = await fetch("/api/chat/pinned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: msgText,
+          pinnedBy: username || "Moderatör"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPinnedMessage(data.pinnedMessage);
+        setShowPinModal(false);
+        setCustomPinText("");
+      }
+    } catch (e) {
+      console.error("Pin error", e);
+    } finally {
+      setPinningLoading(false);
+    }
+  };
+
+  const handleUnpinMessage = async () => {
+    if (!canModerate) return;
+    try {
+      const res = await fetch("/api/chat/pinned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unpin: true, pinnedBy: username })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPinnedMessage(null);
+      }
+    } catch (e) {}
+  };
+
+  const handleCreatePoll = async () => {
+    if (!canModerate) return;
+    if (!pollQuestion.trim()) return;
+    const validOpts = pollOptionsInput.map(o => o.trim()).filter(Boolean);
+    if (validOpts.length < 2) return;
+
+    setCreatingPoll(true);
+    let myId = localStorage.getItem("inanresim_guest_id") || "";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+
+    try {
+      const res = await fetch("/api/chat/poll/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: pollQuestion,
+          options: validOpts,
+          createdBy: username || "Kullanıcı",
+          createdById: myId
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActivePoll(data.poll);
+        setShowCreatePollModal(false);
+        setPollQuestion("");
+        setPollOptionsInput(["", ""]);
+        fetchMessages();
+      }
+    } catch (e) {
+      console.error("Create poll error", e);
+    } finally {
+      setCreatingPoll(false);
+    }
+  };
+
+  const handleVotePoll = async (pollId: string, optionId: string) => {
+    let myId = localStorage.getItem("inanresim_guest_id") || "";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+    if (!myId) return;
+
+    setVotingOptionId(optionId);
+    try {
+      const res = await fetch("/api/chat/poll/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pollId, optionId, userId: myId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActivePoll(data.poll);
+      }
+    } catch (e) {
+      console.error("Vote poll error", e);
+    } finally {
+      setVotingOptionId(null);
+    }
+  };
+
+  const handleClosePoll = async (pollId: string) => {
+    try {
+      await fetch("/api/chat/poll/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pollId })
+      });
+      setActivePoll(null);
+    } catch (e) {}
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchMessages();
       fetchMyProfile();
+      fetchPinnedMessage();
+      fetchActivePoll();
       if (activeChatTab === "dm") {
         fetchDMConversations();
         if (activeDMTarget) {
@@ -239,6 +422,8 @@ export default function MiniChat() {
       }
       const interval = setInterval(() => {
         fetchMessages();
+        fetchPinnedMessage();
+        fetchActivePoll();
         if (activeChatTab === "dm") {
           fetchDMConversations();
           if (activeDMTarget) {
@@ -753,7 +938,7 @@ export default function MiniChat() {
   };
 
   // Fun Slash Commands & Games!
-  const triggerSlashCommand = async (cmd: "zar" | "yazitura" | "fal" | "ask") => {
+  const triggerSlashCommand = async (cmd: "zar" | "yazitura" | "fal" | "ask" | "saka") => {
     let resultText = "";
     if (cmd === "zar") {
       const diceValue1 = Math.floor(Math.random() * 6) + 1;
@@ -780,6 +965,15 @@ export default function MiniChat() {
       if (rate >= 80) comment = "İnanılmaz! Ruh ikizisiniz! ❤️‍🔥🏆";
       else if (rate >= 50) comment = "Güzel bir elektrik var, zamanla artabilir! 💖";
       resultText = `❤️ [Aşk Ölçer] Bugünün sohbet odası aşk enerjisi analiz edildi: %${rate}! ${comment}`;
+    } else if (cmd === "saka") {
+      const jokes = [
+        "😄 Bilgisayarım neden soğuk algınlığı oldu? Çünkü penceresi (Windows) açık kalmış!",
+        "😄 Garsona 'Bana bir çay ver' dedim, 'Demli mi olsun?' dedi. 'Yok, Porselen olsun' dedim!",
+        "😄 Neden yazılımcılar gözlük takar? Çünkü C#'ı göremiyorlar!",
+        "😄 Bir adam varmış, ikinci adam gelememiş çünkü trafik varmış!",
+        "😄 İnternet bağımlısı olan balığa ne denir? Ağ'a takılan balık!"
+      ];
+      resultText = jokes[Math.floor(Math.random() * jokes.length)];
     }
 
     playSoundNotification();
@@ -1159,7 +1353,7 @@ export default function MiniChat() {
               </div>
             )}
 
-            {/* Quick Interactive Tool Bar: Zar, Yazı-Tura, Fal Buttons */}
+            {/* Quick Interactive Tool Bar: Zar, Yazı-Tura, Fal, Aşk Ölçer, Espri Yap Buttons */}
             {isJoined && (
               <div className="px-3.5 py-1.5 bg-slate-100/60 dark:bg-slate-900/40 border-b border-slate-200/40 dark:border-slate-800/30 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
                 <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500 shrink-0 select-none mr-1">Eğlence:</span>
@@ -1169,7 +1363,7 @@ export default function MiniChat() {
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-indigo-50 hover:bg-indigo-100/80 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100/50 dark:border-indigo-900/20 shadow-xs cursor-pointer transition-all hover:scale-103"
                   title="Çift Zar At"
                 >
-                  <Dices className="w-3 h-3" />
+                  <Dices className="w-3 h-3 text-indigo-500" />
                   Zar At
                 </button>
 
@@ -1178,7 +1372,7 @@ export default function MiniChat() {
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-50 hover:bg-amber-100/80 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-100/50 dark:border-amber-900/20 shadow-xs cursor-pointer transition-all hover:scale-103"
                   title="Yazı-Tura At"
                 >
-                  <Coins className="w-3 h-3" />
+                  <Coins className="w-3 h-3 text-amber-500" />
                   Yazı Tura
                 </button>
 
@@ -1199,6 +1393,43 @@ export default function MiniChat() {
                   <Flame className="w-3 h-3 text-rose-500" />
                   Aşk Ölçer
                 </button>
+
+                <button
+                  onClick={() => triggerSlashCommand("saka")}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-50 hover:bg-emerald-100/80 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-100/50 dark:border-emerald-900/20 shadow-xs cursor-pointer transition-all hover:scale-103"
+                  title="Espri / Komik Söz Söyle"
+                >
+                  <Smile className="w-3 h-3 text-emerald-500" />
+                  Espri Yap
+                </button>
+
+                {canModerate && (
+                  <button
+                    onClick={() => {
+                      setShowCreatePollModal(true);
+                      setPollOptionsInput(["", ""]);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-blue-50 hover:bg-blue-100/80 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-100/50 dark:border-blue-900/20 shadow-xs cursor-pointer transition-all hover:scale-103 shrink-0"
+                    title="Sohbet Odasına Anket Ekle (Sadece Yetkililer)"
+                  >
+                    <BarChart2 className="w-3 h-3 text-blue-500" />
+                    Anket Başlat
+                  </button>
+                )}
+
+                {canModerate && (
+                  <button
+                    onClick={() => {
+                      setShowPinModal(true);
+                      setCustomPinText("");
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-50 hover:bg-amber-100/80 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-100/50 dark:border-amber-900/20 shadow-xs cursor-pointer transition-all hover:scale-103 shrink-0"
+                    title="Üst Barda Duyuru/Mesaj Sabitle (Sadece Yetkililer)"
+                  >
+                    <Pin className="w-3 h-3 text-amber-500" />
+                    Duyuru Sabitle
+                  </button>
+                )}
               </div>
             )}
 
@@ -1383,6 +1614,121 @@ export default function MiniChat() {
                     <div className="sticky top-0 z-30 my-1 mx-1 p-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl text-xs font-black text-center shadow-xl flex items-center justify-center gap-2 animate-bounce border border-white/20">
                       <span className="text-sm">📢</span>
                       <span>{chatClearedNotice}</span>
+                    </div>
+                  )}
+
+                  {/* Pinned Message Banner */}
+                  {pinnedMessage && (
+                    <div className="sticky top-0 z-20 my-1 mx-0.5 p-3 bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 dark:border-amber-700/40 rounded-2xl shadow-sm backdrop-blur-md flex items-start gap-2.5 animate-fade-in">
+                      <div className="p-1.5 bg-amber-500 text-white rounded-xl shrink-0 mt-0.5 shadow-xs">
+                        <Pin className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-grow min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            📌 Sabitlenmiş Duyuru
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-semibold">
+                            @{pinnedMessage.pinnedBy}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug break-words">
+                          {pinnedMessage.text}
+                        </p>
+                      </div>
+                      {canModerate && (
+                        <button
+                          onClick={handleUnpinMessage}
+                          className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-all shrink-0 cursor-pointer"
+                          title="Sabitlemeyi Kaldır"
+                        >
+                          <PinOff className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Active Poll Card */}
+                  {activePoll && (
+                    <div className="my-2 mx-0.5 p-3.5 bg-gradient-to-br from-indigo-50/90 via-violet-50/80 to-purple-50/90 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-slate-900/60 border border-indigo-200/80 dark:border-indigo-800/40 rounded-2xl shadow-sm relative group/poll animate-fade-in">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="p-1 bg-indigo-600 text-white rounded-lg text-xs">
+                            <BarChart2 className="w-3.5 h-3.5" />
+                          </span>
+                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-700 dark:text-indigo-300">
+                            Canlı Anket
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400">
+                            @{activePoll.createdBy}
+                          </span>
+                          {(canModerate || activePoll.createdById === (localStorage.getItem("inanresim_guest_id") || "")) && (
+                            <button
+                              onClick={() => handleClosePoll(activePoll.id)}
+                              className="ml-1 text-[9px] font-extrabold text-rose-500 hover:text-rose-600 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/30 px-1.5 py-0.5 rounded-md cursor-pointer transition-all"
+                              title="Anketi Bitir / Kapat"
+                            >
+                              Bitir
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <h5 className="text-xs font-black text-slate-900 dark:text-slate-100 mb-2.5 leading-snug">
+                        {activePoll.question}
+                      </h5>
+
+                      {/* Options List */}
+                      <div className="space-y-1.5">
+                        {(() => {
+                          const myId = localStorage.getItem("inanresim_guest_id") || "";
+                          const totalVotes = activePoll.options.reduce((acc, opt) => acc + opt.votes.length, 0);
+
+                          return activePoll.options.map((opt) => {
+                            const voteCount = opt.votes.length;
+                            const percentage = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+                            const hasVotedThis = opt.votes.includes(myId);
+
+                            return (
+                              <div
+                                key={opt.id}
+                                onClick={() => handleVotePoll(activePoll.id, opt.id)}
+                                className={`relative overflow-hidden p-2 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${
+                                  hasVotedThis
+                                    ? "border-indigo-500 bg-indigo-600/10 text-indigo-900 dark:text-indigo-200 shadow-xs"
+                                    : "border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-700"
+                                }`}
+                              >
+                                {/* Progress fill bar */}
+                                <div
+                                  className="absolute inset-y-0 left-0 bg-indigo-500/15 dark:bg-indigo-500/25 transition-all duration-500 pointer-events-none"
+                                  style={{ width: `${percentage}%` }}
+                                />
+
+                                <div className="relative z-10 flex items-center justify-between gap-2">
+                                  <span className="flex items-center gap-1.5 min-w-0 truncate">
+                                    {hasVotedThis ? (
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                    ) : (
+                                      <span className="w-2.5 h-2.5 rounded-full border border-slate-400 shrink-0" />
+                                    )}
+                                    <span className="truncate">{opt.text}</span>
+                                  </span>
+                                  <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 shrink-0">
+                                    %{percentage} ({voteCount})
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      
+                      <div className="mt-2 text-[9px] text-slate-400 font-semibold text-right">
+                        Toplam Oy: {activePoll.options.reduce((acc, opt) => acc + opt.votes.length, 0)}
+                      </div>
                     </div>
                   )}
                   {filteredMessages.length === 0 ? (
@@ -1572,6 +1918,15 @@ export default function MiniChat() {
                                     title="Kullanıcıyı Engelle / Yasakla"
                                   >
                                     <Ban className="w-3 h-3 text-rose-500" />
+                                  </button>
+                                )}
+                                {canModerate && (
+                                  <button
+                                    onClick={() => handlePinMessage(msg.text)}
+                                    className="p-1 bg-white dark:bg-slate-800 hover:bg-amber-50 hover:border-amber-200 dark:hover:bg-amber-950 border border-slate-200 dark:border-slate-700 rounded-lg text-amber-500 dark:text-amber-400 hover:text-amber-600 shadow-sm cursor-pointer"
+                                    title="Bu Mesajı Sabitle"
+                                  >
+                                    <Pin className="w-3 h-3 text-amber-500" />
                                   </button>
                                 )}
                                 {canModerate && (
@@ -2008,6 +2363,177 @@ export default function MiniChat() {
                     <span>Özel Mesaj (DM) Gönder</span>
                   </button>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Create Poll Modal */}
+          {showCreatePollModal && canModerate && (
+            <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs z-50 flex flex-col justify-center items-center p-4 animate-fade-in pointer-events-auto">
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl max-w-[310px] w-full shadow-2xl border border-slate-100 dark:border-slate-800 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePollModal(false)}
+                  className="absolute top-3.5 right-3.5 p-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 rounded-full cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-2xl">
+                    <BarChart2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">Mini Anket Başlat</h4>
+                    <p className="text-[10px] text-slate-400 font-bold">Odaya canlı oylama sunun</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                      Anket Sorusu
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Örn: Bugün hangi kategoriyi yükleyelim?"
+                      value={pollQuestion}
+                      onChange={(e) => setPollQuestion(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                        Seçenekler
+                      </label>
+                      {pollOptionsInput.length < 5 && (
+                        <button
+                          type="button"
+                          onClick={() => setPollOptionsInput([...pollOptionsInput, ""])}
+                          className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
+                        >
+                          <Plus className="w-2.5 h-2.5" /> Seçenek Ekle
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {pollOptionsInput.map((opt, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            placeholder={`Seçenek ${idx + 1}`}
+                            value={opt}
+                            onChange={(e) => {
+                              const newOpts = [...pollOptionsInput];
+                              newOpts[idx] = e.target.value;
+                              setPollOptionsInput(newOpts);
+                            }}
+                            className="flex-grow px-2.5 py-1.5 text-xs font-semibold border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          {pollOptionsInput.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newOpts = pollOptionsInput.filter((_, i) => i !== idx);
+                                setPollOptionsInput(newOpts);
+                              }}
+                              className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePollModal(false)}
+                      className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      type="button"
+                      disabled={creatingPoll || !pollQuestion.trim() || pollOptionsInput.filter(o => o.trim()).length < 2}
+                      onClick={handleCreatePoll}
+                      className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      {creatingPoll ? (
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        "Yayınla"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Custom Pin Message Modal */}
+          {showPinModal && canModerate && (
+            <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs z-50 flex flex-col justify-center items-center p-4 animate-fade-in pointer-events-auto">
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl max-w-[310px] w-full shadow-2xl border border-slate-100 dark:border-slate-800 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="absolute top-3.5 right-3.5 p-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 rounded-full cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl">
+                    <Pin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">Mesaj / Duyuru Sabitle</h4>
+                    <p className="text-[10px] text-slate-400 font-bold">Sohbetin en üst bandında görünür</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                      Duyuru Metni
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Örn: Hoş geldiniz! Lütfen topluluk kurallarına riayet ediniz..."
+                      value={customPinText}
+                      onChange={(e) => setCustomPinText(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowPinModal(false)}
+                      className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+                    >
+                      İptal
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pinningLoading || !customPinText.trim()}
+                      onClick={() => handlePinMessage(customPinText)}
+                      className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      {pinningLoading ? (
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        "Sabitle"
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

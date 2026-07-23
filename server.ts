@@ -290,8 +290,33 @@ async function startServer() {
     gameCount: number;
   }
 
+  interface PinnedMessage {
+    id?: string;
+    text: string;
+    pinnedBy: string;
+    createdAt: number;
+  }
+
+  interface PollOption {
+    id: string;
+    text: string;
+    votes: string[]; // userIds
+  }
+
+  interface ChatPoll {
+    id: string;
+    question: string;
+    options: PollOption[];
+    createdBy: string;
+    createdById: string;
+    createdAt: number;
+    isActive: boolean;
+  }
+
   const inMemoryDMs: DirectMessage[] = [];
   const inMemoryUserXPProfiles: Record<string, UserXPProfile> = {};
+  let inMemoryPinnedMessage: PinnedMessage | null = null;
+  let inMemoryActivePoll: ChatPoll | null = null;
 
   function getUserLevelAndBadges(profile: UserXPProfile, isMod?: boolean, isAdmin?: boolean) {
     const xp = profile.xp || 0;
@@ -448,6 +473,72 @@ async function startServer() {
     } else {
       inMemoryChatSlowMode = slowMode;
     }
+  }
+
+  async function dbGetPinnedMessage(): Promise<PinnedMessage | null> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "configs", "chat_pinned");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && data.text) {
+            return data as PinnedMessage;
+          }
+        }
+      } catch (e) {
+        console.error("Firebase get pinned message error:", e);
+      }
+    }
+    return inMemoryPinnedMessage;
+  }
+
+  async function dbSavePinnedMessage(pinned: PinnedMessage | null): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        if (pinned) {
+          await setDoc(doc(db, "configs", "chat_pinned"), pinned);
+        } else {
+          await deleteDoc(doc(db, "configs", "chat_pinned"));
+        }
+      } catch (e) {
+        console.error("Firebase save pinned message error:", e);
+      }
+    }
+    inMemoryPinnedMessage = pinned;
+  }
+
+  async function dbGetActivePoll(): Promise<ChatPoll | null> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "configs", "chat_active_poll");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && data.isActive) {
+            return data as ChatPoll;
+          }
+        }
+      } catch (e) {
+        console.error("Firebase get active poll error:", e);
+      }
+    }
+    return inMemoryActivePoll && inMemoryActivePoll.isActive ? inMemoryActivePoll : null;
+  }
+
+  async function dbSaveActivePoll(poll: ChatPoll | null): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        if (poll) {
+          await setDoc(doc(db, "configs", "chat_active_poll"), poll);
+        } else {
+          await deleteDoc(doc(db, "configs", "chat_active_poll"));
+        }
+      } catch (e) {
+        console.error("Firebase save active poll error:", e);
+      }
+    }
+    inMemoryActivePoll = poll;
   }
 
   async function dbGetChatMessages(): Promise<ChatMessage[]> {
@@ -2251,6 +2342,161 @@ async function startServer() {
     } catch (err) {
       console.error("Delete user messages error:", err);
       res.status(500).json({ error: "Kullanıcının mesajları silinemedi." });
+    }
+  });
+
+  // Get Pinned Message
+  app.get("/api/chat/pinned", async (req, res) => {
+    try {
+      const pinned = await dbGetPinnedMessage();
+      res.json({ pinnedMessage: pinned });
+    } catch (err) {
+      res.status(500).json({ error: "Sabitlenmiş mesaj alınamadı." });
+    }
+  });
+
+  // Set or Unpin Pinned Message (Admin / Moderator)
+  app.post("/api/chat/pinned", async (req, res) => {
+    try {
+      const { text, pinnedBy, unpin } = req.body;
+      if (unpin) {
+        await dbSavePinnedMessage(null);
+        await logModAction(pinnedBy || "mod", pinnedBy || "Moderatör", "UNPIN_MSG", "Sabitlenmiş mesaj kaldırıldı.");
+        return res.json({ success: true, pinnedMessage: null });
+      }
+
+      if (!text || !text.trim()) {
+        return res.status(400).json({ error: "Sabitlenecek mesaj metni boş olamaz." });
+      }
+
+      const pinnedObj: PinnedMessage = {
+        id: "pin_" + generateId(8),
+        text: text.trim(),
+        pinnedBy: pinnedBy || "Yönetici",
+        createdAt: Date.now(),
+      };
+
+      await dbSavePinnedMessage(pinnedObj);
+      await logModAction(pinnedBy || "mod", pinnedBy || "Moderatör", "PIN_MSG", `Mesaj sabitlendi: "${pinnedObj.text}"`);
+
+      res.json({ success: true, pinnedMessage: pinnedObj });
+    } catch (err) {
+      console.error("Set pinned message error:", err);
+      res.status(500).json({ error: "Mesaj sabitlenirken bir hata oluştu." });
+    }
+  });
+
+  // Get Active Poll
+  app.get("/api/chat/poll/active", async (req, res) => {
+    try {
+      const poll = await dbGetActivePoll();
+      res.json({ poll });
+    } catch (err) {
+      res.status(500).json({ error: "Aktif anket bilgisi alınamadı." });
+    }
+  });
+
+  // Create Poll (Admin / Mod / User)
+  app.post("/api/chat/poll/create", async (req, res) => {
+    try {
+      const { question, options, createdBy, createdById } = req.body;
+
+      if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
+        return res.status(400).json({ error: "Lütfen geçerli bir anket sorusu ve en az 2 seçenek girin." });
+      }
+
+      const cleanQuestion = question.trim();
+      const pollOptions: PollOption[] = options
+        .map((optStr: string, idx: number) => ({
+          id: `opt_${idx + 1}_${generateId(4)}`,
+          text: String(optStr).trim(),
+          votes: []
+        }))
+        .filter(opt => opt.text.length > 0);
+
+      if (pollOptions.length < 2) {
+        return res.status(400).json({ error: "Anket için en az 2 dolu seçenek girmelisiniz." });
+      }
+
+      const newPoll: ChatPoll = {
+        id: "poll_" + generateId(8),
+        question: cleanQuestion,
+        options: pollOptions,
+        createdBy: createdBy || "Kullanıcı",
+        createdById: createdById || "guest",
+        createdAt: Date.now(),
+        isActive: true,
+      };
+
+      await dbSaveActivePoll(newPoll);
+
+      // Save a system message to chat
+      const sysMsg: ChatMessage = {
+        id: "msg_" + generateId(10),
+        userId: "system",
+        username: "📊 Sistem Anketi",
+        text: `Yeni anket başlatıldı: "${cleanQuestion}"`,
+        createdAt: Date.now(),
+        isMod: true,
+        isAdmin: true,
+      };
+      await dbSaveChatMessage(sysMsg);
+
+      res.json({ success: true, poll: newPoll });
+    } catch (err) {
+      console.error("Create poll error:", err);
+      res.status(500).json({ error: "Anket oluşturulurken bir hata oluştu." });
+    }
+  });
+
+  // Vote on Poll
+  app.post("/api/chat/poll/vote", async (req, res) => {
+    try {
+      const { pollId, optionId, userId } = req.body;
+      if (!pollId || !optionId || !userId) {
+        return res.status(400).json({ error: "Eksik oy kullanma bilgisi." });
+      }
+
+      const poll = await dbGetActivePoll();
+      if (!poll || poll.id !== pollId || !poll.isActive) {
+        return res.status(400).json({ error: "Süresi dolmuş veya aktif olmayan anket." });
+      }
+
+      // Remove userId from all options first (allows vote changing or single vote per user)
+      poll.options.forEach(opt => {
+        opt.votes = opt.votes.filter(v => v !== userId);
+      });
+
+      // Add vote to selected option
+      const targetOpt = poll.options.find(opt => opt.id === optionId);
+      if (!targetOpt) {
+        return res.status(400).json({ error: "Geçersiz anket seçeneği." });
+      }
+
+      targetOpt.votes.push(userId);
+
+      await dbSaveActivePoll(poll);
+
+      res.json({ success: true, poll });
+    } catch (err) {
+      console.error("Vote poll error:", err);
+      res.status(500).json({ error: "Oy kullanılırken bir hata oluştu." });
+    }
+  });
+
+  // Close Poll
+  app.post("/api/chat/poll/close", async (req, res) => {
+    try {
+      const { pollId } = req.body;
+      const poll = await dbGetActivePoll();
+      if (poll && poll.id === pollId) {
+        poll.isActive = false;
+        await dbSaveActivePoll(null); // Clear active poll
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Close poll error:", err);
+      res.status(500).json({ error: "Anket kapatılamadı." });
     }
   });
 
