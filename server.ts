@@ -295,6 +295,8 @@ async function startServer() {
     text: string;
     pinnedBy: string;
     createdAt: number;
+    type?: "info" | "warning" | "important";
+    targetMessageId?: string;
   }
 
   interface PollOption {
@@ -310,6 +312,8 @@ async function startServer() {
     createdBy: string;
     createdById: string;
     createdAt: number;
+    expiresAt?: number | null;
+    allowMultiple?: boolean;
     isActive: boolean;
   }
 
@@ -508,7 +512,54 @@ async function startServer() {
     inMemoryPinnedMessage = pinned;
   }
 
+  async function finalizePollResults(poll: ChatPoll): Promise<void> {
+    try {
+      const totalVotes = poll.options.reduce((acc, opt) => acc + opt.votes.length, 0);
+      let resultText = "";
+
+      if (totalVotes === 0) {
+        resultText = `📊 Anket Sona Erdi: "${poll.question}" — Katılım olmadı (0 oy).`;
+      } else {
+        let maxVotes = -1;
+        let winners: PollOption[] = [];
+
+        poll.options.forEach(opt => {
+          if (opt.votes.length > maxVotes) {
+            maxVotes = opt.votes.length;
+            winners = [opt];
+          } else if (opt.votes.length === maxVotes && maxVotes > 0) {
+            winners.push(opt);
+          }
+        });
+
+        if (winners.length === 1) {
+          const winnerPct = Math.round((winners[0].votes.length / totalVotes) * 100);
+          resultText = `🏆 Anket Sonuçlandı! "${poll.question}" -> Kazanan: "${winners[0].text}" (%${winnerPct} - ${winners[0].votes.length}/${totalVotes} Oy)`;
+        } else if (winners.length > 1) {
+          const winnerNames = winners.map(w => `"${w.text}"`).join(", ");
+          resultText = `🏆 Anket Berabere Bitti! "${poll.question}" -> Berabere Kalanlar: ${winnerNames} (Her biri ${maxVotes} oy)`;
+        } else {
+          resultText = `📊 Anket Sona Erdi: "${poll.question}"`;
+        }
+      }
+
+      const sysMsg: ChatMessage = {
+        id: "msg_" + generateId(10),
+        userId: "system",
+        username: "📊 Sistem Anketi",
+        text: resultText,
+        createdAt: Date.now(),
+        isMod: true,
+        isAdmin: true,
+      };
+      await dbSaveChatMessage(sysMsg);
+    } catch (e) {
+      console.error("Finalize poll results error:", e);
+    }
+  }
+
   async function dbGetActivePoll(): Promise<ChatPoll | null> {
+    let currentPoll: ChatPoll | null = null;
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "configs", "chat_active_poll");
@@ -516,14 +567,24 @@ async function startServer() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data && data.isActive) {
-            return data as ChatPoll;
+            currentPoll = data as ChatPoll;
           }
         }
       } catch (e) {
         console.error("Firebase get active poll error:", e);
       }
+    } else {
+      currentPoll = inMemoryActivePoll && inMemoryActivePoll.isActive ? inMemoryActivePoll : null;
     }
-    return inMemoryActivePoll && inMemoryActivePoll.isActive ? inMemoryActivePoll : null;
+
+    if (currentPoll && currentPoll.expiresAt && Date.now() > currentPoll.expiresAt) {
+      currentPoll.isActive = false;
+      await finalizePollResults(currentPoll);
+      await dbSaveActivePoll(null);
+      return null;
+    }
+
+    return currentPoll;
   }
 
   async function dbSaveActivePoll(poll: ChatPoll | null): Promise<void> {
@@ -2358,7 +2419,7 @@ async function startServer() {
   // Set or Unpin Pinned Message (Admin / Moderator)
   app.post("/api/chat/pinned", async (req, res) => {
     try {
-      const { text, pinnedBy, unpin } = req.body;
+      const { text, pinnedBy, unpin, type, targetMessageId } = req.body;
       if (unpin) {
         await dbSavePinnedMessage(null);
         await logModAction(pinnedBy || "mod", pinnedBy || "Moderatör", "UNPIN_MSG", "Sabitlenmiş mesaj kaldırıldı.");
@@ -2374,10 +2435,12 @@ async function startServer() {
         text: text.trim(),
         pinnedBy: pinnedBy || "Yönetici",
         createdAt: Date.now(),
+        type: (type === "warning" || type === "important") ? type : "info",
+        targetMessageId: targetMessageId || undefined,
       };
 
       await dbSavePinnedMessage(pinnedObj);
-      await logModAction(pinnedBy || "mod", pinnedBy || "Moderatör", "PIN_MSG", `Mesaj sabitlendi: "${pinnedObj.text}"`);
+      await logModAction(pinnedBy || "mod", pinnedBy || "Moderatör", "PIN_MSG", `Mesaj sabitlendi (${pinnedObj.type}): "${pinnedObj.text}"`);
 
       res.json({ success: true, pinnedMessage: pinnedObj });
     } catch (err) {
@@ -2396,10 +2459,10 @@ async function startServer() {
     }
   });
 
-  // Create Poll (Admin / Mod / User)
+  // Create Poll (Admin / Mod)
   app.post("/api/chat/poll/create", async (req, res) => {
     try {
-      const { question, options, createdBy, createdById } = req.body;
+      const { question, options, createdBy, createdById, durationMinutes, allowMultiple } = req.body;
 
       if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
         return res.status(400).json({ error: "Lütfen geçerli bir anket sorusu ve en az 2 seçenek girin." });
@@ -2418,6 +2481,9 @@ async function startServer() {
         return res.status(400).json({ error: "Anket için en az 2 dolu seçenek girmelisiniz." });
       }
 
+      const durMins = Number(durationMinutes) || 0;
+      const expiresAt = durMins > 0 ? Date.now() + (durMins * 60 * 1000) : null;
+
       const newPoll: ChatPoll = {
         id: "poll_" + generateId(8),
         question: cleanQuestion,
@@ -2425,6 +2491,8 @@ async function startServer() {
         createdBy: createdBy || "Kullanıcı",
         createdById: createdById || "guest",
         createdAt: Date.now(),
+        expiresAt,
+        allowMultiple: Boolean(allowMultiple),
         isActive: true,
       };
 
@@ -2435,7 +2503,7 @@ async function startServer() {
         id: "msg_" + generateId(10),
         userId: "system",
         username: "📊 Sistem Anketi",
-        text: `Yeni anket başlatıldı: "${cleanQuestion}"`,
+        text: `Yeni anket başlatıldı: "${cleanQuestion}" ${expiresAt ? `(Süre: ${durMins} dakika)` : ""}`,
         createdAt: Date.now(),
         isMod: true,
         isAdmin: true,
@@ -2462,18 +2530,29 @@ async function startServer() {
         return res.status(400).json({ error: "Süresi dolmuş veya aktif olmayan anket." });
       }
 
-      // Remove userId from all options first (allows vote changing or single vote per user)
-      poll.options.forEach(opt => {
-        opt.votes = opt.votes.filter(v => v !== userId);
-      });
-
-      // Add vote to selected option
       const targetOpt = poll.options.find(opt => opt.id === optionId);
       if (!targetOpt) {
         return res.status(400).json({ error: "Geçersiz anket seçeneği." });
       }
 
-      targetOpt.votes.push(userId);
+      if (poll.allowMultiple) {
+        // Toggle vote for multiple choice
+        if (targetOpt.votes.includes(userId)) {
+          targetOpt.votes = targetOpt.votes.filter(v => v !== userId);
+        } else {
+          targetOpt.votes.push(userId);
+        }
+      } else {
+        // Single choice: remove userId from all options, then toggle or set
+        const alreadyVotedTarget = targetOpt.votes.includes(userId);
+        poll.options.forEach(opt => {
+          opt.votes = opt.votes.filter(v => v !== userId);
+        });
+
+        if (!alreadyVotedTarget) {
+          targetOpt.votes.push(userId);
+        }
+      }
 
       await dbSaveActivePoll(poll);
 
@@ -2491,6 +2570,7 @@ async function startServer() {
       const poll = await dbGetActivePoll();
       if (poll && poll.id === pollId) {
         poll.isActive = false;
+        await finalizePollResults(poll);
         await dbSaveActivePoll(null); // Clear active poll
       }
       res.json({ success: true });
