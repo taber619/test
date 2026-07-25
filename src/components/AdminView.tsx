@@ -835,6 +835,94 @@ export default function AdminView({ onBack }: AdminViewProps) {
           </div>
 
           <div className="border-t border-slate-100 pt-6">
+            <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-4">⚙️ Yükleme & Üyelik Sınırları</h4>
+            <p className="text-[11px] text-slate-400 mb-4 -mt-3">Misafir ve üye kullanıcılar için dosya boyutu ve yükleme sayısı limitlerini yapılandırın.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Guest Limits Card */}
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                <h5 className="text-xs font-extrabold text-slate-800 mb-3 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  Misafir (Üye Olmayan) Limitleri
+                </h5>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Maksimum Dosya Boyutu (MB)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={siteConfig.guestMaxMb ?? 20}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, guestMaxMb: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 20 (Üye olmadan en fazla 20 MB yükleyebilir)</span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Maksimum Yükleme Adedi</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={siteConfig.guestMaxUploadCount ?? 5}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, guestMaxUploadCount: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 5 (Misafir kullanıcı toplamda en fazla 5 resim/video yükleyebilir)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Registered Limits Card */}
+              <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
+                <h5 className="text-xs font-extrabold text-blue-900 mb-3 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Kayıtlı Üye Limitleri
+                </h5>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Maksimum Dosya Boyutu (MB)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={siteConfig.registeredMaxMb ?? 150}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxMb: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 150 (Üyeler için dosya boyutu sınırı. 0 = Sınırsız)</span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Maksimum Yükleme Adedi (0 = Sınırsız)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={siteConfig.registeredMaxUploadCount ?? 0}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxUploadCount: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 0 (Kayıtlı üyeler için yükleme adedi. 0 = Sınırsız yükleme)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Email Verification Requirement Toggle */}
+            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between mb-6">
+              <div>
+                <h5 className="text-xs font-extrabold text-slate-800">📩 E-Posta Doğrulama Zorunluluğu</h5>
+                <p className="text-[10px] text-slate-400 mt-0.5 max-w-[400px]">Yeni üye olan kullanıcıların e-postalarına gelen 6 haneli kodu onaylamadan giriş yapmalarını engeller.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={siteConfig.requireEmailVerification !== false}
+                  onChange={(e) => setSiteConfig({ ...siteConfig, requireEmailVerification: e.target.checked })}
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-6">
             <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-4">Sistem Fonksiyonları & Çalışma Modları</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               {/* Maintenance Mode */}

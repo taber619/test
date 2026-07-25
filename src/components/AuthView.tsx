@@ -7,11 +7,12 @@ interface AuthViewProps {
 }
 
 export default function AuthView({ onLoginSuccess }: AuthViewProps) {
-  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset" | "verify">("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [resetCode, setResetCode] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   
   const [loading, setLoading] = useState(false);
@@ -41,6 +42,12 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
 
       const data = await res.json();
       if (!res.ok) {
+        if (data.requireVerification) {
+          setEmail(data.email || email);
+          setMode("verify");
+          setError(data.error || "E-posta adresiniz henüz onaylanmamış. Lütfen doğrulama kodunu girin.");
+          return;
+        }
         throw new Error(data.error || "Giriş veya kayıt işlemi başarısız oldu.");
       }
 
@@ -50,12 +57,86 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
           onLoginSuccess(data.user);
         }, 800);
       } else {
-        setSuccessMsg("Hesabınız başarıyla oluşturuldu! Şimdi giriş yapabilirsiniz.");
-        setMode("login");
-        setPassword("");
+        if (data.requireVerification) {
+          setMode("verify");
+          setSuccessMsg(data.message || "Kayıt başarılı! Lütfen e-postanıza gönderilen doğrulama kodunu girin.");
+        } else {
+          setSuccessMsg("Hesabınız başarıyla oluşturuldu! Şimdi giriş yapabilirsiniz.");
+          setMode("login");
+          setPassword("");
+        }
       }
     } catch (err: any) {
       setError(err.message || "Bir bağlantı hatası oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!email || !verifyCode) {
+      setError("Lütfen 6 haneli doğrulama kodunu giriniz.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code: verifyCode }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Doğrulama başarısız oldu.");
+      }
+
+      setSuccessMsg(data.message || "E-posta başarıyla doğrulandı!");
+      setVerifyCode("");
+      setTimeout(() => {
+        if (data.user) {
+          onLoginSuccess(data.user);
+        } else {
+          setMode("login");
+        }
+      }, 1000);
+    } catch (err: any) {
+      setError(err.message || "Bir bağlantı hatası oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!email) {
+      setError("E-posta adresi bulunamadı.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Yeni kod gönderilemedi.");
+      }
+
+      setSuccessMsg(data.message || "Yeni doğrulama kodu e-postanıza gönderildi.");
+    } catch (err: any) {
+      setError(err.message || "Bağlantı hatası.");
     } finally {
       setLoading(false);
     }
@@ -140,8 +221,8 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     <div className="max-w-md w-full mx-auto my-12 px-4 animate-fade-in" id="auth-panel">
       <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-[32px] shadow-xl p-6 sm:p-8 transition-colors duration-300">
         
-        {/* Back navigation buttons for forgot / reset modes */}
-        {(mode === "forgot" || mode === "reset") && (
+        {/* Back navigation buttons for forgot / reset / verify modes */}
+        {(mode === "forgot" || mode === "reset" || mode === "verify") && (
           <button
             onClick={() => {
               setMode("login");
@@ -203,12 +284,14 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
             {mode === "register" && "Hesap Oluşturun"}
             {mode === "forgot" && "Şifremi Unuttum"}
             {mode === "reset" && "Şifreyi Sıfırla"}
+            {mode === "verify" && "E-Posta Adresinizi Doğrulayın"}
           </h3>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5 max-w-xs mx-auto leading-relaxed">
             {mode === "login" && "Bulut galerinizde görsellerinizi güvenle saklamak ve yönetmek için hesabınıza erişin."}
             {mode === "register" && "Ücretsiz üye olarak sınırsız silinmeyen yüklemeler ve görsel geçmişi ayrıcalıklarından yararlanın."}
             {mode === "forgot" && "Kayıtlı e-posta adresinizi girin, şifrenizi sıfırlamanız için 6 haneli doğrulama kodu gönderelim."}
             {mode === "reset" && "E-posta adresinize gelen 6 haneli kodu ve kullanmak istediğiniz yeni şifrenizi girin."}
+            {mode === "verify" && `${email} e-posta adresinize gönderilen 6 haneli doğrulama kodunu girerek hesabınızı aktifleştirin.`}
           </p>
         </div>
 
@@ -442,6 +525,76 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
                 </>
               )}
             </button>
+          </form>
+        )}
+
+        {/* --- VERIFY EMAIL FORM --- */}
+        {mode === "verify" && (
+          <form onSubmit={handleVerifyEmail} className="space-y-5 animate-fade-in">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 pl-1">
+                E-posta Adresi
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950/50 text-slate-800 dark:text-white border border-slate-200/50 dark:border-slate-800/80 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:border-blue-500 transition-all shadow-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 pl-1">
+                6 Haneli Doğrulama Kodu
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                  <Key className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="123456"
+                  required
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+                  className="w-full text-xs font-extrabold bg-slate-50 dark:bg-slate-950/50 text-slate-800 dark:text-white border border-slate-200/50 dark:border-slate-800/80 rounded-xl pl-11 pr-4 py-3.5 tracking-widest focus:outline-none focus:border-blue-500 transition-all shadow-sm"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-extrabold text-xs uppercase tracking-wider py-4 px-4 rounded-xl shadow-lg hover:shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {loading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  E-Postanı Onayla ve Giriş Yap
+                </>
+              )}
+            </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={handleResendCode}
+                disabled={loading}
+                className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer inline-flex items-center gap-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Kodu Tekrar Gönder
+              </button>
+            </div>
           </form>
         )}
 

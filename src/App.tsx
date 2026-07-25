@@ -230,6 +230,12 @@ export default function App() {
     let uploadedBytesPriorFiles = 0;
 
     try {
+      let guestToken = localStorage.getItem("inanresim_guest_token");
+      if (!guestToken) {
+        guestToken = "gst_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+        localStorage.setItem("inanresim_guest_token", guestToken);
+      }
+
       const results: ClientImage[] = [];
 
       for (const file of files) {
@@ -242,6 +248,7 @@ export default function App() {
           deleteAfter,
           password,
           userId: currentUser?.id || undefined,
+          guestToken,
           watermarkText: watermarkOptions?.watermarkText,
           watermarkOpacity: watermarkOptions?.watermarkOpacity,
           watermarkColor: watermarkOptions?.watermarkColor,
@@ -595,10 +602,13 @@ export default function App() {
         <HeroSection
           onUploadStart={handleLocalUpload}
           onSwitchToUrlUpload={() => setActiveTab("url-upload")}
+          onSwitchToAuth={() => setActiveTab("auth")}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
           homepageTitle={siteConfig?.homepageTitle}
           homepageSubtitle={siteConfig?.homepageSubtitle}
+          currentUser={currentUser}
+          siteConfig={siteConfig}
         />
 
         {/* Real-time stats */}

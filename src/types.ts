@@ -41,4 +41,9 @@ export interface SiteConfig {
   appVersion?: string;
   maintenanceModeEnabled?: boolean;
   miniChatEnabled?: boolean;
+  guestMaxMb?: number;
+  guestMaxUploadCount?: number;
+  registeredMaxMb?: number;
+  registeredMaxUploadCount?: number;
+  requireEmailVerification?: boolean;
 }

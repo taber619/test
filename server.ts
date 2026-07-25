@@ -49,6 +49,7 @@ interface StoredUser {
   email: string;
   passwordHash: string;
   createdAt: number;
+  emailVerified?: boolean;
 }
 
 async function startServer() {
@@ -65,6 +66,8 @@ async function startServer() {
   const images: Record<string, StoredImage> = {};
   const users: Record<string, StoredUser> = {};
   const passwordResets: Record<string, { code: string; expiresAt: number }> = {};
+  const emailVerifications: Record<string, { code: string; expiresAt: number }> = {};
+  const guestUploadCounts: Record<string, number> = {};
 
   // Lazy-initialized SMTP transporter
   let transporter: any = null;
@@ -204,6 +207,58 @@ async function startServer() {
     }
   }
 
+  async function sendVerificationEmail(email: string, code: string): Promise<{ success: boolean; error?: string }> {
+    const config = await dbGetSmtpConfig();
+    const mailTransporter = await getTransporter();
+    if (!mailTransporter) {
+      return {
+        success: false,
+        error: "SMTP ayarları eksik. Lütfen yönetici panelinden SMTP bilgilerini yapılandırın.",
+      };
+    }
+
+    let fromAddress = (config.from || "").trim();
+    if (!fromAddress) {
+      fromAddress = `"İnanResim" <${config.user}>`;
+    } else if (!fromAddress.includes("@") && !fromAddress.includes("<")) {
+      fromAddress = `"${fromAddress}" <${config.user}>`;
+    }
+
+    const mailOptions = {
+      from: fromAddress,
+      to: email,
+      subject: `İnanResim E-Posta Doğrulama Kodu: ${code}`,
+      text: `Merhaba,\n\nİnanResim hesabınızı doğrulamak için aşağıdaki 6 haneli kodu girin:\n\nDoğrulama Kodu: ${code}\n\nBu kod 15 dakika geçerlidir.\n\nSaygılarımızla,\nİnanResim Ekibi`,
+      html: `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+          <h2 style="color: #2563eb; font-weight: 800; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; font-size: 20px; text-align: center;">İnanResim E-Posta Doğrulama</h2>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">Merhaba,</p>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6;">İnanResim üyelik işleminizi tamamlamak ve hesabınızı aktifleştirmek için lütfen aşağıdaki 6 haneli doğrulama kodunu girin:</p>
+          
+          <div style="background-color: #eff6ff; padding: 18px; border-radius: 12px; text-align: center; margin: 24px 0; border: 1px solid #bfdbfe;">
+            <span style="font-family: monospace; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #1d4ed8;">${code}</span>
+          </div>
+          
+          <p style="color: #64748b; font-size: 12px; line-height: 1.6; text-align: center;">Bu kod <strong>15 dakika</strong> geçerlidir. Kodu kimseyle paylaşmayınız.</p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+          <p style="color: #94a3b8; font-size: 11px; text-align: center;">Bu e-posta otomatik olarak gönderilmiştir. Lütfen yanıtlamayınız.</p>
+        </div>
+      `,
+    };
+
+    try {
+      const sendPromise = mailTransporter.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("SMTP Bağlantı Zaman Aşımı")), 3500)
+      );
+      await Promise.race([sendPromise, timeoutPromise]);
+      return { success: true };
+    } catch (err: any) {
+      console.error("Nodemailer send verification email error:", err);
+      return { success: false, error: err.message || "E-posta gönderilemedi." };
+    }
+  }
+
   // Load Firebase configuration
   let db: any = null;
   let useFirebase = false;
@@ -246,6 +301,11 @@ async function startServer() {
     todayOffset: number;
     maintenanceModeEnabled?: boolean;
     miniChatEnabled?: boolean;
+    guestMaxMb?: number;
+    guestMaxUploadCount?: number;
+    registeredMaxMb?: number;
+    registeredMaxUploadCount?: number;
+    requireEmailVerification?: boolean;
   }
 
   interface ChatMessage {
@@ -405,7 +465,12 @@ async function startServer() {
     usersOffset: 0,
     todayOffset: 0,
     maintenanceModeEnabled: false,
-    miniChatEnabled: true
+    miniChatEnabled: true,
+    guestMaxMb: 20,
+    guestMaxUploadCount: 5,
+    registeredMaxMb: 150,
+    registeredMaxUploadCount: 0,
+    requireEmailVerification: true,
   };
 
   let siteConfigState = { ...defaultSiteConfig };
@@ -428,6 +493,11 @@ async function startServer() {
             todayOffset: data.todayOffset !== undefined ? Number(data.todayOffset) : defaultSiteConfig.todayOffset,
             maintenanceModeEnabled: data.maintenanceModeEnabled ?? defaultSiteConfig.maintenanceModeEnabled,
             miniChatEnabled: data.miniChatEnabled ?? defaultSiteConfig.miniChatEnabled,
+            guestMaxMb: data.guestMaxMb !== undefined ? Number(data.guestMaxMb) : defaultSiteConfig.guestMaxMb,
+            guestMaxUploadCount: data.guestMaxUploadCount !== undefined ? Number(data.guestMaxUploadCount) : defaultSiteConfig.guestMaxUploadCount,
+            registeredMaxMb: data.registeredMaxMb !== undefined ? Number(data.registeredMaxMb) : defaultSiteConfig.registeredMaxMb,
+            registeredMaxUploadCount: data.registeredMaxUploadCount !== undefined ? Number(data.registeredMaxUploadCount) : defaultSiteConfig.registeredMaxUploadCount,
+            requireEmailVerification: data.requireEmailVerification !== undefined ? !!data.requireEmailVerification : defaultSiteConfig.requireEmailVerification,
           };
         }
       } catch (e) {
@@ -1233,6 +1303,7 @@ async function startServer() {
           email: user.email,
           passwordHash: user.passwordHash,
           createdAt: user.createdAt,
+          emailVerified: user.emailVerified ?? false,
         });
         return true;
       } catch (e) {
@@ -1267,6 +1338,7 @@ async function startServer() {
                 email: data.email,
                 passwordHash: data.passwordHash,
                 createdAt: data.createdAt,
+                emailVerified: data.emailVerified ?? false,
               };
             }
           }
@@ -1281,6 +1353,96 @@ async function startServer() {
       (u.passwordHash === cleanPassword || u.passwordHash === passwordHash)
     );
     return user || null;
+  }
+
+  async function dbSaveEmailVerification(email: string, code: string) {
+    const cleanEmail = email.toLowerCase().trim();
+    const expiresAt = Date.now() + 15 * 60 * 1000;
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "email_verifications", cleanEmail), { code, expiresAt });
+      } catch (e) {
+        console.error("Firebase save email verification error:", e);
+      }
+    }
+    emailVerifications[cleanEmail] = { code, expiresAt };
+  }
+
+  async function dbVerifyEmailCode(email: string, code: string): Promise<boolean> {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanCode = code.trim();
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "email_verifications", cleanEmail);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.code === cleanCode && data.expiresAt > Date.now()) {
+            await deleteDoc(docRef);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.error("Firebase verify email error:", e);
+      }
+    }
+    const record = emailVerifications[cleanEmail];
+    if (record && record.code === cleanCode && record.expiresAt > Date.now()) {
+      delete emailVerifications[cleanEmail];
+      return true;
+    }
+    return false;
+  }
+
+  async function dbMarkUserEmailVerified(email: string, usersStore: Record<string, StoredUser>) {
+    const cleanEmail = email.toLowerCase().trim();
+    if (useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("email", "==", cleanEmail));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          for (const userDoc of snap.docs) {
+            await updateDoc(doc(db, "users", userDoc.id), { emailVerified: true });
+          }
+        }
+      } catch (e) {
+        console.error("Firebase mark email verified error:", e);
+      }
+    }
+    const user = Object.values(usersStore).find(u => u.email.toLowerCase().trim() === cleanEmail);
+    if (user) {
+      user.emailVerified = true;
+    }
+  }
+
+  async function dbGetGuestUploadCount(guestToken: string): Promise<number> {
+    if (useFirebase && db) {
+      try {
+        const docRef = doc(db, "guest_uploads", guestToken);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return docSnap.data().count || 0;
+        }
+      } catch (e) {
+        console.error("Firebase get guest count error:", e);
+      }
+    }
+    return guestUploadCounts[guestToken] || 0;
+  }
+
+  async function dbIncrementGuestUploadCount(guestToken: string): Promise<number> {
+    const current = await dbGetGuestUploadCount(guestToken);
+    const newCount = current + 1;
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "guest_uploads", guestToken), { count: newCount, updatedAt: Date.now() });
+      } catch (e) {
+        console.error("Firebase increment guest count error:", e);
+      }
+    }
+    guestUploadCounts[guestToken] = newCount;
+    return newCount;
   }
 
   async function dbGetUserUploads(userId: string, imagesStore: Record<string, StoredImage>): Promise<any[]> {
@@ -1470,6 +1632,22 @@ async function startServer() {
     }
   });
 
+  // Guest status check route
+  app.get("/api/guest-status", async (req, res) => {
+    try {
+      const token = (req.query.token as string) || (req.headers["x-guest-token"] as string) || "guest_anon";
+      const config = await dbGetConfig();
+      const count = await dbGetGuestUploadCount(token);
+      res.json({
+        guestUploadCount: count,
+        guestMaxUploadCount: config.guestMaxUploadCount ?? 5,
+        guestMaxMb: config.guestMaxMb ?? 20
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Misafir durumu alınamadı." });
+    }
+  });
+
   // Handle Image Upload
   app.post("/api/upload", async (req, res) => {
     try {
@@ -1481,6 +1659,7 @@ async function startServer() {
         deleteAfter, 
         password, 
         userId,
+        guestToken,
         watermarkText,
         watermarkOpacity,
         watermarkColor,
@@ -1491,6 +1670,46 @@ async function startServer() {
       if (!data || !mimeType || !name) {
         res.status(400).json({ error: "Eksik resim verisi!" });
         return;
+      }
+
+      const config = await dbGetConfig();
+      const fileSize = Number(size) || 0;
+
+      if (userId) {
+        // Registered User check
+        const userMaxMb = config.registeredMaxMb ?? 150;
+        if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
+          res.status(400).json({ 
+            error: `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB) kayıtlı kullanıcı boyut limitini (${userMaxMb} MB) aşıyor.` 
+          });
+          return;
+        }
+      } else {
+        // Guest user check
+        const guestMaxMb = config.guestMaxMb ?? 20;
+        if (fileSize > guestMaxMb * 1024 * 1024) {
+          res.status(400).json({ 
+            error: `Misafir kullanıcılar en fazla ${guestMaxMb} MB boyutunda dosya yükleyebilir. Sınırsız yükleme yapmak için lütfen ücretsiz üye olun!`,
+            guestLimitReached: true,
+            limitType: "size"
+          });
+          return;
+        }
+
+        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
+        const guestMaxCount = config.guestMaxUploadCount ?? 5;
+        const currentCount = await dbGetGuestUploadCount(token);
+
+        if (currentCount >= guestMaxCount) {
+          res.status(400).json({ 
+            error: `Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Limitiniz doldu! Sınırsız yükleme yapmak için lütfen ücretsiz üye olun.`,
+            guestLimitReached: true,
+            limitType: "count",
+            guestMaxUploadCount: guestMaxCount,
+            currentGuestCount: currentCount
+          });
+          return;
+        }
       }
 
       const id = generateId(6);
@@ -1523,6 +1742,11 @@ async function startServer() {
 
       await dbSaveImage(img, base64Data, images);
 
+      if (!userId) {
+        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
+        await dbIncrementGuestUploadCount(token);
+      }
+
       res.status(200).json({
         success: true,
         id,
@@ -1545,6 +1769,7 @@ async function startServer() {
         deleteAfter, 
         password, 
         userId,
+        guestToken,
         watermarkText,
         watermarkOpacity,
         watermarkColor,
@@ -1555,6 +1780,23 @@ async function startServer() {
       if (!url) {
         res.status(400).json({ error: "Lütfen geçerli bir resim veya video URL'si gönderin!" });
         return;
+      }
+
+      const config = await dbGetConfig();
+
+      if (!userId) {
+        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
+        const guestMaxCount = config.guestMaxUploadCount ?? 5;
+        const currentCount = await dbGetGuestUploadCount(token);
+
+        if (currentCount >= guestMaxCount) {
+          res.status(400).json({ 
+            error: `Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Limitiniz doldu! Sınırsız yükleme yapmak için lütfen ücretsiz üye olun.`,
+            guestLimitReached: true,
+            limitType: "count"
+          });
+          return;
+        }
       }
 
       const response = await fetch(url);
@@ -1572,9 +1814,18 @@ async function startServer() {
         return;
       }
 
-      if (buffer.length > 100 * 1024 * 1024) {
-        res.status(400).json({ error: "İndirilen dosya 100 MB boyut sınırını aşmaktadır!" });
-        return;
+      if (userId) {
+        const userMaxMb = config.registeredMaxMb ?? 150;
+        if (userMaxMb > 0 && buffer.length > userMaxMb * 1024 * 1024) {
+          res.status(400).json({ error: `İndirilen dosya (${(buffer.length / (1024 * 1024)).toFixed(1)} MB) kullanıcı limitini (${userMaxMb} MB) aşmaktadır!` });
+          return;
+        }
+      } else {
+        const guestMaxMb = config.guestMaxMb ?? 20;
+        if (buffer.length > guestMaxMb * 1024 * 1024) {
+          res.status(400).json({ error: `Misafir kullanıcılar için maksimum dosya boyutu ${guestMaxMb} MB'dir. Lütfen ücretsiz üye olun!` });
+          return;
+        }
       }
 
       const id = generateId(6);
@@ -1611,6 +1862,11 @@ async function startServer() {
       };
 
       await dbSaveImage(img, buffer.toString("base64"), images);
+
+      if (!userId) {
+        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
+        await dbIncrementGuestUploadCount(token);
+      }
 
       res.status(200).json({
         success: true,
@@ -1760,14 +2016,18 @@ async function startServer() {
       return;
     }
 
-    const emailLower = email.toLowerCase();
+    const emailLower = email.toLowerCase().trim();
+    const config = await dbGetConfig();
+    const requireVerification = config.requireEmailVerification !== false;
+
     const id = "usr_" + generateId(8);
     const user: StoredUser = {
       id,
-      username,
+      username: username.trim(),
       email: emailLower,
       passwordHash: password,
       createdAt: Date.now(),
+      emailVerified: !requireVerification,
     };
 
     const success = await dbRegisterUser(user, users);
@@ -1776,9 +2036,111 @@ async function startServer() {
       return;
     }
 
+    if (requireVerification) {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await dbSaveEmailVerification(emailLower, code);
+
+      const smtpConfig = await dbGetSmtpConfig();
+      const smtpConfigured = !!(smtpConfig.host && smtpConfig.user && smtpConfig.pass);
+
+      if (smtpConfigured) {
+        await sendVerificationEmail(emailLower, code);
+      } else {
+        console.log(`[E-POSTA DOĞRULAMA KODU] ${emailLower}: ${code}`);
+      }
+
+      res.json({
+        success: true,
+        requireVerification: true,
+        email: emailLower,
+        message: "Kayıt başarılı! Lütfen e-postanıza gönderilen 6 haneli doğrulama kodunu girin."
+      });
+      return;
+    }
+
     res.json({
       success: true,
-      user: { id, username, email: emailLower },
+      requireVerification: false,
+      user: { id, username: user.username, email: emailLower },
+      message: "Kayıt başarıyla tamamlandı!"
+    });
+  });
+
+  // Verify Email Code
+  app.post("/api/auth/verify-email", async (req, res) => {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      res.status(400).json({ error: "E-posta ve doğrulama kodu gereklidir." });
+      return;
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const isValid = await dbVerifyEmailCode(emailLower, code.trim());
+
+    if (!isValid) {
+      res.status(400).json({ error: "Geçersiz veya süresi dolmuş doğrulama kodu." });
+      return;
+    }
+
+    await dbMarkUserEmailVerified(emailLower, users);
+
+    let foundUser = Object.values(users).find(u => u.email.toLowerCase().trim() === emailLower);
+    if (!foundUser && useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("email", "==", emailLower));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const docData = snap.docs[0].data();
+          foundUser = {
+            id: docData.id,
+            username: docData.username,
+            email: docData.email,
+            passwordHash: docData.passwordHash,
+            createdAt: docData.createdAt,
+            emailVerified: true
+          };
+        }
+      } catch (e) {
+        console.error("Firebase get user after verify error:", e);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "E-posta adresiniz başarıyla doğrulandı! Şimdi giriş yapabilirsiniz.",
+      user: foundUser ? { id: foundUser.id, username: foundUser.username, email: foundUser.email } : null
+    });
+  });
+
+  // Resend Email Verification Code
+  app.post("/api/auth/resend-verification", async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ error: "E-posta adresi gereklidir." });
+      return;
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    await dbSaveEmailVerification(emailLower, code);
+
+    const smtpConfig = await dbGetSmtpConfig();
+    const smtpConfigured = !!(smtpConfig.host && smtpConfig.user && smtpConfig.pass);
+
+    if (smtpConfigured) {
+      const sendRes = await sendVerificationEmail(emailLower, code);
+      if (!sendRes.success) {
+        res.status(500).json({ error: `E-posta gönderilirken hata oluştu: ${sendRes.error}` });
+        return;
+      }
+    } else {
+      console.log(`[RE-SEND DOĞRULAMA KODU] ${emailLower}: ${code}`);
+    }
+
+    res.json({
+      success: true,
+      message: "Yeni doğrulama kodu e-postanıza gönderildi."
     });
   });
 
@@ -1791,11 +2153,34 @@ async function startServer() {
       return;
     }
 
-    const emailLower = email.toLowerCase();
+    const emailLower = email.toLowerCase().trim();
     const user = await dbLoginUser(emailLower, password, users);
 
     if (!user) {
       res.status(401).json({ error: "E-posta veya şifre hatalı." });
+      return;
+    }
+
+    const config = await dbGetConfig();
+    const requireVerification = config.requireEmailVerification !== false;
+
+    if (requireVerification && !user.emailVerified) {
+      // Generate new code and notify
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await dbSaveEmailVerification(emailLower, code);
+
+      const smtpConfig = await dbGetSmtpConfig();
+      if (smtpConfig.host && smtpConfig.user && smtpConfig.pass) {
+        await sendVerificationEmail(emailLower, code);
+      } else {
+        console.log(`[LOGIN UNVERIFIED CODE] ${emailLower}: ${code}`);
+      }
+
+      res.status(403).json({
+        error: "E-posta adresiniz henüz onaylanmamış! Lütfen e-postanıza gönderilen doğrulama kodunu girerek hesabınızı aktifleştirin.",
+        requireVerification: true,
+        email: user.email
+      });
       return;
     }
 
@@ -2705,7 +3090,12 @@ async function startServer() {
         usersOffset,
         todayOffset,
         maintenanceModeEnabled,
-        miniChatEnabled
+        miniChatEnabled,
+        guestMaxMb,
+        guestMaxUploadCount,
+        registeredMaxMb,
+        registeredMaxUploadCount,
+        requireEmailVerification
       } = req.body;
 
       const updated = await dbSaveConfig({
@@ -2718,7 +3108,12 @@ async function startServer() {
         usersOffset: usersOffset !== undefined ? Number(usersOffset) : undefined,
         todayOffset: todayOffset !== undefined ? Number(todayOffset) : undefined,
         maintenanceModeEnabled: maintenanceModeEnabled !== undefined ? !!maintenanceModeEnabled : undefined,
-        miniChatEnabled: miniChatEnabled !== undefined ? !!miniChatEnabled : undefined
+        miniChatEnabled: miniChatEnabled !== undefined ? !!miniChatEnabled : undefined,
+        guestMaxMb: guestMaxMb !== undefined ? Number(guestMaxMb) : undefined,
+        guestMaxUploadCount: guestMaxUploadCount !== undefined ? Number(guestMaxUploadCount) : undefined,
+        registeredMaxMb: registeredMaxMb !== undefined ? Number(registeredMaxMb) : undefined,
+        registeredMaxUploadCount: registeredMaxUploadCount !== undefined ? Number(registeredMaxUploadCount) : undefined,
+        requireEmailVerification: requireEmailVerification !== undefined ? !!requireEmailVerification : undefined
       });
 
       res.json({ success: true, config: updated });

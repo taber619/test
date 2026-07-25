@@ -209,8 +209,8 @@ export async function processImage(file: File, options: OptimizationOptions): Pr
     return file;
   }
 
-  // Skip processing GIF files to avoid losing animations
-  if (file.type === "image/gif") {
+  // Skip processing GIF files and Video files to avoid losing animations or video streams
+  if (file.type === "image/gif" || file.type.startsWith("video/")) {
     return file;
   }
 

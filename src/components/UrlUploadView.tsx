@@ -35,6 +35,12 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
 
     setLoading(true);
     try {
+      let guestToken = localStorage.getItem("inanresim_guest_token");
+      if (!guestToken) {
+        guestToken = "gst_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+        localStorage.setItem("inanresim_guest_token", guestToken);
+      }
+
       const res = await fetch("/api/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -43,6 +49,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
           deleteAfter,
           password: password || undefined,
           userId,
+          guestToken,
           watermarkText: addWatermark ? watermarkText : undefined,
           watermarkOpacity: addWatermark ? watermarkOpacity : undefined,
           watermarkColor: addWatermark ? watermarkColor : undefined,

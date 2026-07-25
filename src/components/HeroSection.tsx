@@ -19,7 +19,8 @@ import {
   ShieldCheck,
   Zap,
   Clock,
-  Play
+  Play,
+  Video
 } from "lucide-react";
 import { processImage } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
@@ -45,19 +46,25 @@ interface HeroSectionProps {
     }
   ) => Promise<void>;
   onSwitchToUrlUpload: () => void;
+  onSwitchToAuth?: () => void;
   isUploading: boolean;
   uploadProgress: number;
   homepageTitle?: string;
   homepageSubtitle?: string;
+  currentUser?: any | null;
+  siteConfig?: any | null;
 }
 
 export default function HeroSection({
   onUploadStart,
   onSwitchToUrlUpload,
+  onSwitchToAuth,
   isUploading,
   uploadProgress,
   homepageTitle = "Resimlerinizi Saniyeler İçinde Paylaşın",
   homepageSubtitle = "Türkiye'nin en hızlı resim yükleme platformu.",
+  currentUser,
+  siteConfig,
 }: HeroSectionProps) {
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -65,6 +72,36 @@ export default function HeroSection({
   const [deleteAfter, setDeleteAfter] = useState<string>("never");
   const [password, setPassword] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Guest upload count state
+  const [guestCount, setGuestCount] = useState<number>(0);
+  const [guestMaxCount, setGuestMaxCount] = useState<number>(5);
+  const [guestMaxMb, setGuestMaxMb] = useState<number>(20);
+
+  const fetchGuestStatus = async () => {
+    try {
+      let token = localStorage.getItem("inanresim_guest_token");
+      if (!token) {
+        token = "gst_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+        localStorage.setItem("inanresim_guest_token", token);
+      }
+      const res = await fetch(`/api/guest-status?token=${token}`);
+      if (res.ok) {
+        const data = await res.json();
+        setGuestCount(data.guestUploadCount || 0);
+        setGuestMaxCount(data.guestMaxUploadCount ?? 5);
+        setGuestMaxMb(data.guestMaxMb ?? 20);
+      }
+    } catch (e) {
+      console.error("Fetch guest status error:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUser) {
+      fetchGuestStatus();
+    }
+  }, [currentUser]);
 
   // Image editing & processing options
   const [editingFile, setEditingFile] = useState<SelectedFile | null>(null);
@@ -85,6 +122,9 @@ export default function HeroSection({
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const hasVideo = selectedFiles.some((x) => x.file.type.startsWith("video/"));
+  const hasOnlyVideo = selectedFiles.length > 0 && selectedFiles.every((x) => x.file.type.startsWith("video/"));
 
   // Clipboard paste listener
   useEffect(() => {
@@ -169,6 +209,13 @@ export default function HeroSection({
       return;
     }
 
+    if (!currentUser) {
+      if (guestCount >= guestMaxCount) {
+        setErrorMsg(`Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Misafir limitiniz doldu! Sınırsız yükleme yapmak için ücretsiz üye olun.`);
+        return;
+      }
+    }
+
     const currentCount = selectedFiles.length;
     const incoming: SelectedFile[] = [];
 
@@ -177,12 +224,17 @@ export default function HeroSection({
         setErrorMsg("Aynı anda en fazla 10 dosya yükleyebilirsiniz.");
         break;
       }
+
+      const limitMb = !currentUser ? guestMaxMb : ((siteConfig?.registeredMaxMb ?? 150) || 150);
       const isVideo = f.type.startsWith("video/");
-      const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
-      const sizeLabel = isVideo ? "100 MB" : "20 MB";
+      const maxSizeBytes = limitMb * 1024 * 1024;
       
-      if (f.size > maxSize) {
-        setErrorMsg(`${f.name} boyutu ${sizeLabel} sınırını aştığı için eklenmedi.`);
+      if (maxSizeBytes > 0 && f.size > maxSizeBytes) {
+        if (!currentUser) {
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. Sınırsız yükleme için lütfen ücretsiz kayıt olun!`);
+        } else {
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), izin verilen üyelik limitini (${limitMb} MB) aşıyor.`);
+        }
         continue;
       }
       incoming.push({
@@ -374,6 +426,40 @@ export default function HeroSection({
           {homepageSubtitle}
         </p>
       </div>
+
+      {/* User / Guest Quota Badge */}
+      {!currentUser ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 rounded-2xl animate-fade-in" id="guest-quota-badge">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+            <span className="text-xs font-bold text-amber-900 dark:text-amber-300">
+              Misafir Limiti: <strong className="font-extrabold">{guestMaxMb} MB</strong> | Kalan Yükleme: <strong className="font-extrabold">{Math.max(0, guestMaxCount - guestCount)} / {guestMaxCount}</strong>
+            </span>
+          </div>
+          {onSwitchToAuth && (
+            <button
+              type="button"
+              onClick={onSwitchToAuth}
+              className="text-[11px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Sınırsız Yükleme İçin Üye Ol
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mb-4 flex items-center justify-between px-4 py-2 bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl animate-fade-in" id="registered-quota-badge">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <span className="text-xs font-extrabold text-emerald-900 dark:text-emerald-300">
+              Kayıtlı Üye ({currentUser.username}): Sınırsız Yükleme Yetkisi ({siteConfig?.registeredMaxMb ? `${siteConfig.registeredMaxMb} MB` : "Sınırsız MB"})
+            </span>
+          </div>
+          <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-2.5 py-1 rounded-full">
+            Sınırsız
+          </span>
+        </div>
+      )}
 
       {/* Warning/Error Banner */}
       {errorMsg && (
@@ -740,15 +826,25 @@ export default function HeroSection({
                   WebP & Otomatik Boyut Sıkıştırma
                 </label>
                 <select
-                  value={compressionMode}
+                  value={hasOnlyVideo ? "original" : compressionMode}
                   onChange={(e) => setCompressionMode(e.target.value as any)}
-                  className="w-full text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer hover:border-slate-300"
+                  disabled={hasOnlyVideo}
+                  className={`w-full text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 hover:border-slate-300 ${hasOnlyVideo ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                 >
                   <option value="original">Orijinal Kalite (Sıkıştırma Yok)</option>
-                  <option value="webp-high">WebP (Yüksek Kalite - En Az Sıkıştırma)</option>
-                  <option value="webp-medium">WebP (Dengeli Sıkıştırma - Önerilen)</option>
-                  <option value="webp-low">WebP (Yüksek Sıkıştırma - Düşük Boyut)</option>
+                  <option value="webp-high" disabled={hasOnlyVideo}>WebP (Yüksek Kalite - En Az Sıkıştırma)</option>
+                  <option value="webp-medium" disabled={hasOnlyVideo}>WebP (Dengeli Sıkıştırma - Önerilen)</option>
+                  <option value="webp-low" disabled={hasOnlyVideo}>WebP (Yüksek Sıkıştırma - Düşük Boyut)</option>
                 </select>
+
+                {hasVideo && (
+                  <div className="mt-2.5 p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl text-amber-800 dark:text-amber-300 text-[11px] font-semibold flex items-start gap-2 shadow-xs">
+                    <Video className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <span className="leading-tight">
+                      WebP yalnızca <strong>resim formatları</strong> (JPG, PNG vb.) içindir. Seçtiğiniz video dosyaları WebP sıkıştırmasına tabi tutulmadan orijinal formatı ve kalitesinde yüklenecektir.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* EXIF Privacy Shield setting */}
