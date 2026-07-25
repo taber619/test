@@ -1245,28 +1245,37 @@ async function startServer() {
   }
 
   async function dbLoginUser(email: string, passwordHash: string, usersStore: Record<string, StoredUser>): Promise<StoredUser | null> {
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanPassword = passwordHash.trim();
+
     if (useFirebase && db) {
       try {
         const usersRef = collection(db, "users");
-        const q = query(usersRef, where("email", "==", email), where("passwordHash", "==", passwordHash));
+        const q = query(usersRef, where("email", "==", cleanEmail));
         const snap = await getDocs(q);
         if (!snap.empty) {
-          const data = snap.docs[0].data();
-          return {
-            id: data.id,
-            username: data.username,
-            email: data.email,
-            passwordHash: data.passwordHash,
-            createdAt: data.createdAt,
-          };
+          for (const docSnap of snap.docs) {
+            const data = docSnap.data();
+            if (data.passwordHash === cleanPassword || data.passwordHash === passwordHash) {
+              return {
+                id: data.id,
+                username: data.username,
+                email: data.email,
+                passwordHash: data.passwordHash,
+                createdAt: data.createdAt,
+              };
+            }
+          }
         }
-        return null;
       } catch (e) {
         console.error("Firebase login error:", e);
       }
     }
 
-    const user = Object.values(usersStore).find(u => u.email === email && u.passwordHash === passwordHash);
+    const user = Object.values(usersStore).find(u => 
+      u.email.toLowerCase().trim() === cleanEmail && 
+      (u.passwordHash === cleanPassword || u.passwordHash === passwordHash)
+    );
     return user || null;
   }
 
@@ -1882,7 +1891,9 @@ async function startServer() {
       return;
     }
 
-    const emailLower = email.toLowerCase();
+    const emailLower = email.toLowerCase().trim();
+    const cleanCode = code.trim();
+    const cleanPassword = newPassword.trim();
     let validReset = false;
 
     // Verify reset request
@@ -1892,7 +1903,7 @@ async function startServer() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.code === code && data.expiresAt > Date.now()) {
+          if (data.code === cleanCode && data.expiresAt > Date.now()) {
             validReset = true;
           }
         }
@@ -1901,7 +1912,7 @@ async function startServer() {
       }
     } else {
       const reset = passwordResets[emailLower];
-      if (reset && reset.code === code && reset.expiresAt > Date.now()) {
+      if (reset && reset.code === cleanCode && reset.expiresAt > Date.now()) {
         validReset = true;
       }
     }
@@ -1919,8 +1930,9 @@ async function startServer() {
         const q = query(usersRef, where("email", "==", emailLower));
         const snap = await getDocs(q);
         if (!snap.empty) {
-          const userDoc = snap.docs[0];
-          await updateDoc(doc(db, "users", userDoc.id), { passwordHash: newPassword });
+          for (const userDoc of snap.docs) {
+            await updateDoc(doc(db, "users", userDoc.id), { passwordHash: cleanPassword });
+          }
           updateSuccess = true;
           // Delete reset record
           await deleteDoc(doc(db, "password_resets", emailLower));
@@ -1928,13 +1940,14 @@ async function startServer() {
       } catch (e) {
         console.error("Firebase update password error:", e);
       }
-    } else {
-      const user = Object.values(users).find(u => u.email === emailLower);
-      if (user) {
-        user.passwordHash = newPassword;
-        updateSuccess = true;
-        delete passwordResets[emailLower];
-      }
+    }
+
+    // Always update in-memory fallback store as well
+    const userInMem = Object.values(users).find(u => u.email.toLowerCase().trim() === emailLower);
+    if (userInMem) {
+      userInMem.passwordHash = cleanPassword;
+      updateSuccess = true;
+      delete passwordResets[emailLower];
     }
 
     if (!updateSuccess) {

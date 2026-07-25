@@ -129,6 +129,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
 
       setSuccessMsg(data.message);
       setSimulatedCodeAlert(null);
+      setPassword(newPassword);
       setResetCode("");
       setNewPassword("");
       setTimeout(() => {
