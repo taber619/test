@@ -17,7 +17,6 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [simulatedCodeAlert, setSimulatedCodeAlert] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +65,6 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
-    setSimulatedCodeAlert(null);
 
     if (!email) {
       setError("Lütfen e-posta adresinizi giriniz.");
@@ -87,12 +85,9 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
       }
 
       setSuccessMsg(data.message);
-      if (data.debugCode) {
-        setSimulatedCodeAlert(data.debugCode);
-      }
       setTimeout(() => {
         setMode("reset");
-      }, 1500);
+      }, 500);
     } catch (err: any) {
       setError(err.message || "Bir bağlantı hatası oluştu.");
     } finally {
@@ -128,13 +123,12 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
       }
 
       setSuccessMsg(data.message);
-      setSimulatedCodeAlert(null);
       setPassword(newPassword);
       setResetCode("");
       setNewPassword("");
       setTimeout(() => {
         setMode("login");
-      }, 1500);
+      }, 500);
     } catch (err: any) {
       setError(err.message || "Bir bağlantı hatası oluştu.");
     } finally {
@@ -217,19 +211,6 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
             {mode === "reset" && "E-posta adresinize gelen 6 haneli kodu ve kullanmak istediğiniz yeni şifrenizi girin."}
           </p>
         </div>
-
-        {/* Simulated Code Alert Toast (Extremely useful for simulation testing in app builder environment) */}
-        {simulatedCodeAlert && (
-          <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-950/25 border-2 border-amber-300 dark:border-amber-800 rounded-2xl text-amber-900 dark:text-amber-200 text-xs font-bold shadow-md animate-pulse" id="simulated-code-toast">
-            <div className="flex items-center gap-2 mb-1.5 text-amber-800 dark:text-amber-400">
-              <Key className="w-4 h-4" />
-              <span className="font-extrabold uppercase tracking-wide text-[10px]">Test Ortamı Bildirimi</span>
-            </div>
-            <p className="leading-relaxed">
-              E-posta gönderimi simüle edildi! Sıfırlama kodunuz: <span className="font-mono bg-amber-100 dark:bg-amber-900/50 px-2 py-1 rounded text-sm text-amber-900 dark:text-amber-200 font-extrabold select-all tracking-wider">{simulatedCodeAlert}</span>
-            </p>
-          </div>
-        )}
 
         {/* State Banners */}
         {error && (

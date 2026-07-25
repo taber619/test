@@ -134,17 +134,17 @@ async function startServer() {
         host: host.trim(),
         port: Number(port) || 587,
         secure: Number(port) === 465,
-        connectionTimeout: 10000, // 10 seconds timeout
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
+        connectionTimeout: 2500,
+        greetingTimeout: 2500,
+        socketTimeout: 2500,
         auth: {
           user: user.trim(),
           pass: pass.trim(),
         },
         tls: {
-          rejectUnauthorized: false // Prevents SSL/TLS handshake issues on cloud containers
+          rejectUnauthorized: false
         },
-        family: 4 // Force IPv4 to avoid ENETUNREACH on systems with broken IPv6 routing
+        family: 4
       };
 
       transporter = nodemailer.createTransport(transportConfig);
@@ -192,7 +192,11 @@ async function startServer() {
     };
 
     try {
-      await mailTransporter.sendMail(mailOptions);
+      const sendPromise = mailTransporter.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("SMTP Bağlantı Zaman Aşımı")), 2500)
+      );
+      await Promise.race([sendPromise, timeoutPromise]);
       return { success: true };
     } catch (err: any) {
       console.error("Nodemailer send reset email error:", err);
@@ -1861,23 +1865,19 @@ async function startServer() {
       const emailResult = await sendResetEmail(emailLower, code);
       if (!emailResult.success) {
         res.status(500).json({
-          error: `E-posta gönderilirken hata oluştu: ${emailResult.error || "Bilinmeyen SMTP hatası"}. Lütfen SMTP ayarlarınızı kontrol edin veya simülasyon kodunu kullanın.`,
-          debugCode: code
+          error: `E-posta gönderilemedi: ${emailResult.error || "SMTP sunucu hatası"}. Lütfen e-posta adresinizi veya SMTP ayarlarınızı kontrol edin.`
         });
         return;
       }
 
       res.json({
         success: true,
-        message: "E-posta adresinize 6 haneli sıfırlama kodu başarıyla gönderildi. Lütfen gelen kutunuzu (ve gereksiz/spam klasörünü) kontrol edin.",
-        debugCode: null // Hide debug code if SMTP was successful
+        message: "E-posta adresinize 6 haneli sıfırlama kodu başarıyla gönderildi. Lütfen gelen kutunuzu (ve gereksiz/spam klasörünü) kontrol edin."
       });
     } else {
       // SMTP not configured yet
-      res.json({
-        success: true,
-        message: "SMTP sunucusu yapılandırılmadığı için e-posta gönderimi simüle edildi. Gerçek e-posta göndermek için lütfen panelden SMTP ayarlarınızı tanımlayın.",
-        debugCode: code
+      res.status(400).json({
+        error: "E-posta servisi (SMTP) henüz yapılandırılmadığı için şifre sıfırlama e-postası gönderilemiyor. Lütfen sistem yöneticinizle veya panel yöneticisiyle iletişime geçin."
       });
     }
   });
