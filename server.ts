@@ -50,6 +50,8 @@ interface StoredUser {
   passwordHash: string;
   createdAt: number;
   emailVerified?: boolean;
+  isBanned?: boolean;
+  banReason?: string;
 }
 
 async function startServer() {
@@ -939,10 +941,13 @@ async function startServer() {
         return snap.docs.map(docSnap => {
           const data = docSnap.data();
           return {
-            id: data.id,
+            id: data.id || docSnap.id,
             username: data.username,
             email: data.email,
             createdAt: data.createdAt,
+            emailVerified: data.emailVerified ?? false,
+            isBanned: data.isBanned ?? false,
+            banReason: data.banReason || "",
           };
         });
       } catch (e) {
@@ -954,7 +959,62 @@ async function startServer() {
       username: u.username,
       email: u.email,
       createdAt: u.createdAt,
+      emailVerified: u.emailVerified ?? false,
+      isBanned: u.isBanned ?? false,
+      banReason: u.banReason || "",
     }));
+  }
+
+  async function dbBanUser(userId: string, isBanned: boolean, banReason: string, usersStore: Record<string, StoredUser>): Promise<boolean> {
+    if (useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const snap = await getDocs(usersRef);
+        let foundDocId = "";
+        for (const docSnap of snap.docs) {
+          if (docSnap.data().id === userId || docSnap.id === userId) {
+            foundDocId = docSnap.id;
+            break;
+          }
+        }
+        if (foundDocId) {
+          await updateDoc(doc(db, "users", foundDocId), { isBanned, banReason });
+        } else {
+          await setDoc(doc(db, "users", userId), { isBanned, banReason }, { merge: true });
+        }
+      } catch (e) {
+        console.error("Firebase ban user error:", e);
+      }
+    }
+    const user = usersStore[userId] || Object.values(usersStore).find(u => u.id === userId);
+    if (user) {
+      user.isBanned = isBanned;
+      user.banReason = banReason;
+    }
+    return true;
+  }
+
+  async function dbDeleteUser(userId: string, usersStore: Record<string, StoredUser>): Promise<boolean> {
+    if (useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const snap = await getDocs(usersRef);
+        for (const docSnap of snap.docs) {
+          if (docSnap.data().id === userId || docSnap.id === userId) {
+            await deleteDoc(doc(db, "users", docSnap.id));
+          }
+        }
+      } catch (e) {
+        console.error("Firebase delete user error:", e);
+      }
+    }
+    if (usersStore[userId]) {
+      delete usersStore[userId];
+    } else {
+      const key = Object.keys(usersStore).find(k => usersStore[k].id === userId);
+      if (key) delete usersStore[key];
+    }
+    return true;
   }
 
   async function dbGetAllImages(imagesStore: Record<string, StoredImage>): Promise<any[]> {
@@ -1333,12 +1393,14 @@ async function startServer() {
             const data = docSnap.data();
             if (data.passwordHash === cleanPassword || data.passwordHash === passwordHash) {
               return {
-                id: data.id,
+                id: data.id || docSnap.id,
                 username: data.username,
                 email: data.email,
                 passwordHash: data.passwordHash,
                 createdAt: data.createdAt,
                 emailVerified: data.emailVerified ?? false,
+                isBanned: data.isBanned ?? false,
+                banReason: data.banReason || "",
               };
             }
           }
@@ -1677,6 +1739,12 @@ async function startServer() {
 
       if (userId) {
         // Registered User check
+        const user = users[userId] || Object.values(users).find(u => u.id === userId);
+        if (user && user.isBanned) {
+          res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${user.banReason ? ` Neden: ${user.banReason}` : ''}` });
+          return;
+        }
+
         const userMaxMb = config.registeredMaxMb ?? 150;
         if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
           res.status(400).json({ 
@@ -1784,7 +1852,13 @@ async function startServer() {
 
       const config = await dbGetConfig();
 
-      if (!userId) {
+      if (userId) {
+        const user = users[userId] || Object.values(users).find(u => u.id === userId);
+        if (user && user.isBanned) {
+          res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${user.banReason ? ` Neden: ${user.banReason}` : ''}` });
+          return;
+        }
+      } else {
         const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
         const guestMaxCount = config.guestMaxUploadCount ?? 5;
         const currentCount = await dbGetGuestUploadCount(token);
@@ -2158,6 +2232,13 @@ async function startServer() {
 
     if (!user) {
       res.status(401).json({ error: "E-posta veya şifre hatalı." });
+      return;
+    }
+
+    if (user.isBanned) {
+      res.status(403).json({
+        error: `Hesabınız engellenmiştir.${user.banReason ? ` Neden: ${user.banReason}` : ''}`
+      });
       return;
     }
 
@@ -3219,6 +3300,34 @@ async function startServer() {
     } catch (err) {
       console.error("Admin get users error:", err);
       res.status(500).json({ error: "Kullanıcı listesi alınamadı." });
+    }
+  });
+
+  // Ban/Unban user (Admin only)
+  app.post("/api/admin/users/:id/ban", async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const { isBanned, banReason } = req.body;
+      await dbBanUser(userId, !!isBanned, banReason || "", users);
+      res.json({
+        success: true,
+        message: isBanned ? "Kullanıcı başarıyla engellendi." : "Kullanıcının engeli kaldırıldı."
+      });
+    } catch (err) {
+      console.error("Admin ban user error:", err);
+      res.status(500).json({ error: "İşlem gerçekleştirilemedi." });
+    }
+  });
+
+  // Delete user (Admin only)
+  app.delete("/api/admin/users/:id", async (req, res) => {
+    try {
+      const userId = req.params.id;
+      await dbDeleteUser(userId, users);
+      res.json({ success: true, message: "Kullanıcı hesabı başarıyla silindi." });
+    } catch (err) {
+      console.error("Admin delete user error:", err);
+      res.status(500).json({ error: "Kullanıcı silinemedi." });
     }
   });
 

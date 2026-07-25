@@ -28,6 +28,9 @@ interface AdminUser {
   username: string;
   email: string;
   createdAt: number;
+  emailVerified?: boolean;
+  isBanned?: boolean;
+  banReason?: string;
 }
 
 interface AdminImage {
@@ -461,6 +464,59 @@ export default function AdminView({ onBack }: AdminViewProps) {
       }
     } catch (e) {
       alert("Hata oluştu.");
+    }
+  };
+
+  // User Management Actions
+  const handleDeleteUser = async (userId: string, username: string) => {
+    if (!window.confirm(`"@${username}" isimli kullanıcı hesabını kalıcı olarak silmek istediğinize emin misiniz?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUsersList((prev) => prev.filter((u) => u.id !== userId));
+      } else {
+        alert(data.error || "Kullanıcı silinemedi.");
+      }
+    } catch (e) {
+      alert("Bağlantı hatası.");
+    }
+  };
+
+  const handleToggleBanUser = async (userId: string, currentIsBanned: boolean, username: string) => {
+    let banReason = "";
+    if (!currentIsBanned) {
+      const input = window.prompt(`"@${username}" kullanıcısını engelleme nedeni (opsiyonel):`, "Sistem kural ihlali");
+      if (input === null) return; // User cancelled
+      banReason = input;
+    } else {
+      if (!window.confirm(`"@${username}" kullanıcısının engelini kaldırmak istediğinize emin misiniz?`)) {
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/ban`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isBanned: !currentIsBanned, banReason }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUsersList((prev) =>
+          prev.map((u) =>
+            u.id === userId ? { ...u, isBanned: !currentIsBanned, banReason } : u
+          )
+        );
+      } else {
+        alert(data.error || "İşlem başarısız.");
+      }
+    } catch (e) {
+      alert("Bağlantı hatası.");
     }
   };
 
@@ -1171,20 +1227,94 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   <tr className="border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                     <th className="py-3 px-4">Kullanıcı Adı</th>
                     <th className="py-3 px-4">E-posta</th>
+                    <th className="py-3 px-4">Durum</th>
                     <th className="py-3 px-4">Kayıt Tarihi</th>
-                    <th className="py-3 px-4 text-right">Kullanıcı ID</th>
+                    <th className="py-3 px-4 text-right">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {filteredUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3.5 px-4 font-extrabold text-slate-800">@{u.username}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{u.email}</td>
-                      <td className="py-3.5 px-4 text-slate-400 flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {formatDate(u.createdAt)}
+                    <tr key={u.id} className={`hover:bg-slate-50/50 transition-colors ${u.isBanned ? "bg-rose-50/30" : ""}`}>
+                      <td className="py-3.5 px-4 font-extrabold text-slate-800">
+                        <div className="flex items-center gap-1.5">
+                          <span>@{u.username}</span>
+                          {u.isBanned && (
+                            <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                              <ShieldAlert className="w-3 h-3" />
+                              Engelli
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono text-[10px] text-slate-400">{u.id}</td>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <span>{u.email}</span>
+                          {u.emailVerified ? (
+                            <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5" title="E-posta Doğrulandı">
+                              <CheckCircle className="w-3 h-3" />
+                              Onaylı
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-bold" title="E-posta Onaysız">
+                              Onaysız
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {u.isBanned ? (
+                          <div className="text-[11px] text-rose-600 font-semibold" title={u.banReason}>
+                            🚫 {u.banReason ? `Engelli (${u.banReason})` : "Hesap Engellendi"}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            Aktif
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-400 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {formatDate(u.createdAt)}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleBanUser(u.id, !!u.isBanned, u.username)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                              u.isBanned
+                                ? "bg-emerald-100 hover:bg-emerald-200 text-emerald-700"
+                                : "bg-amber-100 hover:bg-amber-200 text-amber-800"
+                            }`}
+                            title={u.isBanned ? "Kullanıcının Engelini Kaldır" : "Kullanıcıyı Engelle"}
+                          >
+                            {u.isBanned ? (
+                              <>
+                                <Unlock className="w-3.5 h-3.5" />
+                                Engeli Kaldır
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="w-3.5 h-3.5" />
+                                Engelle
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(u.id, u.username)}
+                            className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-xl text-xs font-extrabold flex items-center gap-1 transition-all cursor-pointer"
+                            title="Kullanıcıyı Sil"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Sil
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
