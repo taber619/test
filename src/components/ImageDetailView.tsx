@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Download, Eye, Calendar, HardDrive, ShieldAlert, Key, Copy, Check, ArrowLeft, ExternalLink, Lock } from "lucide-react";
+import { Download, Eye, Calendar, HardDrive, ShieldAlert, Key, Copy, Check, ArrowLeft, ExternalLink, Lock, QrCode } from "lucide-react";
 import { ClientImage } from "../types";
+import QRCodeShareModal from "./QRCodeShareModal";
 
 interface ImageDetailViewProps {
   imageId: string;
@@ -31,6 +32,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   const [verifiedDataUrl, setVerifiedDataUrl] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"direct" | "preview" | "bbcode" | "html" | "markdown">("direct");
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const loadMetadata = () => {
     setLoading(true);
@@ -344,9 +346,20 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
 
           {/* Share links */}
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 shadow-sm flex-1">
-            <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-              {meta?.mimeType?.startsWith("video/") ? "Video Paylaşım Kodları" : "Görsel Paylaşım Kodları"}
-            </span>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                {meta?.mimeType?.startsWith("video/") ? "Video Paylaşım Kodları" : "Görsel Paylaşım Kodları"}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setShowQrModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer hover:scale-105 active:scale-95"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>QR & Sosyal Paylaş</span>
+              </button>
+            </div>
 
             {/* Link Selector Tabs */}
             <div className="flex flex-wrap gap-1 mt-3 border-b border-slate-100 dark:border-slate-800 pb-2">
@@ -392,6 +405,16 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
           </div>
         </div>
       </div>
+
+      {showQrModal && meta && (
+        <QRCodeShareModal
+          isOpen={showQrModal}
+          onClose={() => setShowQrModal(false)}
+          imageUrl={`${window.location.origin}/uploads/${meta.id}`}
+          previewUrl={`${window.location.origin}/i/${meta.id}`}
+          title={meta.name}
+        />
+      )}
     </div>
   );
 }

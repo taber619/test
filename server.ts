@@ -8,10 +8,27 @@ import dns from "dns";
 if (dns && typeof dns.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
 }
+
+// Global exception handlers to catch harmless SDK background warnings like Firestore BloomFilterError
+process.on("uncaughtException", (err: any) => {
+  if (err?.message?.includes("BloomFilterError") || err?.toString()?.includes("BloomFilterError")) {
+    return;
+  }
+  console.error("Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason: any) => {
+  if (reason?.message?.includes("BloomFilterError") || reason?.toString()?.includes("BloomFilterError")) {
+    return;
+  }
+  console.error("Unhandled Rejection:", reason);
+});
+
 import { createServer as createViteServer } from "vite";
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
+  initializeFirestore,
   doc, 
   getDoc, 
   setDoc, 
@@ -69,7 +86,7 @@ async function startServer() {
   const users: Record<string, StoredUser> = {};
   const passwordResets: Record<string, { code: string; expiresAt: number }> = {};
   const emailVerifications: Record<string, { code: string; expiresAt: number }> = {};
-  const guestUploadCounts: Record<string, number> = {};
+  let guestUploadCounts: Record<string, number> = {};
 
   // Lazy-initialized SMTP transporter
   let transporter: any = null;
@@ -270,7 +287,9 @@ async function startServer() {
     if (fs.existsSync(configPath)) {
       const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
       const firebaseApp = initializeApp(firebaseConfig);
-      db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+      db = initializeFirestore(firebaseApp, {
+        ignoreUndefinedProperties: true,
+      }, firebaseConfig.firestoreDatabaseId);
       useFirebase = true;
       console.log("Firebase successfully initialized with database ID:", firebaseConfig.firestoreDatabaseId);
     } else {
@@ -485,6 +504,10 @@ async function startServer() {
     miniChatEnabled: true,
     guestMaxMb: 20,
     guestMaxUploadCount: 5,
+    guestAutoResetMode: "off",
+    guestAutoResetHour: 0,
+    guestResetIntervalHours: 24,
+    lastGuestResetTime: 0,
     registeredMaxMb: 1000,
     registeredMaxUploadCount: 0,
     requireEmailVerification: true,
@@ -526,6 +549,10 @@ async function startServer() {
             miniChatEnabled: data.miniChatEnabled ?? defaultSiteConfig.miniChatEnabled,
             guestMaxMb: data.guestMaxMb !== undefined ? Number(data.guestMaxMb) : defaultSiteConfig.guestMaxMb,
             guestMaxUploadCount: data.guestMaxUploadCount !== undefined ? Number(data.guestMaxUploadCount) : defaultSiteConfig.guestMaxUploadCount,
+            guestAutoResetMode: data.guestAutoResetMode ?? defaultSiteConfig.guestAutoResetMode,
+            guestAutoResetHour: data.guestAutoResetHour !== undefined ? Number(data.guestAutoResetHour) : defaultSiteConfig.guestAutoResetHour,
+            guestResetIntervalHours: data.guestResetIntervalHours !== undefined ? Number(data.guestResetIntervalHours) : defaultSiteConfig.guestResetIntervalHours,
+            lastGuestResetTime: data.lastGuestResetTime !== undefined ? Number(data.lastGuestResetTime) : defaultSiteConfig.lastGuestResetTime,
             registeredMaxMb: data.registeredMaxMb !== undefined ? Number(data.registeredMaxMb) : defaultSiteConfig.registeredMaxMb,
             registeredMaxUploadCount: data.registeredMaxUploadCount !== undefined ? Number(data.registeredMaxUploadCount) : defaultSiteConfig.registeredMaxUploadCount,
             requireEmailVerification: data.requireEmailVerification !== undefined ? !!data.requireEmailVerification : defaultSiteConfig.requireEmailVerification,
@@ -1531,19 +1558,135 @@ async function startServer() {
     }
   }
 
+  let inMemoryGuestLastReset = 0;
+
+  async function checkAutoResetGuestLimits(config?: SiteConfig): Promise<boolean> {
+    const cfg = config || await dbGetConfig();
+    const mode = cfg.guestAutoResetMode || "off";
+    const lastReset = cfg.lastGuestResetTime || 0;
+    const now = Date.now();
+
+    if (mode === "off") return false;
+
+    let shouldReset = false;
+
+    if (mode === "interval" && cfg.guestResetIntervalHours) {
+      const intervalMs = cfg.guestResetIntervalHours * 3600 * 1000;
+      if (now - lastReset >= intervalMs) {
+        shouldReset = true;
+      }
+    } else if (mode === "daily") {
+      const resetHour = cfg.guestAutoResetHour !== undefined ? cfg.guestAutoResetHour : 0;
+      const todayReset = new Date();
+      todayReset.setHours(resetHour, 0, 0, 0);
+      let targetTime = todayReset.getTime();
+      if (now < targetTime) {
+        targetTime -= 24 * 3600 * 1000;
+      }
+      if (lastReset < targetTime) {
+        shouldReset = true;
+      }
+    }
+
+    if (shouldReset) {
+      const newResetTime = now;
+      guestUploadCounts = {};
+      inMemoryGuestLastReset = newResetTime;
+      await dbSaveConfig({ lastGuestResetTime: newResetTime });
+      console.log("Guest limits automatically reset at:", new Date(newResetTime).toISOString());
+      return true;
+    }
+    return false;
+  }
+
   async function dbGetGuestUploadCount(guestToken: string): Promise<number> {
+    const config = await dbGetConfig();
+    await checkAutoResetGuestLimits(config);
+    const lastReset = config.lastGuestResetTime || 0;
+
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "guest_uploads", guestToken);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          return docSnap.data().count || 0;
+          const data = docSnap.data();
+          if (lastReset > 0 && data.updatedAt && data.updatedAt < lastReset) {
+            return 0;
+          }
+          return data.count || 0;
         }
       } catch (e) {
         console.error("Firebase get guest count error:", e);
       }
     }
+
+    if (lastReset > 0 && inMemoryGuestLastReset < lastReset) {
+      guestUploadCounts = {};
+      inMemoryGuestLastReset = lastReset;
+    }
+
     return guestUploadCounts[guestToken] || 0;
+  }
+
+  interface AdRequestItem {
+    id: string;
+    senderName: string;
+    senderEmail: string;
+    senderMessage: string;
+    createdAt: number;
+    status: "new" | "read" | "contacted";
+  }
+
+  let inMemoryAdRequests: AdRequestItem[] = [];
+
+  async function dbGetAdRequests(): Promise<AdRequestItem[]> {
+    if (useFirebase && db) {
+      try {
+        const snap = await getDocs(collection(db, "ad_requests"));
+        const list: AdRequestItem[] = [];
+        snap.forEach(docSnap => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as AdRequestItem);
+        });
+        return list.sort((a, b) => b.createdAt - a.createdAt);
+      } catch (e) {
+        console.error("Firebase get ad requests error:", e);
+      }
+    }
+    return [...inMemoryAdRequests].sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async function dbSaveAdRequest(reqItem: AdRequestItem): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "ad_requests", reqItem.id), reqItem);
+      } catch (e) {
+        console.error("Firebase save ad request error:", e);
+      }
+    }
+    inMemoryAdRequests.push(reqItem);
+  }
+
+  async function dbUpdateAdRequestStatus(id: string, status: "new" | "read" | "contacted"): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await updateDoc(doc(db, "ad_requests", id), { status });
+      } catch (e) {
+        console.error("Firebase update ad request status error:", e);
+      }
+    }
+    const found = inMemoryAdRequests.find(r => r.id === id);
+    if (found) found.status = status;
+  }
+
+  async function dbDeleteAdRequest(id: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await deleteDoc(doc(db, "ad_requests", id));
+      } catch (e) {
+        console.error("Firebase delete ad request error:", e);
+      }
+    }
+    inMemoryAdRequests = inMemoryAdRequests.filter(r => r.id !== id);
   }
 
   async function dbIncrementGuestUploadCount(guestToken: string): Promise<number> {
@@ -3300,6 +3443,10 @@ async function startServer() {
         miniChatEnabled,
         guestMaxMb,
         guestMaxUploadCount,
+        guestAutoResetMode,
+        guestAutoResetHour,
+        guestResetIntervalHours,
+        lastGuestResetTime,
         registeredMaxMb,
         registeredMaxUploadCount,
         requireEmailVerification,
@@ -3323,6 +3470,10 @@ async function startServer() {
         miniChatEnabled: miniChatEnabled !== undefined ? !!miniChatEnabled : undefined,
         guestMaxMb: guestMaxMb !== undefined ? Number(guestMaxMb) : undefined,
         guestMaxUploadCount: guestMaxUploadCount !== undefined ? Number(guestMaxUploadCount) : undefined,
+        guestAutoResetMode,
+        guestAutoResetHour: guestAutoResetHour !== undefined ? Number(guestAutoResetHour) : undefined,
+        guestResetIntervalHours: guestResetIntervalHours !== undefined ? Number(guestResetIntervalHours) : undefined,
+        lastGuestResetTime: lastGuestResetTime !== undefined ? Number(lastGuestResetTime) : undefined,
         registeredMaxMb: registeredMaxMb !== undefined ? Number(registeredMaxMb) : undefined,
         registeredMaxUploadCount: registeredMaxUploadCount !== undefined ? Number(registeredMaxUploadCount) : undefined,
         requireEmailVerification: requireEmailVerification !== undefined ? !!requireEmailVerification : undefined,
@@ -3337,6 +3488,90 @@ async function startServer() {
     } catch (err) {
       console.error("Save config error:", err);
       res.status(500).json({ error: "Site ayarları kaydedilirken hata oluştu." });
+    }
+  });
+
+  // Manual reset guest limits endpoint (Admin only)
+  app.post("/api/admin/reset-guest-limits", async (req, res) => {
+    try {
+      const now = Date.now();
+      guestUploadCounts = {};
+      inMemoryGuestLastReset = now;
+      await dbSaveConfig({ lastGuestResetTime: now });
+      res.json({
+        success: true,
+        message: "Tüm misafir yükleme limitleri başarıyla sıfırlandı!",
+        lastGuestResetTime: now
+      });
+    } catch (err) {
+      console.error("Reset guest limits error:", err);
+      res.status(500).json({ error: "Misafir limitleri sıfırlanırken hata oluştu." });
+    }
+  });
+
+  // --- ADVERTISER REQUESTS ENDPOINTS ---
+
+  // Submit Ad Request (Public)
+  app.post("/api/ad-requests", async (req, res) => {
+    try {
+      const { senderName, senderEmail, senderMessage } = req.body;
+      if (!senderEmail || !senderMessage) {
+        return res.status(400).json({ error: "E-posta adresi ve mesaj alanları zorunludur." });
+      }
+
+      const newReq: AdRequestItem = {
+        id: "adr_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+        senderName: (senderName || "İsimsiz Başvuru").trim(),
+        senderEmail: senderEmail.trim(),
+        senderMessage: senderMessage.trim(),
+        createdAt: Date.now(),
+        status: "new"
+      };
+
+      await dbSaveAdRequest(newReq);
+      res.json({ success: true, message: "Reklam talebiniz başarıyla iletildi! Yönetici ekibimiz inceleyip dönüş yapacaktır." });
+    } catch (err) {
+      console.error("Submit ad request error:", err);
+      res.status(500).json({ error: "Reklam talebi iletilirken bir hata oluştu." });
+    }
+  });
+
+  // Get Ad Requests (Admin only)
+  app.get("/api/admin/ad-requests", async (req, res) => {
+    try {
+      const requests = await dbGetAdRequests();
+      res.json({ requests });
+    } catch (err) {
+      console.error("Get ad requests error:", err);
+      res.status(500).json({ error: "Reklam talepleri alınamadı." });
+    }
+  });
+
+  // Update Ad Request status (Admin only)
+  app.post("/api/admin/ad-requests/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!status || !["new", "read", "contacted"].includes(status)) {
+        return res.status(400).json({ error: "Geçersiz durum." });
+      }
+      await dbUpdateAdRequestStatus(id, status);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Update ad request status error:", err);
+      res.status(500).json({ error: "Durum güncellenemedi." });
+    }
+  });
+
+  // Delete Ad Request (Admin only)
+  app.delete("/api/admin/ad-requests/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await dbDeleteAdRequest(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete ad request error:", err);
+      res.status(500).json({ error: "Silinemedi." });
     }
   });
 

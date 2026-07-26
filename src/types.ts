@@ -39,6 +39,15 @@ export interface AdBanner {
   enabled: boolean;
 }
 
+export interface AdRequest {
+  id: string;
+  senderName: string;
+  senderEmail: string;
+  senderMessage: string;
+  createdAt: number;
+  status: "new" | "read" | "contacted";
+}
+
 export interface SiteConfig {
   homepageTitle: string;
   homepageSubtitle: string;
@@ -53,6 +62,10 @@ export interface SiteConfig {
   miniChatEnabled?: boolean;
   guestMaxMb?: number;
   guestMaxUploadCount?: number;
+  guestAutoResetMode?: "off" | "daily" | "interval";
+  guestAutoResetHour?: number;
+  guestResetIntervalHours?: number;
+  lastGuestResetTime?: number;
   registeredMaxMb?: number;
   registeredMaxUploadCount?: number;
   requireEmailVerification?: boolean;

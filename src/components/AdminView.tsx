@@ -26,7 +26,7 @@ import {
   Edit3,
   Globe
 } from "lucide-react";
-import { SiteConfig, AdBanner } from "../types";
+import { SiteConfig, AdBanner, AdRequest } from "../types";
 
 interface AdminUser {
   id: string;
@@ -69,6 +69,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [newBannerPosition, setNewBannerPosition] = useState<"header" | "sidebar" | "footer" | "image-page">("header");
   const [newBannerHtml, setNewBannerHtml] = useState("");
   const [showAddBannerModal, setShowAddBannerModal] = useState(false);
+  
+  // Ad Requests & Guest Reset states
+  const [adRequests, setAdRequests] = useState<AdRequest[]>([]);
+  const [resettingGuests, setResettingGuests] = useState(false);
+  const [guestResetSuccessMsg, setGuestResetSuccessMsg] = useState("");
   
   // SMTP Config states
   const [smtpConfig, setSmtpConfig] = useState({
@@ -347,6 +352,60 @@ export default function AdminView({ onBack }: AdminViewProps) {
     }
   };
 
+  const fetchAdRequests = async () => {
+    try {
+      const res = await fetch("/api/admin/ad-requests");
+      const data = await res.json();
+      if (res.ok && data.requests) {
+        setAdRequests(data.requests);
+      }
+    } catch (e) {
+      console.error("Fetch ad requests error", e);
+    }
+  };
+
+  const handleUpdateAdRequestStatus = async (id: string, status: "new" | "read" | "contacted") => {
+    try {
+      await fetch(`/api/admin/ad-requests/${id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      setAdRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+    } catch (err) {
+      console.error("Update ad request status error:", err);
+    }
+  };
+
+  const handleDeleteAdRequest = async (id: string) => {
+    if (!confirm("Bu reklam başvurusunu silmek istediğinize emin misiniz?")) return;
+    try {
+      await fetch(`/api/admin/ad-requests/${id}`, { method: "DELETE" });
+      setAdRequests(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error("Delete ad request error:", err);
+    }
+  };
+
+  const handleResetGuestLimits = async () => {
+    if (!confirm("Tüm misafir kullanıcıların yükleme sayılarını şimdi sıfırlamak istediğinize emin misiniz?")) return;
+    setResettingGuests(true);
+    setGuestResetSuccessMsg("");
+    try {
+      const res = await fetch("/api/admin/reset-guest-limits", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setGuestResetSuccessMsg("✓ Tüm misafir yükleme limitleri sıfırlandı!");
+        setSiteConfig(prev => ({ ...prev, lastGuestResetTime: data.lastGuestResetTime }));
+        setTimeout(() => setGuestResetSuccessMsg(""), 4000);
+      }
+    } catch (err) {
+      console.error("Reset guest limits error:", err);
+    } finally {
+      setResettingGuests(false);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       setIsLoading(true);
@@ -357,7 +416,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
         fetchBannedUsers(),
         fetchChatSlowMode(),
         fetchModerationLogs(),
-        fetchSmtpConfig()
+        fetchSmtpConfig(),
+        fetchAdRequests()
       ]).finally(() => {
         setIsLoading(false);
       });
@@ -1018,6 +1078,85 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 5 (Misafir kullanıcı toplamda en fazla 5 resim/video yükleyebilir)</span>
+                  </div>
+
+                  {/* Guest Reset Controls */}
+                  <div className="mt-4 pt-3 border-t border-slate-200/80 space-y-3">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase flex items-center justify-between">
+                      <span>⏱️ Otomatik Limit Sıfırlama</span>
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        {siteConfig.lastGuestResetTime
+                          ? `Son: ${new Date(siteConfig.lastGuestResetTime).toLocaleString("tr-TR")}`
+                          : "Henüz Sıfırlanmadı"}
+                      </span>
+                    </label>
+
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold block mb-1">Sıfırlama Modu</span>
+                        <select
+                          value={siteConfig.guestAutoResetMode || "off"}
+                          onChange={(e) => setSiteConfig({ ...siteConfig, guestAutoResetMode: e.target.value as any })}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                        >
+                          <option value="off">Kapalı (Sadece Manuel Sıfırlama)</option>
+                          <option value="daily">Her Gün Belirli Saatte Otomatik Yenile</option>
+                          <option value="interval">Belirli Saat Aralığıyla Yenile</option>
+                        </select>
+                      </div>
+
+                      {siteConfig.guestAutoResetMode === "daily" && (
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold block mb-1">Yenilenme Saati (Günde 1 Defa)</span>
+                          <select
+                            value={siteConfig.guestAutoResetHour ?? 0}
+                            onChange={(e) => setSiteConfig({ ...siteConfig, guestAutoResetHour: Number(e.target.value) })}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                          >
+                            {Array.from({ length: 24 }).map((_, h) => (
+                              <option key={h} value={h}>
+                                Her Gün {h < 10 ? `0${h}` : h}:00 Saatinde Limitleri Sıfırla
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {siteConfig.guestAutoResetMode === "interval" && (
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold block mb-1">Yenilenme Sıklığı</span>
+                          <select
+                            value={siteConfig.guestResetIntervalHours ?? 24}
+                            onChange={(e) => setSiteConfig({ ...siteConfig, guestResetIntervalHours: Number(e.target.value) })}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                          >
+                            <option value={1}>Her 1 Saatte Bir</option>
+                            <option value={6}>Her 6 Saatte Bir</option>
+                            <option value={12}>Her 12 Saatte Bir</option>
+                            <option value={24}>Her 24 Saatte Bir (Günde 1)</option>
+                            <option value={48}>Her 48 Saatte Bir (2 Günde 1)</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Instant Manual Reset Button */}
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={handleResetGuestLimits}
+                        disabled={resettingGuests}
+                        className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${resettingGuests ? "animate-spin" : ""}`} />
+                        {resettingGuests ? "Sıfırlanıyor..." : "Tüm Misafir Sayaçlarını Şimdi Sıfırla"}
+                      </button>
+                    </div>
+                    {guestResetSuccessMsg && (
+                      <p className="text-[11px] text-emerald-600 font-bold text-center bg-emerald-50 py-1.5 rounded-lg border border-emerald-100">
+                        {guestResetSuccessMsg}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2154,6 +2293,111 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </button>
             </div>
           </form>
+
+          {/* Gelen Reklam Başvuruları Listesi */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-blue-600" />
+                  Gelen Reklam & Sponsorluk Talepleri ({adRequests.length})
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Sitedeki "Reklam Verin / İletişime Geçin" formundan iletilen reklam başvuruları burada listelenir.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchAdRequests}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Yenile
+              </button>
+            </div>
+
+            {adRequests.length === 0 ? (
+              <div className="text-center py-8 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+                <Mail className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-600">Henüz Bekleyen Reklam Başvurusu Yok</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Kullanıcılar "Reklam Verme" formundan bilgi ilettiklerinde burada anlık olarak görüntülenecektir.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {adRequests.map((reqItem) => (
+                  <div
+                    key={reqItem.id}
+                    className={`p-4 rounded-2xl border transition-all ${
+                      reqItem.status === "new"
+                        ? "bg-amber-50/60 border-amber-200 shadow-xs"
+                        : reqItem.status === "contacted"
+                        ? "bg-emerald-50/40 border-emerald-200"
+                        : "bg-slate-50 border-slate-200"
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-xs text-slate-900">{reqItem.senderName}</span>
+                        <span className="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                          {reqItem.senderEmail}
+                        </span>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                          reqItem.status === "new"
+                            ? "bg-amber-500 text-white animate-pulse"
+                            : reqItem.status === "contacted"
+                            ? "bg-emerald-600 text-white"
+                            : "bg-slate-200 text-slate-700"
+                        }`}>
+                          {reqItem.status === "new" ? "Yeni Başvuru" : reqItem.status === "contacted" ? "İletişim Kuruldu" : "Incelendi"}
+                        </span>
+                      </div>
+
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        {new Date(reqItem.createdAt).toLocaleString("tr-TR")}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-100 leading-relaxed font-sans whitespace-pre-wrap">
+                      {reqItem.senderMessage}
+                    </p>
+
+                    <div className="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-slate-100">
+                      <a
+                        href={`mailto:${reqItem.senderEmail}?subject=İnanResim Reklam Başvurusu Hakkında`}
+                        onClick={() => handleUpdateAdRequestStatus(reqItem.id, "contacted")}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Send className="w-3 h-3" />
+                        E-Posta Yanıtla
+                      </a>
+
+                      {reqItem.status === "new" && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateAdRequestStatus(reqItem.id, "read")}
+                          className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                        >
+                          Okundu İşaretle
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAdRequest(reqItem.id)}
+                        className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition-all cursor-pointer"
+                        title="Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Ad Banners List & Management */}
           <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-6">

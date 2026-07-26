@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar, Video, Image } from "lucide-react";
+import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar, Video, Image, QrCode } from "lucide-react";
 import { ClientImage } from "../types";
+import QRCodeShareModal from "./QRCodeShareModal";
 
 interface UploadSuccessProps {
   uploadedImages: ClientImage[];
@@ -19,6 +20,7 @@ export default function UploadSuccess({
   const [passwords, setPasswords] = useState<Record<string, string>>({});
   const [lockedStatus, setLockedStatus] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<Record<string, "direct" | "preview" | "bbcode" | "html" | "markdown">>({});
+  const [qrModalImage, setQrModalImage] = useState<ClientImage | null>(null);
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -224,7 +226,17 @@ export default function UploadSuccess({
               {/* Shared Code Links Block */}
               <div className="lg:col-span-8 flex flex-col justify-between">
                 <div>
-                  <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Paylaşım Kodları</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Paylaşım Kodları</span>
+                    <button
+                      type="button"
+                      onClick={() => setQrModalImage(img)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer hover:scale-105 active:scale-95"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>QR Kod & Sosyal Paylaş</span>
+                    </button>
+                  </div>
                   {/* Tabs */}
                   <div className="flex flex-wrap gap-1.5 mt-3 border-b border-slate-100 dark:border-slate-800 pb-2">
                     {[
@@ -279,6 +291,16 @@ export default function UploadSuccess({
           );
         })}
       </div>
+
+      {qrModalImage && (
+        <QRCodeShareModal
+          isOpen={!!qrModalImage}
+          onClose={() => setQrModalImage(null)}
+          imageUrl={`${window.location.origin}/uploads/${qrModalImage.id}`}
+          previewUrl={`${window.location.origin}/i/${qrModalImage.id}`}
+          title={qrModalImage.name}
+        />
+      )}
     </div>
   );
 }

@@ -14,15 +14,34 @@ export default function AdContactModal({ isOpen, onClose, siteConfig }: AdContac
   const [senderMessage, setSenderMessage] = useState("");
   const [sentSuccess, setSentSuccess] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!senderEmail || !senderMessage) return;
     setIsSending(true);
+    setErrorMsg("");
 
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/ad-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderName,
+          senderEmail,
+          senderMessage,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setErrorMsg(data.error || "Reklam talebiniz gönderilemedi. Lütfen tekrar deneyin.");
+        setIsSending(false);
+        return;
+      }
+
       setIsSending(false);
       setSentSuccess(true);
       setTimeout(() => {
@@ -31,8 +50,12 @@ export default function AdContactModal({ isOpen, onClose, siteConfig }: AdContac
         setSenderEmail("");
         setSenderMessage("");
         onClose();
-      }, 2500);
-    }, 800);
+      }, 3000);
+    } catch (err) {
+      console.error("Ad contact submit error:", err);
+      setErrorMsg("Ağ hatası oluştu. Lütfen tekrar deneyin.");
+      setIsSending(false);
+    }
   };
 
   const email = siteConfig?.adsContactEmail || "reklam@inanresim.com";
@@ -123,6 +146,11 @@ export default function AdContactModal({ isOpen, onClose, siteConfig }: AdContac
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
+            {errorMsg && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl border border-red-200 dark:border-red-800">
+                {errorMsg}
+              </div>
+            )}
             <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
               Hızlı Reklam Başvuru Formu
             </h4>
