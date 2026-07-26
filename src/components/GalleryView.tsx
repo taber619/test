@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Image, Eye, Trash2, Calendar, FileType, Key, RefreshCw, Grid } from "lucide-react";
+import { Image, Eye, Trash2, Calendar, FileType, Key, RefreshCw, Grid, CheckSquare, Square, Check, Loader2 } from "lucide-react";
 import { ClientImage, ClientUser } from "../types";
 
 interface GalleryViewProps {
@@ -12,6 +12,8 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
   const [images, setImages] = useState<ClientImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<"date" | "views" | "size">("date");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
   const fetchUserGallery = () => {
     if (!currentUser) return;
@@ -52,8 +54,51 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
 
   const handleDelete = async (id: string, token: string) => {
     if (confirm("Bu görseli sunucudan kalıcı olarak silmek istediğinize emin misiniz?")) {
-      await onDeleteImage(id, token);
+      await fetch(`/api/images/${id}?token=${token}`, { method: "DELETE" });
+      setSelectedIds((prev) => prev.filter((item) => item !== id));
       fetchUserGallery(); // refresh
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === sortedImages.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(sortedImages.map((img) => img.id));
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (
+      !confirm(
+        `Seçtiğiniz ${selectedIds.length} adet görseli/videoyu sunucudan kalıcı olarak silmek istediğinize emin misiniz?`
+      )
+    ) {
+      return;
+    }
+
+    setIsDeletingBatch(true);
+    try {
+      const deletePromises = selectedIds.map((id) => {
+        const targetImg = images.find((i) => i.id === id);
+        const token = targetImg?.deleteToken || "";
+        return fetch(`/api/images/${id}?token=${token}`, { method: "DELETE" });
+      });
+
+      await Promise.all(deletePromises);
+      setSelectedIds([]);
+      fetchUserGallery();
+    } catch (err) {
+      alert("Toplu silme sırasında bir hata oluştu.");
+    } finally {
+      setIsDeletingBatch(false);
     }
   };
 
@@ -67,7 +112,7 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ["B", "KB", "MB"];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
@@ -85,28 +130,30 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
   if (!currentUser) {
     return (
       <div className="max-w-4xl mx-auto text-center py-20 px-4" id="gallery-unauth">
-        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <div className="w-16 h-16 bg-red-50 dark:bg-red-950/40 text-red-500 dark:text-red-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Key className="w-8 h-8" />
         </div>
-        <h3 className="text-xl font-bold text-slate-800">Galeriye Erişmek İçin Giriş Yapın</h3>
-        <p className="text-slate-500 text-sm mt-2 max-w-md mx-auto">
+        <h3 className="text-xl font-bold text-slate-800 dark:text-white">Galeriye Erişmek İçin Giriş Yapın</h3>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 max-w-md mx-auto">
           Yüklediğiniz resimleri toplu olarak takip etmek, görüntülenme sayılarını izlemek ve yönetmek için ücretsiz üye girişi yapın.
         </p>
       </div>
     );
   }
 
+  const allSelected = sortedImages.length > 0 && selectedIds.length === sortedImages.length;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="gallery-panel">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6 mb-6">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-            <Grid className="w-6 h-6 text-blue-600" />
+          <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
+            <Grid className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             Dosya Galeriniz
           </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Hesabınız ile yüklediğiniz tüm görsel ve videoları buradan yönetebilirsiniz.
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Hesabınız ile yüklediğiniz tüm görsel ve videoları buradan yönetabilir, seçerek toplu silebilirsiniz.
           </p>
         </div>
 
@@ -116,7 +163,7 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="text-xs bg-white border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+            className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
             <option value="date">En Yeni</option>
             <option value="views">En Çok İzlenen</option>
@@ -125,7 +172,7 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
 
           <button
             onClick={fetchUserGallery}
-            className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-50 border border-slate-100 rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl transition-colors cursor-pointer"
             title="Yenile"
           >
             <RefreshCw className="w-4 h-4" />
@@ -133,121 +180,201 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
         </div>
       </div>
 
+      {/* Batch Actions Toolbar */}
+      {!loading && sortedImages.length > 0 && (
+        <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-xs" id="gallery-batch-bar">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 hover:border-slate-300 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 transition-all cursor-pointer shadow-2xs"
+            >
+              {allSelected ? (
+                <>
+                  <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  Seçimi Kaldır
+                </>
+              ) : (
+                <>
+                  <Square className="w-4 h-4 text-slate-400" />
+                  Tümünü Seç ({sortedImages.length})
+                </>
+              )}
+            </button>
+
+            {selectedIds.length > 0 && (
+              <span className="text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 px-3 py-1.5 rounded-xl">
+                {selectedIds.length} adet görsel seçildi
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            disabled={selectedIds.length === 0 || isDeletingBatch}
+            onClick={handleBatchDelete}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
+              selectedIds.length === 0 || isDeletingBatch
+                ? "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
+                : "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-500/20"
+            }`}
+          >
+            {isDeletingBatch ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Siliniyor...
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4" />
+                Seçilenleri Sil ({selectedIds.length})
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center py-20" id="gallery-loader">
           <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent mx-auto"></div>
           <p className="text-slate-400 text-sm mt-4 font-medium">Görselleriniz yükleniyor...</p>
         </div>
       ) : sortedImages.length === 0 ? (
-        <div className="text-center py-20 bg-slate-50 rounded-3xl border border-slate-100" id="gallery-empty">
-          <div className="w-14 h-14 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <div className="text-center py-20 bg-slate-50 dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800" id="gallery-empty">
+          <div className="w-14 h-14 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Image className="w-6 h-6" />
           </div>
-          <h3 className="font-bold text-slate-700 text-base">Henüz görsel yüklemediniz</h3>
-          <p className="text-slate-400 text-xs mt-1">
+          <h3 className="font-bold text-slate-700 dark:text-slate-200 text-base">Henüz görsel yüklemediniz</h3>
+          <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">
             Yüklediğiniz resimler burada listelenecektir. Ana sayfaya dönüp ilk yüklemenizi yapabilirsiniz!
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6" id="gallery-grid">
-          {sortedImages.map((img) => (
-            <div
-              key={img.id}
-              className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative"
-              id={`gallery-item-${img.id}`}
-            >
-              {/* Image / Video Preview thumbnail */}
-              <div 
-                onClick={() => onSelectImage(img.id)}
-                className="relative aspect-square bg-slate-50 border-b border-slate-50 cursor-pointer overflow-hidden flex items-center justify-center"
+          {sortedImages.map((img) => {
+            const isSelected = selectedIds.includes(img.id);
+            return (
+              <div
+                key={img.id}
+                className={`bg-white dark:bg-slate-900 border rounded-2xl overflow-hidden transition-all flex flex-col justify-between group relative ${
+                  isSelected
+                    ? "border-blue-500 dark:border-blue-500 ring-2 ring-blue-500 shadow-md bg-blue-50/10 dark:bg-blue-950/20"
+                    : "border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 shadow-sm hover:shadow-md"
+                }`}
+                id={`gallery-item-${img.id}`}
               >
-                {img.mimeType?.startsWith("video/") ? (
-                  <video
-                    src={img.directUrl}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    muted
-                    playsInline
-                  />
-                ) : (
-                  <img
-                    src={img.directUrl}
-                    alt={img.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                  />
-                )}
-                
-                {img.watermarkText && (
-                  <div 
-                    className="absolute pointer-events-none select-none font-bold text-[9px] px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-[0.5px] z-10"
-                    style={{
-                      opacity: img.watermarkOpacity !== undefined ? img.watermarkOpacity : 0.6,
-                      color: img.watermarkColor || "#ffffff",
-                      textShadow: "0px 1px 2px rgba(0,0,0,0.9)",
-                      ...(() => {
-                        const pos = img.watermarkPosition || "bottom-right";
-                        if (pos === "bottom-left") return { bottom: "8px", left: "8px" };
-                        if (pos === "top-right") return { top: "8px", right: "8px" };
-                        if (pos === "top-left") return { top: "8px", left: "8px" };
-                        if (pos === "center") return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
-                        return { bottom: "8px", right: "8px" };
-                      })()
+                {/* Image / Video Preview thumbnail */}
+                <div className="relative aspect-square bg-slate-50 dark:bg-slate-950 border-b border-slate-50 dark:border-slate-800 overflow-hidden flex items-center justify-center">
+                  {/* Selection Checkbox button on image top-left */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSelect(img.id);
                     }}
+                    className={`absolute top-2.5 left-2.5 z-20 w-7 h-7 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                      isSelected
+                        ? "bg-blue-600 text-white ring-2 ring-blue-300 scale-105"
+                        : "bg-white/90 dark:bg-slate-800/90 hover:bg-white dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 backdrop-blur-xs border border-slate-200 dark:border-slate-700"
+                    }`}
+                    title={isSelected ? "Seçimi Kaldır" : "Görseli Seç"}
                   >
-                    {img.watermarkText}
-                  </div>
-                )}
+                    <Check className={`w-4 h-4 stroke-[3] transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-60"}`} />
+                  </button>
 
-                {img.hasPassword && (
-                  <div className="absolute top-2.5 left-2.5 bg-indigo-600 text-white p-1.5 rounded-lg shadow-sm z-10" title="Şifreli Görsel">
-                    <Key className="w-3.5 h-3.5" />
-                  </div>
-                )}
+                  <div 
+                    onClick={() => onSelectImage(img.id)}
+                    className="w-full h-full cursor-pointer relative flex items-center justify-center"
+                  >
+                    {img.mimeType?.startsWith("video/") ? (
+                      <video
+                        src={img.directUrl}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        muted
+                        playsInline
+                      />
+                    ) : (
+                      <img
+                        src={img.directUrl}
+                        alt={img.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                      />
+                    )}
+                    
+                    {img.watermarkText && (
+                      <div 
+                        className="absolute pointer-events-none select-none font-bold text-[9px] px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-[0.5px] z-10"
+                        style={{
+                          opacity: img.watermarkOpacity !== undefined ? img.watermarkOpacity : 0.6,
+                          color: img.watermarkColor || "#ffffff",
+                          textShadow: "0px 1px 2px rgba(0,0,0,0.9)",
+                          ...(() => {
+                            const pos = img.watermarkPosition || "bottom-right";
+                            if (pos === "bottom-left") return { bottom: "8px", left: "8px" };
+                            if (pos === "top-right") return { top: "8px", right: "8px" };
+                            if (pos === "top-left") return { top: "8px", left: "8px" };
+                            if (pos === "center") return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
+                            return { bottom: "8px", right: "8px" };
+                          })()
+                        }}
+                      >
+                        {img.watermarkText}
+                      </div>
+                    )}
 
-                <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <span className="text-xs bg-white text-slate-800 font-bold px-3 py-1.5 rounded-xl shadow">
-                    Görüntüle
-                  </span>
+                    {img.hasPassword && (
+                      <div className="absolute top-2.5 right-2.5 bg-indigo-600 text-white p-1.5 rounded-lg shadow-sm z-10" title="Şifreli Görsel">
+                        <Key className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
+                      <span className="text-xs bg-white text-slate-800 font-bold px-3 py-1.5 rounded-xl shadow">
+                        Görüntüle
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Details card footer */}
+                <div className="p-4">
+                  <h4 
+                    onClick={() => onSelectImage(img.id)}
+                    className="font-bold text-slate-800 dark:text-white text-sm truncate hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer"
+                    title={img.name}
+                  >
+                    {img.name}
+                  </h4>
+
+                  <div className="space-y-1.5 mt-3 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 shrink-0" />
+                        {formatDate(img.uploadedAt)}
+                      </span>
+                      <span className="font-mono text-[11px] font-semibold text-slate-500 dark:text-slate-400">{formatSize(img.size)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-50 dark:border-slate-800">
+                      <span className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-semibold">
+                        <Eye className="w-3.5 h-3.5" />
+                        {img.views} İzlenme
+                      </span>
+                      <button
+                        onClick={() => handleDelete(img.id, img.deleteToken || "")}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                        title="Görseli Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              {/* Details card footer */}
-              <div className="p-4">
-                <h4 
-                  onClick={() => onSelectImage(img.id)}
-                  className="font-bold text-slate-800 text-sm truncate hover:text-blue-600 cursor-pointer"
-                  title={img.name}
-                >
-                  {img.name}
-                </h4>
-
-                <div className="space-y-1.5 mt-3 text-xs text-slate-400 font-medium">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 shrink-0" />
-                      {formatDate(img.uploadedAt)}
-                    </span>
-                    <span>{formatSize(img.size)}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-50">
-                    <span className="flex items-center gap-1.5 text-slate-500 font-semibold">
-                      <Eye className="w-3.5 h-3.5" />
-                      {img.views} İzlenme
-                    </span>
-                    <button
-                      onClick={() => handleDelete(img.id, img.deleteToken || "")}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                      title="Görseli Sil"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

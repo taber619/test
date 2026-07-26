@@ -29,6 +29,16 @@ export interface ClientImage {
 
 export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-detail" | "admin";
 
+export interface AdBanner {
+  id: string;
+  title: string;
+  imageUrl?: string;
+  htmlCode?: string;
+  targetUrl?: string;
+  position: "header" | "sidebar" | "footer" | "image-page";
+  enabled: boolean;
+}
+
 export interface SiteConfig {
   homepageTitle: string;
   homepageSubtitle: string;
@@ -46,4 +56,9 @@ export interface SiteConfig {
   registeredMaxMb?: number;
   registeredMaxUploadCount?: number;
   requireEmailVerification?: boolean;
+  adsEnabled?: boolean;
+  adsContactEmail?: string;
+  adsContactTelegram?: string;
+  adsContactInfo?: string;
+  adsList?: AdBanner[];
 }

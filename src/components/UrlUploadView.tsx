@@ -73,33 +73,33 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
   return (
     <div className="max-w-3xl mx-auto px-4 py-10 animate-fade-in" id="url-upload-panel">
       {/* Header back navigation */}
-      <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
+      <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100 dark:border-slate-800">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 font-bold text-sm cursor-pointer"
+          className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white font-bold text-sm cursor-pointer transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Yükleme Ekranına Dön
         </button>
 
-        <span className="text-xs bg-blue-50 text-blue-600 font-extrabold px-3 py-1 rounded-full">
+        <span className="text-xs bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-extrabold px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/40">
           Gelişmiş URL Modu
         </span>
       </div>
 
-      <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
             <Link className="w-6 h-6" />
           </div>
-          <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">İnternetten Resim veya Video Yükle</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed">
+          <h3 className="text-xl font-extrabold text-slate-800 dark:text-white tracking-tight">İnternetten Resim veya Video Yükle</h3>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
             Web üzerindeki herhangi bir görsel veya video adresini yapıştırarak hızlıca kendi sunucunuza aktarın.
           </p>
         </div>
 
         {errorMsg && (
-          <div className="mb-6 p-4 bg-red-50 text-red-600 text-xs font-semibold rounded-2xl border border-red-100 flex items-start gap-3">
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-xs font-semibold rounded-2xl border border-red-100 dark:border-red-900/40 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
@@ -108,7 +108,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
         <form onSubmit={handleSubmit} className="space-y-6" id="url-upload-form">
           {/* URL Input */}
           <div>
-            <label className="block text-xs font-extrabold text-slate-600 uppercase mb-2 pl-0.5">
+            <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase mb-2 pl-0.5">
               Görsel veya Video Linki (URL)
             </label>
             <input
@@ -117,22 +117,22 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={loading}
-              className="w-full text-sm bg-slate-50 border border-slate-100 rounded-xl px-4 py-3.5 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 dark:text-white rounded-xl px-4 py-3.5 focus:outline-none focus:bg-white dark:focus:bg-slate-900 focus:ring-1 focus:ring-blue-500 transition-colors"
             />
           </div>
 
           {/* Settings Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-50 dark:bg-slate-950/60 p-5 rounded-2xl border border-slate-100 dark:border-slate-800">
             {/* Delete After selector */}
             <div>
-              <label className="block text-xs font-extrabold text-slate-600 uppercase mb-2 pl-0.5">
+              <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase mb-2 pl-0.5">
                 Otomatik Silinme Süresi
               </label>
               <select
                 value={deleteAfter}
                 onChange={(e) => setDeleteAfter(e.target.value)}
                 disabled={loading}
-                className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
                 <option value="never">Süresiz (Kalıcı)</option>
                 <option value="1h">1 Saat Sonra Sil</option>
@@ -144,8 +144,8 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
 
             {/* Password input */}
             <div>
-              <label className="block text-xs font-extrabold text-slate-600 uppercase flex items-center gap-1 mb-2 pl-0.5">
-                <Shield className="w-3.5 h-3.5 text-indigo-500" />
+              <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase flex items-center gap-1 mb-2 pl-0.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
                 Şifre Koruması (Opsiyonel)
               </label>
               <input
@@ -154,16 +154,16 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
-                className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
           </div>
 
           {/* Filigran / Watermark Section */}
-          <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+          <div className="bg-slate-50 dark:bg-slate-950/60 p-5 rounded-2xl border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between mb-3">
-              <label className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5 cursor-pointer">
-                <Sparkles className="w-4 h-4 text-amber-500" />
+              <label className="text-xs font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer">
+                <Sparkles className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                 Görsel ve Video Üzerine Filigran (Watermark)
               </label>
               <input
@@ -175,22 +175,22 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
             </div>
 
             {addWatermark && (
-              <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Filigran Metni</label>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">Filigran Metni</label>
                   <input
                     type="text"
                     value={watermarkText}
                     onChange={(e) => setWatermarkText(e.target.value)}
-                    className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-800"
+                    className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-semibold text-slate-800 dark:text-slate-200"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Konum</label>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">Konum</label>
                   <select
                     value={watermarkPosition}
                     onChange={(e) => setWatermarkPosition(e.target.value as any)}
-                    className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700"
+                    className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-bold text-slate-700 dark:text-slate-200"
                   >
                     <option value="bottom-right">Sağ Alt</option>
                     <option value="bottom-left">Sol Alt</option>
@@ -207,7 +207,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold py-3 px-4 rounded-xl shadow-md shadow-blue-100 flex items-center justify-center gap-2 transition-all cursor-pointer text-sm"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold py-3 px-4 rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer text-sm"
           >
             {loading ? (
               <>

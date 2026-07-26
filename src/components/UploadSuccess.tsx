@@ -48,16 +48,16 @@ export default function UploadSuccess({
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 animate-fade-in" id="upload-success-panel">
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-100">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-100 dark:border-slate-800">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+          <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
             🎉 Yükleme Tamamlandı!
           </h2>
-          <p className="text-sm text-slate-500 mt-1">Dosyalarınız başarıyla buluta yüklendi ve paylaşıma hazır.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Dosyalarınız başarıyla buluta yüklendi ve paylaşıma hazır.</p>
         </div>
         <button
           onClick={onReset}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-100 transition-all duration-200 cursor-pointer"
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-500/20 transition-all duration-200 cursor-pointer"
           id="btn-new-upload"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -88,12 +88,12 @@ export default function UploadSuccess({
           return (
             <div
               key={img.id}
-              className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow grid grid-cols-1 lg:grid-cols-12 gap-6"
+              className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow grid grid-cols-1 lg:grid-cols-12 gap-6"
               id={`uploaded-card-${img.id}`}
             >
               {/* Thumbnail and Info */}
               <div className="lg:col-span-4 flex flex-col gap-4">
-                <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-50 border border-slate-100 group">
+                <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 group">
                   {img.mimeType?.startsWith("video/") ? (
                     <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-xl">
                       <video
@@ -137,7 +137,7 @@ export default function UploadSuccess({
                       href={img.previewUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2.5 bg-white rounded-xl text-slate-800 hover:scale-105 transition-transform"
+                      className="p-2.5 bg-white dark:bg-slate-800 rounded-xl text-slate-800 dark:text-white hover:scale-105 transition-transform"
                       title="Önizleme Sayfası"
                     >
                       <Eye className="w-4 h-4" />
@@ -148,21 +148,21 @@ export default function UploadSuccess({
                 <div>
                   <div className="flex items-center gap-1.5 mb-2">
                     {img.mimeType?.startsWith("video/") ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-blue-50 text-blue-600 border border-blue-100">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40">
                         <Video className="w-3 h-3" />
                         Video
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-emerald-50 text-emerald-600 border border-emerald-100">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
                         <Image className="w-3 h-3" />
                         Görsel
                       </span>
                     )}
                   </div>
-                  <h4 className="font-bold text-slate-800 truncate text-sm" title={img.name}>
+                  <h4 className="font-bold text-slate-800 dark:text-white truncate text-sm" title={img.name}>
                     {img.name}
                   </h4>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-2 text-xs text-slate-400 font-medium">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-2 text-xs text-slate-400 dark:text-slate-500 font-medium">
                     <span>Boyut: {formatSize(img.size)}</span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
@@ -173,15 +173,15 @@ export default function UploadSuccess({
                 </div>
 
                 {/* Password Setting & Deletion Action */}
-                <div className="border-t border-slate-100 pt-4 mt-1 space-y-3">
+                <div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-1 space-y-3">
                   {/* Password Protection */}
                   <div>
-                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1.5 mb-2">
-                      <Shield className="w-3.5 h-3.5 text-indigo-500" />
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mb-2">
+                      <Shield className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
                       Dosyayı Şifreyle Koru
                     </label>
                     {lockedStatus[img.id] || img.hasPassword ? (
-                      <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-100">
+                      <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 py-1.5 px-3 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
                         <Lock className="w-3.5 h-3.5" />
                         Bu dosya şifre ile koruma altında!
                       </div>
@@ -192,7 +192,7 @@ export default function UploadSuccess({
                           placeholder="Şifre belirle..."
                           value={passwords[img.id] || ""}
                           onChange={(e) => setPasswords((prev) => ({ ...prev, [img.id]: e.target.value }))}
-                          className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="flex-1 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                         <button
                           onClick={() => submitPassword(img.id)}
@@ -212,7 +212,7 @@ export default function UploadSuccess({
                           onDeleteImage(img.id, img.deleteToken || "");
                         }
                       }}
-                      className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-bold bg-red-50 hover:bg-red-100 py-1.5 px-3 rounded-lg border border-red-100 transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-bold bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 py-1.5 px-3 rounded-lg border border-red-100 dark:border-red-900/40 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       Dosyayı Şimdi Sil
@@ -224,9 +224,9 @@ export default function UploadSuccess({
               {/* Shared Code Links Block */}
               <div className="lg:col-span-8 flex flex-col justify-between">
                 <div>
-                  <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Paylaşım Kodları</span>
+                  <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Paylaşım Kodları</span>
                   {/* Tabs */}
-                  <div className="flex flex-wrap gap-1.5 mt-3 border-b border-slate-100 pb-2">
+                  <div className="flex flex-wrap gap-1.5 mt-3 border-b border-slate-100 dark:border-slate-800 pb-2">
                     {[
                       { id: "direct", label: "Doğrudan Link" },
                       { id: "preview", label: "Önizleme Sayfası" },
@@ -240,7 +240,7 @@ export default function UploadSuccess({
                         className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                           currentTab === tab.id
                             ? "bg-blue-600 text-white shadow-sm"
-                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                         }`}
                       >
                         {tab.label}
@@ -249,14 +249,14 @@ export default function UploadSuccess({
                   </div>
 
                   {/* Link Output Block */}
-                  <div className="mt-4 bg-slate-50 border border-slate-100 rounded-2xl p-4 relative">
-                    <pre className="text-xs font-mono text-slate-600 whitespace-pre-wrap break-all pr-12 max-h-[140px] overflow-y-auto leading-relaxed">
+                  <div className="mt-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 relative">
+                    <pre className="text-xs font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-all pr-12 max-h-[140px] overflow-y-auto leading-relaxed">
                       {getLinkValue()}
                     </pre>
 
                     <button
                       onClick={() => handleCopy(getLinkValue(), `${img.id}-${currentTab}`)}
-                      className="absolute right-3 top-3 p-2 bg-white border border-slate-100 rounded-xl text-slate-500 hover:text-slate-800 hover:shadow-sm active:scale-95 transition-all cursor-pointer"
+                      className="absolute right-3 top-3 p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:shadow-sm active:scale-95 transition-all cursor-pointer"
                       title="Linki Kopyala"
                     >
                       {isCopied(currentTab) ? (
@@ -268,10 +268,10 @@ export default function UploadSuccess({
                   </div>
                 </div>
 
-                <div className="mt-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-50 flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-1.5 shrink-0" />
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    <strong>İpucu:</strong> Doğrudan linki web sitelerinizde, e-posta imzalarında veya forumlarda doğrudan görsel kaynağı olarak kullanabilirsiniz.
+                <div className="mt-6 p-4 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl border border-blue-50 dark:border-blue-900/30 flex items-start gap-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-1.5 shrink-0" />
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    <strong className="text-slate-800 dark:text-white">İpucu:</strong> Doğrudan linki web sitelerinizde, e-posta imzalarında veya forumlarda doğrudan görsel kaynağı olarak kullanabilirsiniz.
                   </p>
                 </div>
               </div>

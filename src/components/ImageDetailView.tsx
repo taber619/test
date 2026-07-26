@@ -216,16 +216,16 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   return (
     <div className="max-w-6xl mx-auto px-4 py-10 animate-fade-in" id="detail-view-panel">
       {/* Back navigation header */}
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 font-bold text-sm cursor-pointer"
+          className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white font-bold text-sm cursor-pointer transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Geri Dön
         </button>
 
-        <span className="text-xs bg-blue-50 text-blue-600 font-extrabold px-3 py-1 rounded-full">
+        <span className="text-xs bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-extrabold px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/40">
           {meta?.mimeType?.startsWith("video/") ? "Aktif Video" : "Aktif Görsel"}
         </span>
       </div>
@@ -233,7 +233,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left column: Visual display & info */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          <div className="bg-white border border-slate-100 rounded-3xl p-4 shadow-sm relative flex items-center justify-center min-h-[300px] max-h-[550px] w-full">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-4 shadow-sm relative flex items-center justify-center min-h-[300px] max-h-[550px] w-full">
             {meta?.mimeType?.startsWith("video/") ? (
               <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl">
                 <video
@@ -279,7 +279,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
             <a
               href={verifiedDataUrl || ""}
               download={meta?.name || (meta?.mimeType?.startsWith("video/") ? "video.mp4" : "gorsel.jpg")}
-              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-2xl shadow-md shadow-blue-100 transition-all cursor-pointer text-sm"
+              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-2xl shadow-md shadow-blue-500/20 transition-all cursor-pointer text-sm"
             >
               <Download className="w-4 h-4" />
               {meta?.mimeType?.startsWith("video/") ? "Videoyu İndir" : "Görseli İndir"}
@@ -289,7 +289,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
               href={verifiedDataUrl || ""}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-5 rounded-2xl transition-all cursor-pointer text-sm"
+              className="flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold py-3 px-5 rounded-2xl transition-all cursor-pointer text-sm"
             >
               <ExternalLink className="w-4 h-4" />
               Aç
@@ -300,42 +300,42 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
         {/* Right column: metadata and code links */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           {/* Metadata Card */}
-          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
-            <h3 className="font-extrabold text-slate-800 text-lg mb-4 truncate" title={meta?.name}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+            <h3 className="font-extrabold text-slate-800 dark:text-white text-lg mb-4 truncate" title={meta?.name}>
               {meta?.name}
             </h3>
 
-            <div className="space-y-3.5 text-xs text-slate-500 font-semibold" id="meta-details-list">
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50">
+            <div className="space-y-3.5 text-xs text-slate-500 dark:text-slate-400 font-semibold" id="meta-details-list">
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
                 <span className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   Yükleme Tarihi:
                 </span>
-                <span className="text-slate-800">{formatDate(meta?.uploadedAt || 0)}</span>
+                <span className="text-slate-800 dark:text-slate-200">{formatDate(meta?.uploadedAt || 0)}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50">
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
                 <span className="flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-slate-400" />
+                  <HardDrive className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   Dosya Boyutu:
                 </span>
-                <span className="text-slate-800">{formatSize(meta?.size || 0)}</span>
+                <span className="text-slate-800 dark:text-slate-200">{formatSize(meta?.size || 0)}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50">
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
                 <span className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-slate-400" />
+                  <Eye className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   İzlenme Sayısı:
                 </span>
-                <span className="text-slate-800 font-black text-blue-600">{meta?.views}</span>
+                <span className="text-slate-800 dark:text-slate-200 font-black text-blue-600 dark:text-blue-400">{meta?.views}</span>
               </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50">
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
                 <span className="flex items-center gap-2">
-                  <ClockIcon className="w-4 h-4 text-slate-400" />
+                  <ClockIcon className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                   Otomatik Silinme:
                 </span>
-                <span className="text-slate-800 capitalize">
+                <span className="text-slate-800 dark:text-slate-200 capitalize">
                   {meta?.deleteAfter === "never" ? "Süresiz" : meta?.deleteAfter}
                 </span>
               </div>
@@ -343,13 +343,13 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
           </div>
 
           {/* Share links */}
-          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm flex-1">
-            <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 shadow-sm flex-1">
+            <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
               {meta?.mimeType?.startsWith("video/") ? "Video Paylaşım Kodları" : "Görsel Paylaşım Kodları"}
             </span>
 
             {/* Link Selector Tabs */}
-            <div className="flex flex-wrap gap-1 mt-3 border-b border-slate-100 pb-2">
+            <div className="flex flex-wrap gap-1 mt-3 border-b border-slate-100 dark:border-slate-800 pb-2">
               {[
                 { id: "direct", label: "Doğrudan" },
                 { id: "preview", label: "Önizleme" },
@@ -363,7 +363,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
                   className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                     activeTab === tab.id
                       ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   {tab.label}
@@ -372,14 +372,14 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
             </div>
 
             {/* Links output box */}
-            <div className="mt-4 bg-slate-50 border border-slate-100 rounded-2xl p-4 relative min-h-[100px]">
-              <pre className="text-xs font-mono text-slate-600 whitespace-pre-wrap break-all pr-12 leading-relaxed max-h-[120px] overflow-y-auto">
+            <div className="mt-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 relative min-h-[100px]">
+              <pre className="text-xs font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-all pr-12 leading-relaxed max-h-[120px] overflow-y-auto">
                 {getLinkValue()}
               </pre>
 
               <button
                 onClick={() => handleCopy(getLinkValue(), activeTab)}
-                className="absolute right-3 top-3 p-2 bg-white border border-slate-100 rounded-xl text-slate-500 hover:text-slate-800 hover:shadow-sm transition-all cursor-pointer"
+                className="absolute right-3 top-3 p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:shadow-sm transition-all cursor-pointer"
                 title="Kopyala"
               >
                 {copiedIndex === activeTab ? (

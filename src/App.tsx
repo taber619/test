@@ -11,6 +11,7 @@ import ImageDetailView from "./components/ImageDetailView";
 import UrlUploadView from "./components/UrlUploadView";
 import AdminView from "./components/AdminView";
 import MiniChat from "./components/MiniChat";
+import AdContactModal from "./components/AdContactModal";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -63,6 +64,14 @@ export default function App() {
     localStorage.setItem("theme", nextTheme);
     playThemeSound(nextTheme);
   };
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
 
   // Live reload version checking states
   const initialAppVersionRef = React.useRef<string | null>(null);
@@ -118,6 +127,7 @@ export default function App() {
   const [currentAnnIdx, setCurrentAnnIdx] = useState(0);
   const [isAnnDismissed, setIsAnnDismissed] = useState(false);
   const [showAllAnnouncements, setShowAllAnnouncements] = useState(false);
+  const [showAdModal, setShowAdModal] = useState(false);
 
   useEffect(() => {
     if (!siteConfig || !siteConfig.announcementEnabled) return;
@@ -615,52 +625,98 @@ export default function App() {
         <StatsCounter />
 
         {/* Feature info sections */}
-        <section className="py-16 bg-gray-50 border-t border-slate-200" id="landing-benefits">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <section className="py-16 bg-gray-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800/80" id="landing-benefits">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-10">
-              <span className="text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">
+              <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-blue-950/60 px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/40">
                 Sınırları Olmayan Paylaşım Deneyimi
               </span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-3 tracking-tight">
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-3 tracking-tight">
                 Neden İnanResim'i Tercih Etmelisiniz?
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
-              <div className="flex items-start space-x-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
-                <div className="flex-none w-10 h-10 bg-green-100 text-green-600 rounded-lg flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-10">
+              <div className="flex items-start space-x-3.5 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex-none w-10 h-10 bg-green-100 dark:bg-green-950/40 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center shrink-0">
+                  <Zap className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Işık Hızında</h3>
-                  <p className="text-slate-500 text-xs mt-1 leading-relaxed">En gelişmiş sunucularımızla resimleriniz anında sıkıştırılmadan orijinal kalitede sunucuya işlenir.</p>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">Işık Hızında</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed">En gelişmiş altyapımızla yüksek çözünürlüklü görselleriniz ve videolarınız anında sunucuya işlenir.</p>
                 </div>
               </div>
 
-              <div className="flex items-start space-x-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
-                <div className="flex-none w-10 h-10 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04c0 4.833 2.053 9.227 5.343 12.316a1.977 1.977 0 002.55 0c3.29-3.089 5.343-7.483 5.343-12.316z" />
-                  </svg>
+              <div className="flex items-start space-x-3.5 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 shadow-sm bg-gradient-to-br from-white to-amber-50/30 dark:from-slate-900 dark:to-amber-950/20 hover:shadow-md transition-shadow">
+                <div className="flex-none w-10 h-10 bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                  <UserPlus className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Tam Gizlilik</h3>
-                  <p className="text-slate-500 text-xs mt-1 leading-relaxed">Resimlerinizi isteğe bağlı şifreleyin, otomatik silinme süresi ekleyin veya kalıcı olarak dilediğiniz an silin.</p>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">Üyeler İçin 1 GB Transfer</h3>
+                    <span className="text-[9px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded uppercase">Özel</span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-300 text-xs mt-1 leading-relaxed">
+                    Ücretsiz üye olarak <strong className="text-slate-900 dark:text-white">1 GB'a (1000 MB) kadar</strong> dosya, resim ve videolarınızı tek tıkla yükleyebilir, toplu olarak yönetebilirsiniz.
+                  </p>
                 </div>
               </div>
 
-              <div className="flex items-start space-x-4 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
-                <div className="flex-none w-10 h-10 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                  </svg>
+              <div className="flex items-start space-x-3.5 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex-none w-10 h-10 bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Güçlü Linkler</h3>
-                  <p className="text-slate-500 text-xs mt-1 leading-relaxed">BBCode, HTML ve Markdown gibi popüler forum ve blog paylaşım linkleri tek tıkla kopyalamaya hazır elinizin altında.</p>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">Tam Gizlilik & Kontrol</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed">Görsellerinizi şifreleyin, otomatik silinme zamanı belirleyin veya galerinize ekleyip dilediğiniz zaman silin.</p>
                 </div>
+              </div>
+
+              <div className="flex items-start space-x-3.5 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex-none w-10 h-10 bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center shrink-0">
+                  <Code className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">Güçlü Bağlantılar</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed">BBCode, Direct Link, HTML ve Markdown gibi popüler forum ve blog paylaşım kodları anında kopyalamaya hazır.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Unlimited Membership Banner */}
+            <div className="mt-8 p-6 sm:p-8 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 text-center md:text-left">
+                <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-white">
+                  Sınırsız İnanResim Ayrıcalıkları
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight">
+                  Üye Olun, Sınırsız 1 GB Dosya Transferi İle Tanışın!
+                </h3>
+                <p className="text-xs sm:text-sm text-blue-100 max-w-2xl leading-relaxed">
+                  İnanResim'e tamamen ücretsiz üye olarak tek seferde <strong>1 GB'a (1000 MB) kadar büyük boyutlu resim, video ve belgeleri</strong> sınırsız şekilde yükleyebilir; gelişmiş galeri panelinde toplu seçim ve silme yapabilirsiniz.
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                {currentUser ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("gallery")}
+                    className="px-6 py-3.5 bg-white text-blue-700 hover:bg-blue-50 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    Galerime Git
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("auth")}
+                    className="px-6 py-3.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Hemen Ücretsiz Üye Ol
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -880,6 +936,29 @@ export default function App() {
         onToggleTheme={toggleTheme}
       />
 
+      {/* Header Ad Banners */}
+      {siteConfig?.adsEnabled !== false && siteConfig?.adsList && siteConfig.adsList.filter(b => b.enabled && b.position === "header").length > 0 && (
+        <div className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 py-2 px-4" id="header-ad-banner-container">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            {siteConfig.adsList.filter(b => b.enabled && b.position === "header").map(ad => (
+              <div key={ad.id} className="w-full flex items-center justify-center">
+                {ad.imageUrl ? (
+                  <a href={ad.targetUrl || "#"} target="_blank" rel="noreferrer" className="block max-w-4xl w-full rounded-2xl overflow-hidden shadow-sm hover:opacity-95 transition-all border border-slate-200 dark:border-slate-800">
+                    <img src={ad.imageUrl} alt={ad.title} className="w-full max-h-24 object-cover" />
+                  </a>
+                ) : ad.htmlCode ? (
+                  <div dangerouslySetInnerHTML={{ __html: ad.htmlCode }} />
+                ) : (
+                  <a href={ad.targetUrl || "#"} target="_blank" rel="noreferrer" className="block w-full text-center py-2 px-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-all">
+                    📢 {ad.title}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Main Container Workspace */}
       <main className="flex-grow bg-slate-50/30">
         {renderContent()}
@@ -935,8 +1014,15 @@ export default function App() {
         </div>
       )}
 
+      {/* Ad Contact Modal */}
+      <AdContactModal
+        isOpen={showAdModal}
+        onClose={() => setShowAdModal(false)}
+        siteConfig={siteConfig || undefined}
+      />
+
       {/* Bottom Footer block */}
-      <Footer />
+      <Footer onOpenAdsModal={() => setShowAdModal(true)} />
     </div>
   );
 }

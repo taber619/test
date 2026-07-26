@@ -19,9 +19,14 @@ import {
   X,
   ShieldAlert,
   Mail,
-  Send
+  Send,
+  Megaphone,
+  DollarSign,
+  ExternalLink,
+  Edit3,
+  Globe
 } from "lucide-react";
-import { SiteConfig } from "../types";
+import { SiteConfig, AdBanner } from "../types";
 
 interface AdminUser {
   id: string;
@@ -55,7 +60,15 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [authError, setAuthError] = useState("");
   
   // Tab states
-  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp">("settings");
+  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp" | "ads">("settings");
+  
+  // Ad Management states
+  const [newBannerTitle, setNewBannerTitle] = useState("");
+  const [newBannerImgUrl, setNewBannerImgUrl] = useState("");
+  const [newBannerTargetUrl, setNewBannerTargetUrl] = useState("");
+  const [newBannerPosition, setNewBannerPosition] = useState<"header" | "sidebar" | "footer" | "image-page">("header");
+  const [newBannerHtml, setNewBannerHtml] = useState("");
+  const [showAddBannerModal, setShowAddBannerModal] = useState(false);
   
   // SMTP Config states
   const [smtpConfig, setSmtpConfig] = useState({
@@ -112,6 +125,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
   
   const [usersList, setUsersList] = useState<AdminUser[]>([]);
   const [imagesList, setImagesList] = useState<AdminImage[]>([]);
+  
+  // Bulk/Batch delete image states
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showDeleteAllConfirmModal, setShowDeleteAllConfirmModal] = useState(false);
   
   // Search/Filter states
   const [userSearch, setUserSearch] = useState("");
@@ -379,12 +397,76 @@ export default function AdminView({ onBack }: AdminViewProps) {
       });
       if (res.ok) {
         setImagesList(prev => prev.filter(img => img.id !== imageId));
+        setSelectedImageIds(prev => prev.filter(id => id !== imageId));
         alert("Görsel başarıyla silindi.");
       } else {
         alert("Görsel silinemedi.");
       }
     } catch (e) {
       alert("Hata oluştu.");
+    }
+  };
+
+  const toggleSelectImage = (id: string) => {
+    setSelectedImageIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllImages = () => {
+    if (selectedImageIds.length === filteredImages.length && filteredImages.length > 0) {
+      setSelectedImageIds([]);
+    } else {
+      setSelectedImageIds(filteredImages.map(img => img.id));
+    }
+  };
+
+  const handleBatchDeleteImages = async () => {
+    if (selectedImageIds.length === 0) return;
+    if (!confirm(`Seçilen ${selectedImageIds.length} adet görseli kalıcı olarak silmek istediğinize emin misiniz?`)) {
+      return;
+    }
+    setIsBulkDeleting(true);
+    try {
+      const res = await fetch("/api/admin/images/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedImageIds })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setImagesList(prev => prev.filter(img => !selectedImageIds.includes(img.id)));
+        setSelectedImageIds([]);
+        alert(`${data.count || selectedImageIds.length} adet görsel başarıyla silindi.`);
+      } else {
+        alert(data.error || "Görseller silinemedi.");
+      }
+    } catch (e) {
+      alert("Sunucu hatası oluştu.");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const handleDeleteAllImages = async () => {
+    setIsBulkDeleting(true);
+    try {
+      const res = await fetch("/api/admin/images/delete-all", {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setImagesList([]);
+        setSelectedImageIds([]);
+        setShowDeleteAllConfirmModal(false);
+        alert(data.message || "Sistemdeki tüm görseller başarıyla silindi.");
+      } else {
+        alert(data.error || "Tüm görseller silinirken bir hata oluştu.");
+      }
+    } catch (e) {
+      alert("Sunucu hatası oluştu.");
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -746,6 +828,19 @@ export default function AdminView({ onBack }: AdminViewProps) {
           <Mail className="w-4 h-4" />
           SMTP E-Posta Ayarları
         </button>
+
+        <button
+          id="admin-ads-tab"
+          onClick={() => setActiveSubTab("ads")}
+          className={`px-5 py-3 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeSubTab === "ads"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <Megaphone className="w-4 h-4 text-amber-500" />
+          Reklam Yönetimi & Bannerlar
+        </button>
       </div>
 
       {/* Tab Contents */}
@@ -939,11 +1034,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     <input
                       type="number"
                       min="0"
-                      value={siteConfig.registeredMaxMb ?? 150}
+                      value={siteConfig.registeredMaxMb ?? 1000}
                       onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxMb: Number(e.target.value) })}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 150 (Üyeler için dosya boyutu sınırı. 0 = Sınırsız)</span>
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 1000 (Üyeler için dosya boyutu sınırı. 1000 MB = 1 GB. 0 = Sınırsız)</span>
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Maksimum Yükleme Adedi (0 = Sınırsız)</label>
@@ -1325,91 +1420,231 @@ export default function AdminView({ onBack }: AdminViewProps) {
       )}
 
       {activeSubTab === "images" && (
-        <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6" id="admin-images-panel">
-          {/* Filters Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
-            <h3 className="font-extrabold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-slate-400" />
-              Sistemdeki Tüm Görseller
-            </h3>
+        <div className="space-y-6" id="admin-images-panel">
+          {/* Main Card Header & Action Bar */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5 text-blue-600" />
+                    Sistemdeki Tüm Yüklenen Görseller
+                  </h3>
+                  <span className="text-[10px] font-black px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200/60">
+                    {imagesList.length} Görsel ({formatBytes(imagesList.reduce((acc, img) => acc + (img.size || 0), 0))})
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Yüklenen tüm medyaları görüntüleyin, seçmeli veya toplu olarak sistemden tamamen silin.
+                </p>
+              </div>
 
-            <div className="relative max-w-sm">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                <Search className="w-4 h-4" />
-              </span>
-              <input
-                type="text"
-                value={imageSearch}
-                onChange={(e) => setImageSearch(e.target.value)}
-                placeholder="Görsel adı veya ID ara..."
-                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+              {/* Action Buttons: Search & Delete All Button */}
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                <div className="relative flex-1 md:w-64">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                    <Search className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    value={imageSearch}
+                    onChange={(e) => setImageSearch(e.target.value)}
+                    placeholder="Görsel adı veya ID ara..."
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-          {/* Images Grid */}
-          {filteredImages.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs">
-              Hiç görsel yüklenmemiş veya eşleşen sonuç bulunamadı.
+                {imagesList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteAllConfirmModal(true)}
+                    disabled={isBulkDeleting}
+                    className="px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+                    title="Sistemdeki Tüm Görselleri Kalıcı Olarak Sil"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Tüm Görselleri Sil ({imagesList.length})
+                  </button>
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-              {filteredImages.map((img) => (
-                <div key={img.id} className="border border-slate-100 rounded-2xl p-4 flex flex-col hover:shadow-md transition-all bg-slate-50/20">
-                  {/* Thumbnail */}
-                  <div className="aspect-video w-full rounded-xl bg-slate-100 border border-slate-200/60 overflow-hidden relative group">
-                    <img
-                      src={`/api/images/${img.id}`}
-                      alt={img.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = "none";
-                      }}
+
+            {/* Selection & Batch Action Toolbar */}
+            {filteredImages.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedImageIds.length > 0 && selectedImageIds.length === filteredImages.length}
+                      onChange={toggleSelectAllImages}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
                     />
-                    <div className="absolute top-2 right-2 bg-slate-900/70 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
-                      {img.id}
-                    </div>
-                  </div>
+                    <span>Tümünü Seç ({filteredImages.length})</span>
+                  </label>
 
-                  {/* Metadata */}
-                  <div className="mt-3 flex-grow">
-                    <h4 className="font-bold text-xs text-slate-800 line-clamp-1" title={img.name}>{img.name}</h4>
-                    <div className="grid grid-cols-2 gap-y-1.5 gap-x-2 mt-2.5 text-[11px] text-slate-500 font-medium">
-                      <div>Boyut: <span className="font-semibold text-slate-700">{formatBytes(img.size)}</span></div>
-                      <div>Gösterim: <span className="font-semibold text-slate-700">{img.views}</span></div>
-                      <div className="col-span-2">Yüklenme: <span className="font-semibold text-slate-700">{formatDate(img.uploadedAt)}</span></div>
-                      <div>Silinme: <span className="font-semibold text-slate-700">{img.deleteAfter === "never" ? "Asla" : img.deleteAfter}</span></div>
-                      <div>
-                        Şifre:{" "}
-                        <span className={`font-semibold ${img.hasPassword ? "text-red-500" : "text-emerald-500"} inline-flex items-center gap-0.5`}>
-                          {img.hasPassword ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                          {img.hasPassword ? "Şifreli" : "Açık"}
-                        </span>
+                  {selectedImageIds.length > 0 && (
+                    <span className="text-xs text-slate-500 font-medium">
+                      • <strong className="text-blue-600 font-bold">{selectedImageIds.length}</strong> görsel seçildi
+                    </span>
+                  )}
+                </div>
+
+                {selectedImageIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleBatchDeleteImages}
+                    disabled={isBulkDeleting}
+                    className="px-4 py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Seçilenleri Sil ({selectedImageIds.length})
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Images Grid */}
+            {filteredImages.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs">
+                Hiç görsel yüklenmemiş veya eşleşen sonuç bulunamadı.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {filteredImages.map((img) => {
+                  const isSelected = selectedImageIds.includes(img.id);
+                  return (
+                    <div
+                      key={img.id}
+                      className={`border rounded-2xl p-4 flex flex-col transition-all relative ${
+                        isSelected
+                          ? "border-rose-400 bg-rose-50/30 ring-2 ring-rose-400/30 shadow-md"
+                          : "border-slate-100 hover:border-slate-200 hover:shadow-md bg-slate-50/20"
+                      }`}
+                    >
+                      {/* Checkbox badge on top-left */}
+                      <div className="absolute top-6 left-6 z-10">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectImage(img.id)}
+                          className="w-5 h-5 text-rose-600 rounded-lg border-2 border-white shadow-md focus:ring-rose-500 cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Thumbnail */}
+                      <div className="aspect-video w-full rounded-xl bg-slate-100 border border-slate-200/60 overflow-hidden relative group">
+                        <img
+                          src={`/api/images/${img.id}`}
+                          alt={img.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = "none";
+                          }}
+                        />
+                        <div className="absolute top-2 right-2 bg-slate-900/70 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
+                          {img.id}
+                        </div>
+                      </div>
+
+                      {/* Metadata */}
+                      <div className="mt-3 flex-grow">
+                        <h4 className="font-bold text-xs text-slate-800 line-clamp-1" title={img.name}>{img.name}</h4>
+                        <div className="grid grid-cols-2 gap-y-1.5 gap-x-2 mt-2.5 text-[11px] text-slate-500 font-medium">
+                          <div>Boyut: <span className="font-semibold text-slate-700">{formatBytes(img.size)}</span></div>
+                          <div>Gösterim: <span className="font-semibold text-slate-700">{img.views}</span></div>
+                          <div className="col-span-2">Yüklenme: <span className="font-semibold text-slate-700">{formatDate(img.uploadedAt)}</span></div>
+                          <div>Silinme: <span className="font-semibold text-slate-700">{img.deleteAfter === "never" ? "Asla" : img.deleteAfter}</span></div>
+                          <div>
+                            Şifre:{" "}
+                            <span className={`font-semibold ${img.hasPassword ? "text-red-500" : "text-emerald-500"} inline-flex items-center gap-0.5`}>
+                              {img.hasPassword ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                              {img.hasPassword ? "Şifreli" : "Açık"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
+                        <a
+                          href={`/?view=image-detail&id=${img.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg text-center transition-all flex items-center justify-center gap-1"
+                        >
+                          Detay
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </a>
+                        <button
+                          onClick={() => handleDeleteImage(img.id)}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                          title="Görseli Sistemden Kaldır"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
-                    <a
-                      href={`/?view=image-detail&id=${img.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg text-center transition-all flex items-center justify-center gap-1"
-                    >
-                      Detay
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </a>
-                    <button
-                      onClick={() => handleDeleteImage(img.id)}
-                      className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-all flex items-center justify-center cursor-pointer"
-                      title="Görseli Sistemden Kaldır"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+          {/* Double Confirmation Modal for "Delete All Images" */}
+          {showDeleteAllConfirmModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-5 shadow-2xl animate-scale-up border border-slate-100 text-center">
+                <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+                  <ShieldAlert className="w-8 h-8" />
                 </div>
-              ))}
+
+                <div className="space-y-2">
+                  <h3 className="font-extrabold text-slate-900 text-base">
+                    Tüm Görseller Silinsin mi?
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Sistemde kayıtlı olan <strong className="text-rose-600 font-extrabold">{imagesList.length} adet görselin tümü</strong> kalıcı olarak silinecek. Bu işlem geri alınamaz!
+                  </p>
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 font-medium text-left space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    Dikkat:
+                  </div>
+                  <p>Sunucuda ve veritabanında saklanan tüm resim dosyaları tamamen temizlenecektir.</p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteAllConfirmModal(false)}
+                    disabled={isBulkDeleting}
+                    className="flex-1 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all cursor-pointer"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllImages}
+                    disabled={isBulkDeleting}
+                    className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-rose-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {isBulkDeleting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Siliniyor...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        Evet, Hepsini Sil
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1833,6 +2068,320 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeSubTab === "ads" && (
+        <div className="space-y-6" id="admin-ads-panel">
+          {/* Ad Contact & Global Settings Box */}
+          <form onSubmit={handleSaveConfig} className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                  <Megaphone className="w-5 h-5 text-amber-500" />
+                  Sitemiz İçin Reklam & Sponsorluk Yönetimi
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Reklam vermek isteyen yayıncılar için iletişim bilgilerini tanımlayın ve sitedeki banner alanlarını canlı yönetin.
+                </p>
+              </div>
+
+              {/* Global Ads Toggle */}
+              <div className="flex items-center gap-3 bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-200">
+                <span className="text-xs font-bold text-slate-700">Reklam Modu</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={siteConfig.adsEnabled !== false}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, adsEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* Advertisers Contact Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Reklam İletişim E-Posta Adresi</label>
+                <input
+                  type="email"
+                  value={siteConfig.adsContactEmail || ""}
+                  onChange={(e) => setSiteConfig({ ...siteConfig, adsContactEmail: e.target.value })}
+                  placeholder="reklam@inanresim.com"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">Reklam vermek isteyen kişilerin başvuracağı resmi e-posta adresi.</span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Reklam İletişim Telegram / WhatsApp</label>
+                <input
+                  type="text"
+                  value={siteConfig.adsContactTelegram || ""}
+                  onChange={(e) => setSiteConfig({ ...siteConfig, adsContactTelegram: e.target.value })}
+                  placeholder="@inanresim_reklam"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">Telegram kullanıcı adı veya iletişim numarası.</span>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Reklamcılar İçin Bilgilendirme Notu</label>
+                <textarea
+                  rows={2}
+                  value={siteConfig.adsContactInfo || ""}
+                  onChange={(e) => setSiteConfig({ ...siteConfig, adsContactInfo: e.target.value })}
+                  placeholder="Sitemizde günlük 10,000+ tekil ziyaretçiye ulaşan banner ve sponsorluk fırsatları için bizimle iletişime geçin."
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              {saveSuccess && (
+                <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-3 py-1.5 rounded-xl">
+                  ✓ Reklam Ayarları Kaydedildi
+                </span>
+              )}
+              <button
+                type="submit"
+                className="ml-auto px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Reklam Ayarlarını Kaydet
+              </button>
+            </div>
+          </form>
+
+          {/* Ad Banners List & Management */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  Aktif Banner ve Reklam Alanları ({siteConfig.adsList?.length || 0})
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Header, Görsel Sayfası, Sidebar veya Footer alanlarına özel bannerlar tanımlayın.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddBannerModal(true)}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Yeni Reklam Bannerı Ekle
+              </button>
+            </div>
+
+            {/* Banners List */}
+            {(!siteConfig.adsList || siteConfig.adsList.length === 0) ? (
+              <div className="text-center py-10 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+                <Megaphone className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-600">Henüz Eklenmiş Özel Reklam Bannerı Yok</p>
+                <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                  Sitenin üstüne, detay sayfalarına veya alt kısmına sponsorlu görsel reklam veya HTML kodu ekleyebilirsiniz.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowAddBannerModal(true)}
+                  className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 font-bold text-xs rounded-xl hover:bg-blue-100 transition-all cursor-pointer"
+                >
+                  + İlk Bannerı Oluştur
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {siteConfig.adsList.map((banner) => (
+                  <div key={banner.id} className="p-4 border border-slate-200 rounded-2xl bg-slate-50/50 flex flex-col justify-between gap-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                            banner.position === "header" ? "bg-purple-100 text-purple-700" :
+                            banner.position === "image-page" ? "bg-blue-100 text-blue-700" :
+                            banner.position === "sidebar" ? "bg-emerald-100 text-emerald-700" :
+                            "bg-amber-100 text-amber-700"
+                          }`}>
+                            {banner.position === "header" ? "Üst Header" :
+                             banner.position === "image-page" ? "Görsel Detay Sayfası" :
+                             banner.position === "sidebar" ? "Yan Panel" : "Alt Footer"}
+                          </span>
+
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${banner.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+                            {banner.enabled ? "Aktif" : "Pasif"}
+                          </span>
+                        </div>
+                        <h5 className="font-bold text-slate-800 text-xs mt-2">{banner.title}</h5>
+                        {banner.targetUrl && (
+                          <a href={banner.targetUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5 truncate max-w-[220px]">
+                            <ExternalLink className="w-3 h-3" />
+                            {banner.targetUrl}
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = siteConfig.adsList?.map(b => b.id === banner.id ? { ...b, enabled: !b.enabled } : b);
+                            setSiteConfig({ ...siteConfig, adsList: updated });
+                          }}
+                          className={`p-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                            banner.enabled ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100" : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                          }`}
+                          title={banner.enabled ? "Pasife Al" : "Aktif Et"}
+                        >
+                          {banner.enabled ? "Durdur" : "Yayınla"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm("Bu reklam alanını silmek istiyor musunuz?")) {
+                              const updated = siteConfig.adsList?.filter(b => b.id !== banner.id);
+                              setSiteConfig({ ...siteConfig, adsList: updated });
+                            }
+                          }}
+                          className="p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 text-xs font-bold transition-all cursor-pointer"
+                          title="Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {banner.imageUrl && (
+                      <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-black/5 max-h-24 flex items-center justify-center">
+                        <img src={banner.imageUrl} alt={banner.title} className="max-h-24 w-full object-cover" />
+                      </div>
+                    )}
+
+                    {banner.htmlCode && (
+                      <div className="bg-slate-900 text-slate-300 p-2 rounded-xl text-[10px] font-mono overflow-x-auto max-h-16">
+                        <code>{banner.htmlCode}</code>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add New Banner Modal */}
+          {showAddBannerModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-scale-up border border-slate-100">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                    <Megaphone className="w-4 h-4 text-blue-600" />
+                    Yeni Reklam Bannerı Ekle
+                  </h4>
+                  <button onClick={() => setShowAddBannerModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Banner Başlığı / Sponsor İsmi</label>
+                    <input
+                      type="text"
+                      value={newBannerTitle}
+                      onChange={(e) => setNewBannerTitle(e.target.value)}
+                      placeholder="Örn: X Markası Ana Sayfa Bannerı"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Gösterim Pozisyonu</label>
+                    <select
+                      value={newBannerPosition}
+                      onChange={(e: any) => setNewBannerPosition(e.target.value)}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                    >
+                      <option value="header">Üst Header (Sitenin En Üstü)</option>
+                      <option value="image-page">Görsel Detay Sayfası (Resim İndirme Sayfası)</option>
+                      <option value="sidebar">Yan Panel / Ana Sayfa Arası</option>
+                      <option value="footer">Alt Footer</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Görsel URL'si (İsteğe Bağlı)</label>
+                    <input
+                      type="text"
+                      value={newBannerImgUrl}
+                      onChange={(e) => setNewBannerImgUrl(e.target.value)}
+                      placeholder="https://example.com/banner.jpg"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Hedef Tıklama Bağlantısı (URL)</label>
+                    <input
+                      type="text"
+                      value={newBannerTargetUrl}
+                      onChange={(e) => setNewBannerTargetUrl(e.target.value)}
+                      placeholder="https://sponsor-sitesi.com"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Özel HTML / Google AdSense Kodu (İsteğe Bağlı)</label>
+                    <textarea
+                      rows={2}
+                      value={newBannerHtml}
+                      onChange={(e) => setNewBannerHtml(e.target.value)}
+                      placeholder="<script>...</script> veya <iframe>...</iframe>"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddBannerModal(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const banner: AdBanner = {
+                        id: "ad_" + Date.now().toString(36),
+                        title: newBannerTitle.trim() || "Sponsorlu Reklam",
+                        imageUrl: newBannerImgUrl.trim(),
+                        targetUrl: newBannerTargetUrl.trim(),
+                        position: newBannerPosition,
+                        htmlCode: newBannerHtml.trim(),
+                        enabled: true
+                      };
+                      const updated = [...(siteConfig.adsList || []), banner];
+                      setSiteConfig({ ...siteConfig, adsList: updated });
+                      setNewBannerTitle("");
+                      setNewBannerImgUrl("");
+                      setNewBannerTargetUrl("");
+                      setNewBannerHtml("");
+                      setShowAddBannerModal(false);
+                    }}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md"
+                  >
+                    Bannerı Ekle
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

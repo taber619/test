@@ -81,13 +81,12 @@ export default function HeroSection({
   const fetchGuestStatus = async () => {
     try {
       let token = localStorage.getItem("inanresim_guest_token");
-      if (!token) {
-        token = "gst_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
-        localStorage.setItem("inanresim_guest_token", token);
-      }
-      const res = await fetch(`/api/guest-status?token=${token}`);
+      const res = await fetch(`/api/guest-status${token ? `?token=${encodeURIComponent(token)}` : ""}`);
       if (res.ok) {
         const data = await res.json();
+        if (data.guestToken) {
+          localStorage.setItem("inanresim_guest_token", data.guestToken);
+        }
         setGuestCount(data.guestUploadCount || 0);
         setGuestMaxCount(data.guestMaxUploadCount ?? 5);
         setGuestMaxMb(data.guestMaxMb ?? 20);
@@ -101,7 +100,7 @@ export default function HeroSection({
     if (!currentUser) {
       fetchGuestStatus();
     }
-  }, [currentUser]);
+  }, [currentUser, isUploading]);
 
   // Image editing & processing options
   const [editingFile, setEditingFile] = useState<SelectedFile | null>(null);
@@ -122,6 +121,8 @@ export default function HeroSection({
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
 
   const hasVideo = selectedFiles.some((x) => x.file.type.startsWith("video/"));
   const hasOnlyVideo = selectedFiles.length > 0 && selectedFiles.every((x) => x.file.type.startsWith("video/"));
@@ -225,13 +226,13 @@ export default function HeroSection({
         break;
       }
 
-      const limitMb = !currentUser ? guestMaxMb : ((siteConfig?.registeredMaxMb ?? 150) || 150);
+      const limitMb = !currentUser ? guestMaxMb : ((siteConfig?.registeredMaxMb ?? 1000) || 1000);
       const isVideo = f.type.startsWith("video/");
       const maxSizeBytes = limitMb * 1024 * 1024;
       
       if (maxSizeBytes > 0 && f.size > maxSizeBytes) {
         if (!currentUser) {
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. Sınırsız yükleme için lütfen ücretsiz kayıt olun!`);
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. 1 GB'a kadar dosya yüklemek ve sınırsız paylaşım yapmak için lütfen ücretsiz üye olun!`);
         } else {
           setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), izin verilen üyelik limitini (${limitMb} MB) aşıyor.`);
         }
@@ -452,7 +453,7 @@ export default function HeroSection({
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
             <span className="text-xs font-extrabold text-emerald-900 dark:text-emerald-300">
-              Kayıtlı Üye ({currentUser.username}): Sınırsız Yükleme Yetkisi ({siteConfig?.registeredMaxMb ? `${siteConfig.registeredMaxMb} MB` : "Sınırsız MB"})
+              Kayıtlı Üye ({currentUser.username}): Üyelik Yükleme Limiti ({siteConfig?.registeredMaxMb ? (siteConfig.registeredMaxMb >= 1000 ? `${(siteConfig.registeredMaxMb / 1000).toFixed(0)} GB` : `${siteConfig.registeredMaxMb} MB`) : "1 GB"})
             </span>
           </div>
           <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-2.5 py-1 rounded-full">
@@ -482,6 +483,24 @@ export default function HeroSection({
         } border-dashed shadow-sm`}
         id="drag-drop-zone"
       >
+        <input
+          type="file"
+          ref={imageInputRef}
+          onChange={handleFileChange}
+          multiple
+          accept="image/*"
+          className="hidden"
+          id="hidden-image-input"
+        />
+        <input
+          type="file"
+          ref={videoInputRef}
+          onChange={handleFileChange}
+          multiple
+          accept="video/*"
+          className="hidden"
+          id="hidden-video-input"
+        />
         <input
           type="file"
           ref={fileInputRef}
@@ -646,33 +665,71 @@ export default function HeroSection({
                 <div className="h-[1px] bg-slate-200 dark:bg-slate-800/80 flex-grow" />
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full relative z-10">
+              {/* Explicit Upload Category Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-2xl relative z-10" id="hero-action-buttons-group">
+                {/* Resim Yükle Button */}
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3.5 rounded-xl font-bold text-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-md shadow-blue-500/20 flex flex-col items-center justify-center gap-1.5 cursor-pointer group"
+                  id="btn-upload-image"
+                >
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    <span>Resim Yükle</span>
+                  </div>
+                  <span className="text-[10px] text-blue-100 font-normal">JPG, PNG, WEBP, GIF</span>
+                </button>
+
+                {/* Video Yükle Button */}
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-3.5 rounded-xl font-bold text-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-md shadow-indigo-500/20 flex flex-col items-center justify-center gap-1.5 cursor-pointer group"
+                  id="btn-upload-video"
+                >
+                  <div className="flex items-center gap-2">
+                    <Video className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    <span>Video Yükle</span>
+                  </div>
+                  <span className="text-[10px] text-indigo-100 font-normal">MP4, WEBM, MOV</span>
+                </button>
+
+                {/* Dosya Yükle Button */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-10 py-4 rounded-xl font-bold text-base transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-blue-500/25 dark:shadow-none flex items-center justify-center gap-2.5 cursor-pointer"
-                  id="btn-select-file"
+                  className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 hover:from-slate-900 hover:to-black text-white px-4 py-3.5 rounded-xl font-bold text-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 shadow-md shadow-slate-900/20 flex flex-col items-center justify-center gap-1.5 cursor-pointer group"
+                  id="btn-upload-file"
                 >
-                  <FolderOpen className="w-5 h-5" />
-                  Dosya Seç
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    <span>Dosya Yükle</span>
+                  </div>
+                  <span className="text-[10px] text-slate-300 font-normal">Toplu Resim / Video</span>
                 </button>
 
+                {/* Kamerayla Çek Button */}
                 <button
                   type="button"
                   onClick={startCamera}
-                  className="w-full sm:w-auto bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-8 py-4 rounded-xl font-bold text-base hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-sm"
+                  className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-4 py-3.5 rounded-xl font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 flex flex-col items-center justify-center gap-1.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-xs group"
                   id="btn-take-cam"
                 >
-                  <Camera className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-                  Kamerayla Çek
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform" />
+                    <span>Kamerayla Çek</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-normal">Canlı Fotoğraf</span>
                 </button>
               </div>
 
               <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider relative z-10">
-                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">JPG, PNG, GIF, WEBP, MP4, WEBM</span>
+                <span className="bg-slate-100 dark:bg-slate-850 px-2.5 py-1 rounded-md">DESTEKLENEN: GÖRSEL, VİDEO & TÜM MEDYA DOSYALARI</span>
                 <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
-                <span className="bg-slate-100 dark:bg-slate-850 px-2 py-1 rounded-md">GÖRSEL: MAKS. 20 MB / VİDEO: MAKS. 100 MB</span>
+                <span className="bg-slate-100 dark:bg-slate-850 px-2.5 py-1 rounded-md">
+                  {!currentUser ? `MİSAFİR: MAX ${guestMaxMb} MB` : `ÜYE LİMİTİ: 1 GB (1000 MB)`}
+                </span>
                 <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
                 <button
                   type="button"

@@ -60,9 +60,9 @@ async function startServer() {
   
   const SERVER_BOOT_TIME = Date.now().toString() + "_" + Math.random().toString(36).substring(2, 9);
 
-  // Enable large file uploads (Hızlı Resim max 20MB per file, max 10 files, video max 100MB)
-  app.use(express.json({ limit: "150mb" }));
-  app.use(express.urlencoded({ limit: "150mb", extended: true }));
+  // Enable large file uploads (Registered users can upload up to 1GB per file)
+  app.use(express.json({ limit: "1500mb" }));
+  app.use(express.urlencoded({ limit: "1500mb", extended: true }));
 
   // In-memory data store (fallback if Firebase is not active)
   const images: Record<string, StoredImage> = {};
@@ -292,6 +292,16 @@ async function startServer() {
   }
 
   // Site configuration interface
+  interface AdBanner {
+    id: string;
+    title: string;
+    imageUrl?: string;
+    htmlCode?: string;
+    targetUrl?: string;
+    position: "header" | "sidebar" | "footer" | "image-page";
+    enabled: boolean;
+  }
+
   interface SiteConfig {
     homepageTitle: string;
     homepageSubtitle: string;
@@ -308,6 +318,11 @@ async function startServer() {
     registeredMaxMb?: number;
     registeredMaxUploadCount?: number;
     requireEmailVerification?: boolean;
+    adsEnabled?: boolean;
+    adsContactEmail?: string;
+    adsContactTelegram?: string;
+    adsContactInfo?: string;
+    adsList?: AdBanner[];
   }
 
   interface ChatMessage {
@@ -470,9 +485,23 @@ async function startServer() {
     miniChatEnabled: true,
     guestMaxMb: 20,
     guestMaxUploadCount: 5,
-    registeredMaxMb: 150,
+    registeredMaxMb: 1000,
     registeredMaxUploadCount: 0,
     requireEmailVerification: true,
+    adsEnabled: true,
+    adsContactEmail: "reklam@inanresim.com",
+    adsContactTelegram: "@inanresim_reklam",
+    adsContactInfo: "Sitemizde banner veya özel sponsorluk reklamı vermek için bizimle e-posta veya Telegram üzerinden iletişime geçebilirsiniz.",
+    adsList: [
+      {
+        id: "ad_1",
+        title: "İnanResim Sponsorlu Reklam Alanı",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&q=80",
+        targetUrl: "mailto:reklam@inanresim.com",
+        position: "header",
+        enabled: true
+      }
+    ]
   };
 
   let siteConfigState = { ...defaultSiteConfig };
@@ -500,6 +529,11 @@ async function startServer() {
             registeredMaxMb: data.registeredMaxMb !== undefined ? Number(data.registeredMaxMb) : defaultSiteConfig.registeredMaxMb,
             registeredMaxUploadCount: data.registeredMaxUploadCount !== undefined ? Number(data.registeredMaxUploadCount) : defaultSiteConfig.registeredMaxUploadCount,
             requireEmailVerification: data.requireEmailVerification !== undefined ? !!data.requireEmailVerification : defaultSiteConfig.requireEmailVerification,
+            adsEnabled: data.adsEnabled !== undefined ? !!data.adsEnabled : defaultSiteConfig.adsEnabled,
+            adsContactEmail: data.adsContactEmail ?? defaultSiteConfig.adsContactEmail,
+            adsContactTelegram: data.adsContactTelegram ?? defaultSiteConfig.adsContactTelegram,
+            adsContactInfo: data.adsContactInfo ?? defaultSiteConfig.adsContactInfo,
+            adsList: data.adsList ?? defaultSiteConfig.adsList,
           };
         }
       } catch (e) {
@@ -1345,6 +1379,25 @@ async function startServer() {
     return null;
   }
 
+  async function dbDeleteAllImages(imagesStore: Record<string, StoredImage>): Promise<number> {
+    const allImages = await dbGetAllImages(imagesStore);
+    let count = 0;
+    for (const img of allImages) {
+      const deleted = await dbDeleteImage(img.id, imagesStore);
+      if (deleted) count++;
+    }
+    return count;
+  }
+
+  async function dbDeleteBatchImages(ids: string[], imagesStore: Record<string, StoredImage>): Promise<number> {
+    let count = 0;
+    for (const id of ids) {
+      const deleted = await dbDeleteImage(id, imagesStore);
+      if (deleted) count++;
+    }
+    return count;
+  }
+
   async function dbRegisterUser(user: StoredUser, usersStore: Record<string, StoredUser>): Promise<boolean> {
     if (useFirebase && db) {
       try {
@@ -1505,6 +1558,59 @@ async function startServer() {
     }
     guestUploadCounts[guestToken] = newCount;
     return newCount;
+  }
+
+  function extractClientIp(req: express.Request): string {
+    const forwarded = req.headers["x-forwarded-for"];
+    let ipStr = "";
+    if (typeof forwarded === "string") {
+      ipStr = forwarded.split(",")[0].trim();
+    } else if (Array.isArray(forwarded)) {
+      ipStr = forwarded[0].trim();
+    } else {
+      ipStr = req.ip || req.socket?.remoteAddress || "127.0.0.1";
+    }
+    return ipStr.replace(/[^a-zA-Z0-9_.-]/g, "_");
+  }
+
+  function extractGuestToken(req: express.Request): string {
+    let token = (req.body && req.body.guestToken) || (req.query && (req.query.token as string));
+    if (!token) {
+      token = req.headers["x-guest-token"] as string;
+    }
+    if (!token && req.headers.cookie) {
+      const match = req.headers.cookie.match(/guest_token=([^;]+)/);
+      if (match) {
+        token = match[1];
+      }
+    }
+    return token || "";
+  }
+
+  async function getEffectiveGuestCount(guestToken: string, ip: string): Promise<number> {
+    let countByToken = 0;
+    if (guestToken) {
+      countByToken = await dbGetGuestUploadCount("tok_" + guestToken);
+      // Also check legacy raw token if present
+      const rawCount = await dbGetGuestUploadCount(guestToken);
+      if (rawCount > countByToken) countByToken = rawCount;
+    }
+    let countByIp = 0;
+    if (ip) {
+      countByIp = await dbGetGuestUploadCount("ip_" + ip);
+    }
+    return Math.max(countByToken, countByIp);
+  }
+
+  async function incrementEffectiveGuestCount(guestToken: string, ip: string): Promise<number> {
+    if (guestToken) {
+      await dbIncrementGuestUploadCount("tok_" + guestToken);
+      await dbIncrementGuestUploadCount(guestToken);
+    }
+    if (ip) {
+      await dbIncrementGuestUploadCount("ip_" + ip);
+    }
+    return await getEffectiveGuestCount(guestToken, ip);
   }
 
   async function dbGetUserUploads(userId: string, imagesStore: Record<string, StoredImage>): Promise<any[]> {
@@ -1697,10 +1803,16 @@ async function startServer() {
   // Guest status check route
   app.get("/api/guest-status", async (req, res) => {
     try {
-      const token = (req.query.token as string) || (req.headers["x-guest-token"] as string) || "guest_anon";
+      const clientIp = extractClientIp(req);
+      let token = extractGuestToken(req);
+      if (!token) {
+        token = "gst_" + generateId(12);
+      }
+      res.setHeader("Set-Cookie", `guest_token=${token}; Path=/; Max-Age=31536000; SameSite=Lax`);
       const config = await dbGetConfig();
-      const count = await dbGetGuestUploadCount(token);
+      const count = await getEffectiveGuestCount(token, clientIp);
       res.json({
+        guestToken: token,
         guestUploadCount: count,
         guestMaxUploadCount: config.guestMaxUploadCount ?? 5,
         guestMaxMb: config.guestMaxMb ?? 20
@@ -1745,7 +1857,7 @@ async function startServer() {
           return;
         }
 
-        const userMaxMb = config.registeredMaxMb ?? 150;
+        const userMaxMb = config.registeredMaxMb ?? 1000;
         if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
           res.status(400).json({ 
             error: `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB) kayıtlı kullanıcı boyut limitini (${userMaxMb} MB) aşıyor.` 
@@ -1764,9 +1876,13 @@ async function startServer() {
           return;
         }
 
-        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
+        const clientIp = extractClientIp(req);
+        let token = extractGuestToken(req);
+        if (!token) {
+          token = "gst_" + generateId(12);
+        }
         const guestMaxCount = config.guestMaxUploadCount ?? 5;
-        const currentCount = await dbGetGuestUploadCount(token);
+        const currentCount = await getEffectiveGuestCount(token, clientIp);
 
         if (currentCount >= guestMaxCount) {
           res.status(400).json({ 
@@ -1811,8 +1927,11 @@ async function startServer() {
       await dbSaveImage(img, base64Data, images);
 
       if (!userId) {
-        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
-        await dbIncrementGuestUploadCount(token);
+        const clientIp = extractClientIp(req);
+        let token = extractGuestToken(req);
+        if (!token) token = "gst_" + generateId(12);
+        await incrementEffectiveGuestCount(token, clientIp);
+        res.setHeader("Set-Cookie", `guest_token=${token}; Path=/; Max-Age=31536000; SameSite=Lax`);
       }
 
       res.status(200).json({
@@ -1859,9 +1978,13 @@ async function startServer() {
           return;
         }
       } else {
-        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
+        const clientIp = extractClientIp(req);
+        let token = extractGuestToken(req);
+        if (!token) {
+          token = "gst_" + generateId(12);
+        }
         const guestMaxCount = config.guestMaxUploadCount ?? 5;
-        const currentCount = await dbGetGuestUploadCount(token);
+        const currentCount = await getEffectiveGuestCount(token, clientIp);
 
         if (currentCount >= guestMaxCount) {
           res.status(400).json({ 
@@ -1889,7 +2012,7 @@ async function startServer() {
       }
 
       if (userId) {
-        const userMaxMb = config.registeredMaxMb ?? 150;
+        const userMaxMb = config.registeredMaxMb ?? 1000;
         if (userMaxMb > 0 && buffer.length > userMaxMb * 1024 * 1024) {
           res.status(400).json({ error: `İndirilen dosya (${(buffer.length / (1024 * 1024)).toFixed(1)} MB) kullanıcı limitini (${userMaxMb} MB) aşmaktadır!` });
           return;
@@ -1938,8 +2061,11 @@ async function startServer() {
       await dbSaveImage(img, buffer.toString("base64"), images);
 
       if (!userId) {
-        const token = guestToken || (req.headers["x-guest-token"] as string) || "guest_anon";
-        await dbIncrementGuestUploadCount(token);
+        const clientIp = extractClientIp(req);
+        let token = extractGuestToken(req);
+        if (!token) token = "gst_" + generateId(12);
+        await incrementEffectiveGuestCount(token, clientIp);
+        res.setHeader("Set-Cookie", `guest_token=${token}; Path=/; Max-Age=31536000; SameSite=Lax`);
       }
 
       res.status(200).json({
@@ -3176,7 +3302,12 @@ async function startServer() {
         guestMaxUploadCount,
         registeredMaxMb,
         registeredMaxUploadCount,
-        requireEmailVerification
+        requireEmailVerification,
+        adsEnabled,
+        adsContactEmail,
+        adsContactTelegram,
+        adsContactInfo,
+        adsList
       } = req.body;
 
       const updated = await dbSaveConfig({
@@ -3194,7 +3325,12 @@ async function startServer() {
         guestMaxUploadCount: guestMaxUploadCount !== undefined ? Number(guestMaxUploadCount) : undefined,
         registeredMaxMb: registeredMaxMb !== undefined ? Number(registeredMaxMb) : undefined,
         registeredMaxUploadCount: registeredMaxUploadCount !== undefined ? Number(registeredMaxUploadCount) : undefined,
-        requireEmailVerification: requireEmailVerification !== undefined ? !!requireEmailVerification : undefined
+        requireEmailVerification: requireEmailVerification !== undefined ? !!requireEmailVerification : undefined,
+        adsEnabled: adsEnabled !== undefined ? !!adsEnabled : undefined,
+        adsContactEmail,
+        adsContactTelegram,
+        adsContactInfo,
+        adsList
       });
 
       res.json({ success: true, config: updated });
@@ -3342,7 +3478,33 @@ async function startServer() {
     }
   });
 
-  // Admin delete image
+  // Admin delete ALL images
+  app.delete("/api/admin/images/delete-all", async (req, res) => {
+    try {
+      const count = await dbDeleteAllImages(images);
+      res.json({ success: true, count, message: `${count} adet görsel sistemden tamamen silindi.` });
+    } catch (err) {
+      console.error("Admin delete all images error:", err);
+      res.status(500).json({ error: "Görseller silinirken hata oluştu." });
+    }
+  });
+
+  // Admin batch delete selected images
+  app.post("/api/admin/images/batch-delete", async (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "Silinecek geçerli görsel ID listesi girilmedi." });
+    }
+    try {
+      const count = await dbDeleteBatchImages(ids, images);
+      res.json({ success: true, count, message: `${count} adet görsel silindi.` });
+    } catch (err) {
+      console.error("Admin batch delete images error:", err);
+      res.status(500).json({ error: "Görseller silinirken hata oluştu." });
+    }
+  });
+
+  // Admin delete single image
   app.delete("/api/admin/images/:id", async (req, res) => {
     const { id } = req.params;
     try {
