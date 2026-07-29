@@ -176,11 +176,21 @@ export default function App() {
       const id = params.get("id");
       const adminParam = params.get("admin");
 
+      // Support path-based short routes (/i/XYZ, /d/XYZ, /download/XYZ, /v/XYZ)
+      const pathname = window.location.pathname;
+      let pathId: string | null = null;
+      const pathParts = pathname.split("/").filter(Boolean);
+      if (pathParts.length >= 2 && ["i", "d", "download", "v"].includes(pathParts[0])) {
+        pathId = pathParts[1];
+      }
+
+      const activeDetailId = id || pathId;
+
       if (adminParam === "true" || view === "admin") {
         localStorage.setItem("inanresim_admin_visible", "true");
         setActiveTab("admin");
-      } else if (view === "image-detail" && id) {
-        setSelectedDetailId(id);
+      } else if ((view === "image-detail" || pathId) && activeDetailId) {
+        setSelectedDetailId(activeDetailId);
         setActiveTab("image-detail");
       } else {
         // Fallback default

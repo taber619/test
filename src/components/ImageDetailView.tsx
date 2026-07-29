@@ -1,5 +1,29 @@
 import React, { useEffect, useState } from "react";
-import { Download, Eye, Calendar, HardDrive, ShieldAlert, Key, Copy, Check, ArrowLeft, ExternalLink, Lock, QrCode, Archive } from "lucide-react";
+import { 
+  DownloadCloud, 
+  Download, 
+  Eye, 
+  Calendar, 
+  HardDrive, 
+  ShieldAlert, 
+  ShieldCheck, 
+  Copy, 
+  Check, 
+  ArrowLeft, 
+  ExternalLink, 
+  Lock, 
+  QrCode, 
+  Archive, 
+  ListOrdered, 
+  CheckCircle2, 
+  Share2, 
+  FileText, 
+  Zap, 
+  RefreshCw, 
+  HelpCircle,
+  Clock,
+  Sparkles
+} from "lucide-react";
 import { ClientImage } from "../types";
 import QRCodeShareModal from "./QRCodeShareModal";
 
@@ -33,24 +57,25 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"direct" | "preview" | "bbcode" | "html" | "markdown">("direct");
   const [showQrModal, setShowQrModal] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   const loadMetadata = () => {
     setLoading(true);
     setError(null);
     fetch(`/api/images/${imageId}/info`)
       .then((res) => {
-        if (!res.ok) throw new Error("Görsel bulunamadı.");
+        if (!res.ok) throw new Error("Görsel veya dosya bulunamadı.");
         return res.json();
       })
       .then((data) => {
         setMeta(data);
         if (!data.hasPassword) {
-          // If not password-protected, the image source is just the standard endpoint
           setVerifiedDataUrl(`/api/images/${imageId}`);
         }
       })
       .catch((err) => {
-        setError(err.message || "Görsel yüklenirken bir hata oluştu.");
+        setError(err.message || "Dosya detayları yüklenirken bir hata oluştu.");
       })
       .finally(() => {
         setLoading(false);
@@ -74,7 +99,6 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
       if (!res.ok) {
         throw new Error(data.error || "Şifre doğrulanamadı.");
       }
-      // Success!
       setVerifiedDataUrl(data.dataUrl);
     } catch (err: any) {
       setError(err.message || "Hatalı şifre!");
@@ -90,7 +114,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   const formatSize = (bytes: number) => {
     if (!bytes) return "0 B";
     const k = 1024;
-    const sizes = ["B", "KB", "MB"];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
@@ -106,11 +130,31 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
     });
   };
 
+  const triggerDownload = () => {
+    if (!verifiedDataUrl) return;
+    setIsDownloading(true);
+    setDownloadSuccess(true);
+
+    const link = document.createElement("a");
+    link.href = verifiedDataUrl;
+    link.download = meta?.name || "dosya";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+      setIsDownloading(false);
+    }, 1500);
+    setTimeout(() => {
+      setDownloadSuccess(false);
+    }, 4000);
+  };
+
   if (loading) {
     return (
-      <div className="text-center py-24" id="detail-loading-state">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
-        <p className="text-slate-400 text-sm mt-4 font-bold">Dosya detayları alınıyor...</p>
+      <div className="text-center py-28" id="detail-loading-state">
+        <div className="animate-spin rounded-full h-14 w-14 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+        <p className="text-slate-400 text-sm mt-4 font-bold">Güvenli Dosya İndirme Sayfası Hazırlanıyor...</p>
       </div>
     );
   }
@@ -118,16 +162,16 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   if (error && !meta) {
     return (
       <div className="max-w-md mx-auto text-center py-20 px-4 animate-fade-in" id="detail-error-state">
-        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-4">
+        <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-red-500/20">
           <ShieldAlert className="w-8 h-8" />
         </div>
-        <h3 className="text-xl font-bold text-slate-800">Dosya Bulunamadı veya Silindi</h3>
-        <p className="text-slate-500 text-sm mt-2">
+        <h3 className="text-xl font-bold text-slate-800 dark:text-white">Dosya Bulunamadı veya Silindi</h3>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">
           Aradığınız dosya otomatik silinme süresi dolduğu için veya sahibi tarafından silinmiş olabilir.
         </p>
         <button
           onClick={onBack}
-          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all cursor-pointer"
+          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all cursor-pointer shadow-md shadow-blue-500/20"
         >
           <ArrowLeft className="w-4 h-4" />
           Ana Sayfaya Dön
@@ -137,11 +181,12 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   }
 
   const isVideo = meta?.mimeType?.startsWith("video/");
+  const isImage = meta?.mimeType?.startsWith("image/");
 
-  // Generate codes
   const origin = window.location.origin;
   const directLink = `${origin}/api/images/${imageId}`;
   const previewLink = `${origin}/?view=image-detail&id=${imageId}`;
+  const shortLink = `${origin}/d/${imageId}`;
   const bbCode = isVideo ? `[VIDEO]${directLink}[/VIDEO]` : `[IMG]${directLink}[/IMG]`;
   const htmlCode = isVideo 
     ? `<video src="${directLink}" controls width="100%"></video>` 
@@ -155,7 +200,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
       case "direct":
         return directLink;
       case "preview":
-        return previewLink;
+        return shortLink;
       case "bbcode":
         return bbCode;
       case "html":
@@ -165,25 +210,23 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
     }
   };
 
-  // If password is required and not yet verified
+  // Password Screen
   if (meta?.hasPassword && !verifiedDataUrl) {
     return (
       <div className="max-w-md mx-auto my-16 px-4 animate-fade-in" id="detail-lock-screen">
-        <div className="bg-white border border-slate-100 rounded-3xl p-8 shadow-sm text-center">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-6 h-6" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-xl text-center relative overflow-hidden">
+          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-900/40">
+            <Lock className="w-8 h-8" />
           </div>
-          <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">
-            {isVideo ? "Bu Video Şifrelenmiştir" : "Bu Görsel Şifrelenmiştir"}
+          <h3 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">
+            Şifre Korumalı Dosya
           </h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
-            {isVideo 
-              ? "Bu videoyu izlemek ve paylaşım kodlarını açmak için yükleyicinin belirlediği şifreyi girmelisiniz." 
-              : "Bu görseli görüntülemek ve paylaşım kodlarını açmak için yükleyicinin belirlediği şifreyi girmelisiniz."}
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-xs mx-auto leading-relaxed">
+            Bu dosyayı indirmek ve görüntülemek için yükleyici tarafından belirlenen şifreyi girmelisiniz.
           </p>
 
           {error && (
-            <div className="mt-4 p-3 bg-red-50 text-red-600 text-xs font-semibold rounded-xl border border-red-100">
+            <div className="mt-4 p-3 bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold rounded-xl border border-red-500/20">
               {error}
             </div>
           )}
@@ -191,24 +234,24 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
           <form onSubmit={handleVerifyPassword} className="mt-6 space-y-4">
             <input
               type="password"
-              placeholder="Şifreyi giriniz..."
+              placeholder="Dosya şifresini giriniz..."
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full text-sm bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-white"
             />
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer text-sm shadow-md shadow-blue-100"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl transition-all cursor-pointer text-sm shadow-lg shadow-blue-500/25"
             >
-              {isVideo ? "Doğrula ve Videoyu Göster" : "Doğrula ve Görseli Göster"}
+              Şifreyi Doğrula ve İndir
             </button>
           </form>
 
           <button
             onClick={onBack}
-            className="mt-4 text-xs text-slate-400 font-semibold hover:text-slate-600 cursor-pointer"
+            className="mt-5 text-xs text-slate-400 font-semibold hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer transition-colors"
           >
-            ← İptal Et ve Geri Dön
+            ← Ana Sayfaya Dön
           </button>
         </div>
       </div>
@@ -216,201 +259,246 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10 animate-fade-in" id="detail-view-panel">
-      {/* Back navigation header */}
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+    <div className="max-w-5xl mx-auto px-4 py-8 animate-fade-in" id="file-download-portal">
+      {/* Top Navigation & Status Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white font-bold text-sm cursor-pointer transition-colors"
+          className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 font-bold text-sm cursor-pointer transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Geri Dön
+          <span>Ana Sayfaya Dön</span>
         </button>
 
-        <span className="text-xs bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-extrabold px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/40">
-          {meta?.mimeType?.startsWith("video/") ? "Aktif Video" : meta?.mimeType?.startsWith("image/") ? "Aktif Görsel" : "Aktif Dosya / Arşiv"}
-        </span>
+        <div className="flex items-center gap-2 text-xs font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-3.5 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800/40 shadow-sm">
+          <ShieldCheck className="w-4 h-4" />
+          <span>Güvenli SSL Bulut İndirme Sunucusu</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left column: Visual display & info */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-4 shadow-sm relative flex items-center justify-center min-h-[300px] max-h-[550px] w-full">
-            {meta?.mimeType?.startsWith("video/") ? (
-              <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-2xl">
-                <video
-                  src={verifiedDataUrl || ""}
-                  controls
-                  autoPlay
-                  className="max-h-[510px] w-full rounded-2xl object-contain"
-                />
-                {meta?.watermarkText && (
-                  <div 
-                    className="absolute pointer-events-none select-none font-extrabold tracking-wide px-3 py-1.5 rounded-lg bg-black/20 backdrop-blur-[0.5px] z-10"
-                    style={{
-                      opacity: meta.watermarkOpacity !== undefined ? meta.watermarkOpacity : 0.6,
-                      color: meta.watermarkColor || "#ffffff",
-                      fontSize: meta.watermarkSize ? `${Math.max(12, Math.round(400 * meta.watermarkSize))}px` : "16px",
-                      textShadow: "0px 2px 4px rgba(0,0,0,0.9), 0px 0px 8px rgba(0,0,0,0.7)",
-                      ...(() => {
-                        const pos = meta.watermarkPosition || "bottom-right";
-                        if (pos === "bottom-left") return { bottom: "52px", left: "24px" };
-                        if (pos === "top-right") return { top: "24px", right: "24px" };
-                        if (pos === "top-left") return { top: "24px", left: "24px" };
-                        if (pos === "center") return { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
-                        return { bottom: "52px", right: "24px" }; // bottom-right
-                      })()
-                    }}
-                  >
-                    {meta.watermarkText}
-                  </div>
+      <div className="space-y-6">
+        {/* Main Download Portal Card */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+          {/* Subtle decorative glow */}
+          <div className="absolute -top-24 -right-24 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+          {/* File Header Info */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
+                {isVideo ? (
+                  <Zap className="w-6 h-6" />
+                ) : isImage ? (
+                  <Sparkles className="w-6 h-6" />
+                ) : (
+                  <Archive className="w-6 h-6" />
                 )}
               </div>
-            ) : meta?.mimeType?.startsWith("image/") ? (
+              <div className="min-w-0">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white tracking-tight truncate" title={meta?.name}>
+                  {meta?.name}
+                </h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5 flex items-center gap-2">
+                  <span>{formatSize(meta?.size || 0)}</span>
+                  <span>•</span>
+                  <span>{formatDate(meta?.uploadedAt || 0)}</span>
+                  <span>•</span>
+                  <span className="text-blue-600 dark:text-blue-400 font-extrabold">{meta?.views} indirme/görüntülenme</span>
+                </p>
+              </div>
+            </div>
+
+            <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl border border-slate-200 dark:border-slate-700">
+              {isImage ? "Görsel Dosyası" : isVideo ? "Video Medyası" : "Arşiv / Dosya"}
+            </span>
+          </div>
+
+          {/* Preview Box */}
+          <div className="mb-8 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 p-4 flex items-center justify-center min-h-[220px] max-h-[480px] overflow-hidden relative">
+            {isVideo ? (
+              <video
+                src={verifiedDataUrl || ""}
+                controls
+                className="max-h-[440px] w-full rounded-xl object-contain"
+              />
+            ) : isImage ? (
               <img
                 src={verifiedDataUrl || ""}
                 alt={meta?.name}
-                className="max-h-[510px] w-auto rounded-2xl object-contain"
+                className="max-h-[440px] w-auto rounded-xl object-contain shadow-sm"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-full h-full min-h-[250px] bg-slate-900 rounded-2xl flex flex-col items-center justify-center p-6 text-white text-center">
-                <Archive className="w-16 h-16 text-amber-400 mb-3 animate-pulse" />
-                <h3 className="text-lg font-black text-amber-300 mb-1">{meta?.name}</h3>
-                <p className="text-xs text-slate-400 mb-4">{meta?.size ? `${(meta.size / (1024 * 1024)).toFixed(2)} MB` : ""}</p>
-                <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  {meta?.name?.split('.').pop()?.toUpperCase() || "DOSYA"} ARŞİVİ
-                </span>
+              <div className="text-center py-8">
+                <Archive className="w-16 h-16 text-blue-500 mx-auto mb-3 animate-pulse" />
+                <h4 className="text-base font-black text-slate-800 dark:text-white">{meta?.name}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{formatSize(meta?.size || 0)} • Yüksek Hızlı Dosya İndirme</p>
               </div>
             )}
           </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-4">
-            <a
-              href={verifiedDataUrl || ""}
-              download={meta?.name || (meta?.mimeType?.startsWith("video/") ? "video.mp4" : meta?.mimeType?.startsWith("image/") ? "gorsel.jpg" : "dosya")}
-              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-2xl shadow-md shadow-blue-500/20 transition-all cursor-pointer text-sm"
+          {/* Prominent Blue Download Button Section (Exact match to sample image request) */}
+          <div className="flex flex-col items-center justify-center py-4 space-y-4">
+            <button
+              type="button"
+              onClick={triggerDownload}
+              disabled={isDownloading}
+              className="w-full sm:w-auto min-w-[280px] sm:min-w-[360px] bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-4 sm:py-5 px-8 sm:px-12 rounded-2xl sm:rounded-3xl shadow-xl shadow-blue-600/30 hover:shadow-2xl hover:shadow-blue-600/40 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 sm:gap-4 text-lg sm:text-xl group"
+              id="btn-main-download"
             >
-              <Download className="w-4 h-4" />
-              {meta?.mimeType?.startsWith("video/") ? "Videoyu İndir" : meta?.mimeType?.startsWith("image/") ? "Görseli İndir" : "Dosyayı İndir"}
-            </a>
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white/20 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                <DownloadCloud className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              <span className="tracking-wide">
+                {isDownloading ? "İndirme Başlatılıyor..." : "Dosyayı indir"}
+              </span>
+            </button>
 
-            <a
-              href={verifiedDataUrl || ""}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold py-3 px-5 rounded-2xl transition-all cursor-pointer text-sm"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Aç
-            </a>
+            {downloadSuccess && (
+              <div className="flex items-center gap-2 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-4 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800/40 animate-bounce">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>İndirme başlatıldı! Dosyanız cihazınıza kaydediliyor.</span>
+              </div>
+            )}
+
+            {/* Direct Mirror Download Option */}
+            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
+              <span>İndirme otomatik başlamadıysa:</span>
+              <a
+                href={verifiedDataUrl || ""}
+                download={meta?.name || "dosya"}
+                className="text-blue-600 dark:text-blue-400 font-extrabold hover:underline flex items-center gap-1"
+              >
+                <span>Doğrudan İndirme Bağlantısı</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </div>
         </div>
 
-        {/* Right column: metadata and code links */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* Metadata Card */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-            <h3 className="font-extrabold text-slate-800 dark:text-white text-lg mb-4 truncate" title={meta?.name}>
-              {meta?.name}
+        {/* "Dosya Nasıl İndirilir?" Card (Direct match to reference image) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm">
+          <div className="flex items-center gap-3 pb-4 mb-5 border-b border-slate-100 dark:border-slate-800">
+            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center font-black shrink-0 border border-blue-100 dark:border-blue-900/40">
+              <ListOrdered className="w-5 h-5" />
+            </div>
+            <h3 className="text-lg sm:text-xl font-black text-slate-800 dark:text-white tracking-tight">
+              Dosya Nasıl İndirilir?
             </h3>
+          </div>
 
-            <div className="space-y-3.5 text-xs text-slate-500 dark:text-slate-400 font-semibold" id="meta-details-list">
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                  Yükleme Tarihi:
-                </span>
-                <span className="text-slate-800 dark:text-slate-200">{formatDate(meta?.uploadedAt || 0)}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-start gap-3.5">
+              <span className="w-7 h-7 bg-blue-600 text-white font-black text-xs rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                1
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">"Dosyayı İndir" Butonuna Basın</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Yukarıda yer alan mavi renkli <strong>Dosyayı indir</strong> butonuna tıklayarak indirme işlemini başlatın.
+                </p>
               </div>
+            </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                  Dosya Boyutu:
-                </span>
-                <span className="text-slate-800 dark:text-slate-200">{formatSize(meta?.size || 0)}</span>
+            <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-start gap-3.5">
+              <span className="w-7 h-7 bg-blue-600 text-white font-black text-xs rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                2
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">Otomatik İndirme Onayı</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Cihazınız veya tarayıcınız indirme konumu seçmenizi isteyebilir. Onay verdikten sonra indirme doğrudan başlar.
+                </p>
               </div>
+            </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                  İzlenme Sayısı:
-                </span>
-                <span className="text-slate-800 dark:text-slate-200 font-black text-blue-600 dark:text-blue-400">{meta?.views}</span>
+            <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-start gap-3.5">
+              <span className="w-7 h-7 bg-blue-600 text-white font-black text-xs rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                3
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">Yüksek Hızlı & SSL Güvenlikli</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Dosyanız virüs taramasından geçmiş SSL şifreli yüksek hızlı bulut sunucularımızdan doğrudan aktarılır.
+                </p>
               </div>
+            </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="flex items-center gap-2">
-                  <ClockIcon className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                  Otomatik Silinme:
-                </span>
-                <span className="text-slate-800 dark:text-slate-200 capitalize">
-                  {meta?.deleteAfter === "never" ? "Süresiz" : meta?.deleteAfter}
-                </span>
+            <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl flex items-start gap-3.5">
+              <span className="w-7 h-7 bg-blue-600 text-white font-black text-xs rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                4
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">Sorun Mu Yaşıyorsunuz?</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  İndirme başlamadıysa sayfayı yenileyip tekrar deneyebilir veya <strong>"Doğrudan İndirme Bağlantısı"</strong> alanına tıklayabilirsiniz.
+                </p>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Share links */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 shadow-sm flex-1">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                {meta?.mimeType?.startsWith("video/") ? "Video Paylaşım Kodları" : "Görsel Paylaşım Kodları"}
-              </span>
+        {/* Share Links & Embedding Codes Panel */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-base font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>Dosya Paylaşım & Bağlantı Kodları</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Forumlar, web siteleri ve sosyal medya için paylaşım linkleri.</p>
+            </div>
 
+            <button
+              type="button"
+              onClick={() => setShowQrModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer hover:scale-105"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>QR Kod & Paylaş</span>
+            </button>
+          </div>
+
+          {/* Link Selector Tabs */}
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {[
+              { id: "direct", label: "Doğrudan İndirme" },
+              { id: "preview", label: "İndirme Sayfası Linki" },
+              { id: "bbcode", label: "Forum (BBCode)" },
+              { id: "html", label: "HTML Kodu" },
+              { id: "markdown", label: "Markdown" },
+            ].map((tab) => (
               <button
-                type="button"
-                onClick={() => setShowQrModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer hover:scale-105 active:scale-95"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-3 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                  activeTab === tab.id
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
               >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>QR & Sosyal Paylaş</span>
+                {tab.label}
               </button>
-            </div>
+            ))}
+          </div>
 
-            {/* Link Selector Tabs */}
-            <div className="flex flex-wrap gap-1 mt-3 border-b border-slate-100 dark:border-slate-800 pb-2">
-              {[
-                { id: "direct", label: "Doğrudan" },
-                { id: "preview", label: "Önizleme" },
-                { id: "bbcode", label: "BBCode" },
-                { id: "html", label: "HTML" },
-                { id: "markdown", label: "Markdown" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    activeTab === tab.id
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+          {/* Links Output Box */}
+          <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 relative min-h-[90px] flex items-center justify-between gap-4">
+            <pre className="text-xs font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all pr-12 leading-relaxed max-h-[100px] overflow-y-auto">
+              {getLinkValue()}
+            </pre>
 
-            {/* Links output box */}
-            <div className="mt-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 relative min-h-[100px]">
-              <pre className="text-xs font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-all pr-12 leading-relaxed max-h-[120px] overflow-y-auto">
-                {getLinkValue()}
-              </pre>
-
-              <button
-                onClick={() => handleCopy(getLinkValue(), activeTab)}
-                className="absolute right-3 top-3 p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:shadow-sm transition-all cursor-pointer"
-                title="Kopyala"
-              >
-                {copiedIndex === activeTab ? (
-                  <Check className="w-4 h-4 text-emerald-500" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </button>
-            </div>
+            <button
+              onClick={() => handleCopy(getLinkValue(), activeTab)}
+              className="absolute right-3 top-3.5 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:shadow-sm transition-all cursor-pointer"
+              title="Kopyala"
+            >
+              {copiedIndex === activeTab ? (
+                <Check className="w-4 h-4 text-emerald-500" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -419,31 +507,11 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
         <QRCodeShareModal
           isOpen={showQrModal}
           onClose={() => setShowQrModal(false)}
-          imageUrl={`${window.location.origin}/uploads/${meta.id}`}
-          previewUrl={`${window.location.origin}/i/${meta.id}`}
+          imageUrl={`${origin}/api/images/${meta.id}`}
+          previewUrl={`${origin}/d/${meta.id}`}
           title={meta.name}
         />
       )}
     </div>
-  );
-}
-
-// Inline fallback Clock Icon to stay compact and modular without loading too many extra icons
-function ClockIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="24"
-      height="24"
-      stroke="currentColor"
-      strokeWidth="2"
-      fill="none"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
   );
 }

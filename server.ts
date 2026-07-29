@@ -2830,6 +2830,12 @@ async function startServer() {
     }
   });
 
+  // Short URL redirects for share links: /i/:id, /d/:id, /download/:id, /v/:id
+  app.get(["/i/:id", "/d/:id", "/download/:id", "/v/:id"], (req, res) => {
+    const { id } = req.params;
+    res.redirect(`/?view=image-detail&id=${id}`);
+  });
+
   // Get Image Information (Excluding raw base64 data and password)
   app.get("/api/images/:id/info", async (req, res) => {
     const { id } = req.params;
