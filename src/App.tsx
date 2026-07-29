@@ -20,59 +20,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">(
-    () => (localStorage.getItem("theme") as "light" | "dark") || "light"
-  );
-
-  const playThemeSound = (currentTheme: "light" | "dark") => {
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      
-      if (currentTheme === "dark") {
-        // Soft descending warm nighttime sweep
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(320, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.35);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      } else {
-        // Bright ascending cheerful morning beep
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(180, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.25);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.25);
-      }
-    } catch (err) {
-      console.warn("Could not play theme sound", err);
-    }
-  };
-
-  const toggleTheme = () => {
-    const nextTheme = theme === "light" ? "dark" : "light";
-    setTheme(nextTheme);
-    localStorage.setItem("theme", nextTheme);
-    playThemeSound(nextTheme);
-  };
+  const [theme] = useState<"dark">("dark");
 
   useEffect(() => {
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [theme]);
+    document.documentElement.classList.add("dark");
+  }, []);
 
   // Live reload version checking states
   const initialAppVersionRef = React.useRef<string | null>(null);
@@ -724,12 +676,12 @@ export default function App() {
         </section>
 
         {/* 3-Step Guide */}
-        <section className="py-16 bg-white" id="landing-guide">
+        <section className="py-16 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800/80" id="landing-guide">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <span className="text-xs font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3.5 py-1.5 rounded-full">
+            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/60 px-3.5 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800/40">
               Hızlı Başlangıç Rehberi
             </span>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight mt-4">
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-4">
               Sadece 3 Adımda Resimlerinizi Paylaşın
             </h2>
 
@@ -752,11 +704,11 @@ export default function App() {
                 },
               ].map((step, idx) => (
                 <div key={idx} className="relative flex flex-col items-center">
-                  <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-lg shadow-blue-100 mb-4 z-10">
+                  <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-lg shadow-blue-500/20 mb-4 z-10">
                     {step.num}
                   </div>
-                  <h3 className="font-bold text-slate-800 text-base mt-2">{step.title}</h3>
-                  <p className="text-xs text-slate-400 max-w-xs mt-2 leading-relaxed">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base mt-2">{step.title}</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 font-medium max-w-xs mt-2 leading-relaxed">
                     {step.desc}
                   </p>
                 </div>
@@ -926,15 +878,14 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen max-w-full overflow-x-hidden flex flex-col font-sans transition-colors duration-300 ${theme === "dark" ? "dark bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`} id="app-root-container">
+    <div className="min-h-screen max-w-full overflow-x-hidden flex flex-col font-sans dark bg-slate-950 text-slate-100" id="app-root-container">
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
         onLogout={handleLogout}
-        theme={theme}
-        onToggleTheme={toggleTheme}
+        theme="dark"
       />
 
       {/* Header Ad Banners */}
@@ -961,7 +912,7 @@ export default function App() {
       )}
 
       {/* Main Container Workspace */}
-      <main className="flex-grow bg-slate-50/30">
+      <main className="flex-grow bg-slate-50/50 dark:bg-slate-950">
         {renderContent()}
       </main>
 

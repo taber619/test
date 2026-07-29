@@ -20,8 +20,8 @@ interface NavbarProps {
   setActiveTab: (tab: ActiveTab) => void;
   currentUser: ClientUser | null;
   onLogout: () => void;
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
+  theme?: "light" | "dark";
+  onToggleTheme?: () => void;
 }
 
 export default function Navbar({ 
@@ -29,7 +29,7 @@ export default function Navbar({
   setActiveTab, 
   currentUser, 
   onLogout, 
-  theme, 
+  theme = "dark", 
   onToggleTheme 
 }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -106,7 +106,7 @@ export default function Navbar({
           <span className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-none">
             inanresim<span className="text-blue-600 dark:text-blue-400">.com</span>
           </span>
-          <span className="text-[9px] text-slate-400 font-extrabold tracking-widest uppercase mt-0.5">
+          <span className="text-[9px] text-slate-500 dark:text-slate-400 font-extrabold tracking-widest uppercase mt-0.5">
             HIZLI RESİM PAYLAŞIMI
           </span>
         </div>
@@ -120,27 +120,10 @@ export default function Navbar({
           className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 cursor-pointer ${
             activeTab === "home" || activeTab === "url-upload" || activeTab === "image-detail"
               ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-              : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/60 hover:text-slate-900 dark:hover:text-slate-100"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900/60 hover:text-slate-900 dark:hover:text-slate-100"
           }`}
         >
           Ana Sayfa
-        </button>
-
-        {/* Separator */}
-        <div className="h-5 w-px bg-slate-200/80 dark:bg-slate-800 mx-1 sm:mx-2"></div>
-
-        {/* Theme Toggle Button */}
-        <button
-          id="nav-btn-theme-toggle"
-          onClick={onToggleTheme}
-          title={theme === "light" ? "Gece Moduna Geç" : "Gündüz Moduna Geç"}
-          className="p-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-900/60 rounded-xl transition-all cursor-pointer flex items-center justify-center"
-        >
-          {theme === "light" ? (
-            <Moon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-slate-600" />
-          ) : (
-            <Sun className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400 animate-pulse" />
-          )}
         </button>
 
         {/* User Auth Status Area */}

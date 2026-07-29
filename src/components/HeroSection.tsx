@@ -630,42 +630,42 @@ export default function HeroSection({
 
               {/* Core Feature Benefits Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-2xl mb-8 relative z-10">
-                <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
+                <div className="bg-white/90 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-xs">
                   <div className="p-2 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
                     <Zap className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="text-xs font-black text-slate-800 dark:text-white block">WebP Sıkıştırma</span>
-                    <span className="text-[10px] text-slate-400 block leading-tight">Otomatik boyut optimizasyonu</span>
+                    <span className="text-xs font-black text-slate-900 dark:text-white block">WebP Sıkıştırma</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block leading-tight">Otomatik boyut optimizasyonu</span>
                   </div>
                 </div>
 
-                <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
+                <div className="bg-white/90 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-xs">
                   <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-xl shrink-0">
                     <Shield className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="text-xs font-black text-slate-800 dark:text-white block">EXIF Gizliliği</span>
-                    <span className="text-[10px] text-slate-400 block leading-tight">Kamera ve konum verisini temizleme</span>
+                    <span className="text-xs font-black text-slate-900 dark:text-white block">EXIF Gizliliği</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block leading-tight">Kamera ve konum verisini temizleme</span>
                   </div>
                 </div>
 
-                <div className="bg-white/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-sm">
+                <div className="bg-white/90 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 p-3 rounded-2xl flex items-center gap-3 text-left shadow-xs">
                   <div className="p-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-xl shrink-0">
                     <Clock className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="text-xs font-black text-slate-800 dark:text-white block">Otomatik Silinme</span>
-                    <span className="text-[10px] text-slate-400 block leading-tight">İstediğiniz sürede kendi kendini silme</span>
+                    <span className="text-xs font-black text-slate-900 dark:text-white block">Otomatik Silinme</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block leading-tight">İstediğiniz sürede kendi kendini silme</span>
                   </div>
                 </div>
               </div>
 
               {/* Divider element */}
               <div className="flex items-center gap-4 w-full max-w-md mb-8 relative z-10">
-                <div className="h-[1px] bg-slate-200 dark:bg-slate-800/80 flex-grow" />
-                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">veya</span>
-                <div className="h-[1px] bg-slate-200 dark:bg-slate-800/80 flex-grow" />
+                <div className="h-[1px] bg-slate-300 dark:bg-slate-800/80 flex-grow" />
+                <span className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">veya</span>
+                <div className="h-[1px] bg-slate-300 dark:bg-slate-800/80 flex-grow" />
               </div>
 
               {/* Explicit Upload Category Action Buttons */}
@@ -723,14 +723,14 @@ export default function HeroSection({
                     <Camera className="w-5 h-5 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform" />
                     <span>Kamerayla Çek</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-normal">Canlı Fotoğraf</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Canlı Fotoğraf</span>
                 </button>
               </div>
 
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider relative z-10">
-                <span className="bg-slate-100 dark:bg-slate-850 px-2.5 py-1 rounded-md">DESTEKLENEN: GÖRSEL, VİDEO & TÜM MEDYA DOSYALARI</span>
-                <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
-                <span className="bg-slate-100 dark:bg-slate-850 px-2.5 py-1 rounded-md">
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 text-[11px] text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider relative z-10">
+                <span className="bg-slate-200/70 dark:bg-slate-800/80 px-2.5 py-1 rounded-md text-slate-700 dark:text-slate-300">DESTEKLENEN: GÖRSEL, VİDEO & TÜM MEDYA DOSYALARI</span>
+                <div className="h-1.5 w-1.5 bg-slate-400 dark:bg-slate-700 rounded-full hidden sm:block"></div>
+                <span className="bg-slate-200/70 dark:bg-slate-800/80 px-2.5 py-1 rounded-md text-slate-700 dark:text-slate-300">
                   {!currentUser ? `MİSAFİR: MAX ${guestMaxMb} MB` : `ÜYE LİMİTİ: 1 GB (1000 MB)`}
                 </span>
                 <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>

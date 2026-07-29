@@ -217,7 +217,7 @@ export default function AdBannerSection({
       <div className={`w-full bg-slate-900 border-t border-slate-800 py-4 px-4 text-white ${className}`}>
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           {activeAds.map((ad) => (
-            <div key={ad.id} className="w-full flex items-center justify-between gap-4 bg-slate-800/80 p-3 rounded-2xl border border-slate-700">
+            <div key={ad.id} className="w-full flex items-center justify-between gap-4 bg-slate-800/80 p-3 rounded-2xl border border-slate-700 shadow-xs">
               <div className="flex items-center gap-3">
                 {ad.imageUrl && (
                   <img src={ad.imageUrl} alt={ad.title} className="w-12 h-12 rounded-xl object-cover" />
