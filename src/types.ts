@@ -32,10 +32,12 @@ export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-deta
 export interface AdBanner {
   id: string;
   title: string;
+  price?: string;
+  badgeText?: string;
   imageUrl?: string;
   htmlCode?: string;
   targetUrl?: string;
-  position: "header" | "sidebar" | "footer" | "image-page";
+  position: "header" | "sidebar" | "footer" | "image-page" | "home-cards" | "home-bottom";
   enabled: boolean;
 }
 

@@ -64,9 +64,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
   
   // Ad Management states
   const [newBannerTitle, setNewBannerTitle] = useState("");
+  const [newBannerPrice, setNewBannerPrice] = useState("");
+  const [newBannerBadgeText, setNewBannerBadgeText] = useState("");
   const [newBannerImgUrl, setNewBannerImgUrl] = useState("");
   const [newBannerTargetUrl, setNewBannerTargetUrl] = useState("");
-  const [newBannerPosition, setNewBannerPosition] = useState<"header" | "sidebar" | "footer" | "image-page">("header");
+  const [newBannerPosition, setNewBannerPosition] = useState<"header" | "sidebar" | "footer" | "image-page" | "home-cards" | "home-bottom">("home-cards");
   const [newBannerHtml, setNewBannerHtml] = useState("");
   const [showAddBannerModal, setShowAddBannerModal] = useState(false);
   
@@ -2405,10 +2407,10 @@ export default function AdminView({ onBack }: AdminViewProps) {
               <div>
                 <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-emerald-600" />
-                  Aktif Banner ve Reklam Alanları ({siteConfig.adsList?.length || 0})
+                  Aktif Banner ve Reklam Vitrini ({siteConfig.adsList?.length || 0})
                 </h4>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Header, Görsel Sayfası, Sidebar veya Footer alanlarına özel bannerlar tanımlayın.
+                  Ana Sayfa Ürün Kartları (CS:GO skin vb.), Ana Sayfa Altı, Header, Footer veya Detay Sayfalarına özel reklamlar ekleyin.
                 </p>
               </div>
 
@@ -2418,7 +2420,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
                 className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                Yeni Reklam Bannerı Ekle
+                Yeni Reklam / Ürün Ekle
               </button>
             </div>
 
@@ -2435,7 +2437,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   onClick={() => setShowAddBannerModal(true)}
                   className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 font-bold text-xs rounded-xl hover:bg-blue-100 transition-all cursor-pointer"
                 >
-                  + İlk Bannerı Oluştur
+                  + İlk Reklamı Oluştur
                 </button>
               </div>
             ) : (
@@ -2444,25 +2446,44 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   <div key={banner.id} className="p-4 border border-slate-200 rounded-2xl bg-slate-50/50 flex flex-col justify-between gap-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                            banner.position === "home-cards" ? "bg-amber-100 text-amber-800 border border-amber-200" :
+                            banner.position === "home-bottom" ? "bg-indigo-100 text-indigo-700 border border-indigo-200" :
                             banner.position === "header" ? "bg-purple-100 text-purple-700" :
                             banner.position === "image-page" ? "bg-blue-100 text-blue-700" :
                             banner.position === "sidebar" ? "bg-emerald-100 text-emerald-700" :
-                            "bg-amber-100 text-amber-700"
+                            "bg-slate-200 text-slate-700"
                           }`}>
-                            {banner.position === "header" ? "Üst Header" :
-                             banner.position === "image-page" ? "Görsel Detay Sayfası" :
+                            {banner.position === "home-cards" ? "🛒 Ana Sayfa Ürün Kartı" :
+                             banner.position === "home-bottom" ? "📢 Ana Sayfa Alt Banner" :
+                             banner.position === "header" ? "Üst Header" :
+                             banner.position === "image-page" ? "Görsel Detay" :
                              banner.position === "sidebar" ? "Yan Panel" : "Alt Footer"}
                           </span>
+
+                          {banner.badgeText && (
+                            <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-slate-900 text-white uppercase font-mono">
+                              {banner.badgeText}
+                            </span>
+                          )}
 
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${banner.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
                             {banner.enabled ? "Aktif" : "Pasif"}
                           </span>
                         </div>
-                        <h5 className="font-bold text-slate-800 text-xs mt-2">{banner.title}</h5>
+                        
+                        <div className="flex items-baseline gap-2 mt-2">
+                          <h5 className="font-bold text-slate-800 text-xs">{banner.title}</h5>
+                          {banner.price && (
+                            <span className="text-xs font-black text-slate-900 bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {banner.price}
+                            </span>
+                          )}
+                        </div>
+
                         {banner.targetUrl && (
-                          <a href={banner.targetUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5 truncate max-w-[220px]">
+                          <a href={banner.targetUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 truncate max-w-[220px]">
                             <ExternalLink className="w-3 h-3" />
                             {banner.targetUrl}
                           </a>
@@ -2500,8 +2521,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     </div>
 
                     {banner.imageUrl && (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-black/5 max-h-24 flex items-center justify-center">
-                        <img src={banner.imageUrl} alt={banner.title} className="max-h-24 w-full object-cover" />
+                      <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white max-h-28 p-2 flex items-center justify-center">
+                        <img src={banner.imageUrl} alt={banner.title} className="max-h-24 max-w-full object-contain" />
                       </div>
                     )}
 
@@ -2519,52 +2540,150 @@ export default function AdminView({ onBack }: AdminViewProps) {
           {/* Add New Banner Modal */}
           {showAddBannerModal && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-scale-up border border-slate-100">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-scale-up border border-slate-100 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                     <Megaphone className="w-4 h-4 text-blue-600" />
-                    Yeni Reklam Bannerı Ekle
+                    Yeni Reklam / Sponsor Ürünü Ekle
                   </h4>
-                  <button onClick={() => setShowAddBannerModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                  <button onClick={() => setShowAddBannerModal(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
+                {/* Preset Quick Fill Templates */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    ⚡ Hızlı Örnek Şablon Seç (CS:GO / Skin Pazarı)
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewBannerTitle("AWP | Atheris (Field-Tested)");
+                        setNewBannerPrice("₺48,80");
+                        setNewBannerBadgeText("PRICE DROP");
+                        setNewBannerPosition("home-cards");
+                        setNewBannerImgUrl("https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80");
+                        setNewBannerTargetUrl("https://cs.money");
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700 cursor-pointer shadow-2xs"
+                    >
+                      🎯 AWP Atheris (₺48,80)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewBannerTitle("Hydra Gloves | Emerald (FT)");
+                        setNewBannerPrice("₺1.450,00");
+                        setNewBannerBadgeText("PRICE DROP");
+                        setNewBannerPosition("home-cards");
+                        setNewBannerImgUrl("https://images.unsplash.com/photo-1563089145-599997674d42?w=500&q=80");
+                        setNewBannerTargetUrl("https://cs.money");
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700 cursor-pointer shadow-2xs"
+                    >
+                      🧤 Eldiven (₺1.450)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewBannerTitle("CS.MONEY Skin Takas & Pazaryeri");
+                        setNewBannerPrice("%20 İndirimli Fiyatlar");
+                        setNewBannerBadgeText("SPONSORLU BÖLÜM");
+                        setNewBannerPosition("home-bottom");
+                        setNewBannerImgUrl("https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200&q=80");
+                        setNewBannerTargetUrl("https://cs.money");
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-bold text-indigo-700 cursor-pointer shadow-2xs"
+                    >
+                      📢 Alt Banner Şablonu
+                    </button>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Banner Başlığı / Sponsor İsmi</label>
-                    <input
-                      type="text"
-                      value={newBannerTitle}
-                      onChange={(e) => setNewBannerTitle(e.target.value)}
-                      placeholder="Örn: X Markası Ana Sayfa Bannerı"
-                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Gösterim Pozisyonu</label>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Gösterim Alanı (Pozisyon)</label>
                     <select
                       value={newBannerPosition}
                       onChange={(e: any) => setNewBannerPosition(e.target.value)}
-                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white font-bold text-slate-800"
                     >
-                      <option value="header">Üst Header (Sitenin En Üstü)</option>
-                      <option value="image-page">Görsel Detay Sayfası (Resim İndirme Sayfası)</option>
-                      <option value="sidebar">Yan Panel / Ana Sayfa Arası</option>
-                      <option value="footer">Alt Footer</option>
+                      <option value="home-cards">🛒 Ana Sayfa Ürün/Skin Kartları Grid (Referans Görseller)</option>
+                      <option value="home-bottom">📢 Ana Sayfa Alt Banner (Alt Tarafta)</option>
+                      <option value="header">⬆️ Üst Header Banner (Sitenin En Üstü)</option>
+                      <option value="footer">⬇️ Alt Footer Banner (Tüm Sayfaların En Altı)</option>
+                      <option value="image-page">🖼️ Görsel Detay Sayfası (Resim İndirme)</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Görsel URL'si (İsteğe Bağlı)</label>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Başlık / Ürün Adı</label>
                     <input
                       type="text"
-                      value={newBannerImgUrl}
-                      onChange={(e) => setNewBannerImgUrl(e.target.value)}
-                      placeholder="https://example.com/banner.jpg"
-                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs"
+                      value={newBannerTitle}
+                      onChange={(e) => setNewBannerTitle(e.target.value)}
+                      placeholder="Örn: AWP | Atheris (Field-Tested)"
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-semibold"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">Fiyat / Alt Metin</label>
+                      <input
+                        type="text"
+                        value={newBannerPrice}
+                        onChange={(e) => setNewBannerPrice(e.target.value)}
+                        placeholder="Örn: ₺48,80 veya %20 İndirim"
+                        className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-bold text-emerald-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">Rozet Etiketi (Badge)</label>
+                      <input
+                        type="text"
+                        value={newBannerBadgeText}
+                        onChange={(e) => setNewBannerBadgeText(e.target.value)}
+                        placeholder="Örn: PRICE DROP, HOT, İNDİRİM"
+                        className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-mono uppercase font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Görsel URL veya Dosya Seç</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newBannerImgUrl}
+                        onChange={(e) => setNewBannerImgUrl(e.target.value)}
+                        placeholder="https://example.com/item.png"
+                        className="flex-1 px-3.5 py-2 border border-slate-200 rounded-xl text-xs"
+                      />
+                      <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-all shrink-0">
+                        <span>Yükle</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (evt) => {
+                                if (evt.target?.result) {
+                                  setNewBannerImgUrl(evt.target.result as string);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
 
                   <div>
@@ -2588,13 +2707,36 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-mono"
                     />
                   </div>
+
+                  {/* Live Card Preview */}
+                  {(newBannerTitle || newBannerImgUrl || newBannerPrice) && (
+                    <div className="pt-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        👁️ Canlı Önizleme (Kart Tipi)
+                      </span>
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl max-w-xs mx-auto">
+                        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold border border-slate-800 rounded uppercase">
+                              {newBannerBadgeText || "PRICE DROP"}
+                            </span>
+                          </div>
+                          {newBannerImgUrl && (
+                            <img src={newBannerImgUrl} alt="Preview" className="h-20 w-full object-contain mx-auto my-1" />
+                          )}
+                          <p className="text-xs font-bold text-slate-800 truncate">{newBannerTitle || "Ürün Başlığı"}</p>
+                          <p className="text-sm font-black text-slate-900 mt-0.5">{newBannerPrice || "₺48,80"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setShowAddBannerModal(false)}
-                    className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50"
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                   >
                     İptal
                   </button>
@@ -2604,6 +2746,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       const banner: AdBanner = {
                         id: "ad_" + Date.now().toString(36),
                         title: newBannerTitle.trim() || "Sponsorlu Reklam",
+                        price: newBannerPrice.trim(),
+                        badgeText: newBannerBadgeText.trim(),
                         imageUrl: newBannerImgUrl.trim(),
                         targetUrl: newBannerTargetUrl.trim(),
                         position: newBannerPosition,
@@ -2613,14 +2757,16 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       const updated = [...(siteConfig.adsList || []), banner];
                       setSiteConfig({ ...siteConfig, adsList: updated });
                       setNewBannerTitle("");
+                      setNewBannerPrice("");
+                      setNewBannerBadgeText("");
                       setNewBannerImgUrl("");
                       setNewBannerTargetUrl("");
                       setNewBannerHtml("");
                       setShowAddBannerModal(false);
                     }}
-                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
                   >
-                    Bannerı Ekle
+                    Reklamı Yayınla
                   </button>
                 </div>
               </div>

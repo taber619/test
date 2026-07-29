@@ -314,10 +314,12 @@ async function startServer() {
   interface AdBanner {
     id: string;
     title: string;
+    price?: string;
+    badgeText?: string;
     imageUrl?: string;
     htmlCode?: string;
     targetUrl?: string;
-    position: "header" | "sidebar" | "footer" | "image-page";
+    position: "header" | "sidebar" | "footer" | "image-page" | "home-cards" | "home-bottom";
     enabled: boolean;
   }
 
@@ -334,6 +336,10 @@ async function startServer() {
     miniChatEnabled?: boolean;
     guestMaxMb?: number;
     guestMaxUploadCount?: number;
+    guestAutoResetMode?: "off" | "daily" | "interval";
+    guestAutoResetHour?: number;
+    guestResetIntervalHours?: number;
+    lastGuestResetTime?: number;
     registeredMaxMb?: number;
     registeredMaxUploadCount?: number;
     requireEmailVerification?: boolean;
@@ -517,11 +523,53 @@ async function startServer() {
     adsContactInfo: "Sitemizde banner veya özel sponsorluk reklamı vermek için bizimle e-posta veya Telegram üzerinden iletişime geçebilirsiniz.",
     adsList: [
       {
-        id: "ad_1",
-        title: "İnanResim Sponsorlu Reklam Alanı",
-        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&q=80",
-        targetUrl: "mailto:reklam@inanresim.com",
-        position: "header",
+        id: "ad_skin_1",
+        title: "AWP | Atheris (Field-Tested)",
+        price: "₺48,80",
+        badgeText: "PRICE DROP",
+        imageUrl: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80",
+        targetUrl: "https://cs.money",
+        position: "home-cards",
+        enabled: true
+      },
+      {
+        id: "ad_skin_2",
+        title: "PP-Bizon | Judgement of Anubis",
+        price: "₺27,48",
+        badgeText: "PRICE DROP",
+        imageUrl: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=500&q=80",
+        targetUrl: "https://cs.money",
+        position: "home-cards",
+        enabled: true
+      },
+      {
+        id: "ad_skin_3",
+        title: "Hydra Gloves | Emerald (FT)",
+        price: "₺1.450,00",
+        badgeText: "PRICE DROP",
+        imageUrl: "https://images.unsplash.com/photo-1563089145-599997674d42?w=500&q=80",
+        targetUrl: "https://cs.money",
+        position: "home-cards",
+        enabled: true
+      },
+      {
+        id: "ad_skin_4",
+        title: "P250 | See Ya Later (MW)",
+        price: "₺94,20",
+        badgeText: "HOT DEAL",
+        imageUrl: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&q=80",
+        targetUrl: "https://cs.money",
+        position: "home-cards",
+        enabled: true
+      },
+      {
+        id: "ad_bottom_1",
+        title: "CS.MONEY — En Büyük Skin Takas ve Pazaryeri",
+        price: "%20 İndirimli Fiyatlar",
+        badgeText: "SPONSORLU BÖLÜM",
+        imageUrl: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1200&q=80",
+        targetUrl: "https://cs.money",
+        position: "home-bottom",
         enabled: true
       }
     ]

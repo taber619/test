@@ -12,6 +12,7 @@ import UrlUploadView from "./components/UrlUploadView";
 import AdminView from "./components/AdminView";
 import MiniChat from "./components/MiniChat";
 import AdContactModal from "./components/AdContactModal";
+import AdBannerSection from "./components/AdBannerSection";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -1019,6 +1020,14 @@ export default function App() {
         isOpen={showAdModal}
         onClose={() => setShowAdModal(false)}
         siteConfig={siteConfig || undefined}
+      />
+
+      {/* Footer Banner Ad */}
+      <AdBannerSection
+        position="footer"
+        adsList={siteConfig?.adsList}
+        adsEnabled={siteConfig?.adsEnabled !== false}
+        onOpenContactModal={() => setShowAdModal(true)}
       />
 
       {/* Bottom Footer block */}

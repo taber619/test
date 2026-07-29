@@ -7,7 +7,8 @@ interface QRCodeShareModalProps {
   onClose: () => void;
   title: string;
   previewUrl: string;
-  directUrl: string;
+  directUrl?: string;
+  imageUrl?: string;
 }
 
 export default function QRCodeShareModal({
@@ -16,6 +17,7 @@ export default function QRCodeShareModal({
   title,
   previewUrl,
   directUrl,
+  imageUrl,
 }: QRCodeShareModalProps) {
   const [copied, setCopied] = useState(false);
   const [activeShareType, setActiveShareType] = useState<"preview" | "direct">("preview");
@@ -23,7 +25,7 @@ export default function QRCodeShareModal({
 
   if (!isOpen) return null;
 
-  const targetUrl = activeShareType === "preview" ? previewUrl : directUrl;
+  const targetUrl = activeShareType === "preview" ? previewUrl : (directUrl || imageUrl || previewUrl);
   const shareText = `${title || "İnanResim Görseli"} - İnanResim ile paylaşıldı:`;
 
   const handleCopy = () => {

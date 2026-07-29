@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { processImage } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
+import AdBannerSection from "./AdBannerSection";
+import AdContactModal from "./AdContactModal";
 
 interface SelectedFile {
   id: string;
@@ -72,6 +74,7 @@ export default function HeroSection({
   const [deleteAfter, setDeleteAfter] = useState<string>("never");
   const [password, setPassword] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isAdModalOpen, setIsAdModalOpen] = useState<boolean>(false);
 
   // Guest upload count state
   const [guestCount, setGuestCount] = useState<number>(0);
@@ -1059,6 +1062,22 @@ export default function HeroSection({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Homepage Sponsored Product / CS Skin Cards Showcase (Reference Image Style) */}
+        <AdBannerSection
+          position="home-cards"
+          adsList={siteConfig?.adsList}
+          adsEnabled={siteConfig?.adsEnabled !== false}
+          onOpenContactModal={() => setIsAdModalOpen(true)}
+        />
+
+        {/* Homepage Bottom Sponsored Banner */}
+        <AdBannerSection
+          position="home-bottom"
+          adsList={siteConfig?.adsList}
+          adsEnabled={siteConfig?.adsEnabled !== false}
+          onOpenContactModal={() => setIsAdModalOpen(true)}
+        />
       </div>
 
       {/* Optimizing files overlay */}
@@ -1156,6 +1175,13 @@ export default function HeroSection({
           }}
         />
       )}
+
+      {/* Ad Contact Modal Portal */}
+      <AdContactModal
+        isOpen={isAdModalOpen}
+        onClose={() => setIsAdModalOpen(false)}
+        siteConfig={siteConfig}
+      />
     </div>
   );
 }
