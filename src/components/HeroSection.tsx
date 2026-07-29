@@ -23,7 +23,9 @@ import {
   Video,
   Archive,
   FileText,
-  File
+  File,
+  Lock,
+  ChevronDown
 } from "lucide-react";
 import { processImage } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
@@ -82,6 +84,12 @@ export default function HeroSection({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isAdModalOpen, setIsAdModalOpen] = useState<boolean>(false);
 
+  // Dedicated File Upload form state (matching user reference)
+  const [description, setDescription] = useState<string>("");
+  const [isPublic, setIsPublic] = useState<boolean>(true);
+  const [showEmailOrLock, setShowEmailOrLock] = useState<boolean>(false);
+  const [recipientEmail, setRecipientEmail] = useState<string>("");
+
   // Guest upload count state
   const [guestCount, setGuestCount] = useState<number>(0);
   const [guestMaxCount, setGuestMaxCount] = useState<number>(5);
@@ -135,6 +143,7 @@ export default function HeroSection({
 
   const hasVideo = selectedFiles.some((x) => x.file.type.startsWith("video/"));
   const hasOnlyVideo = selectedFiles.length > 0 && selectedFiles.every((x) => x.file.type.startsWith("video/"));
+  const hasNonMedia = selectedFiles.some((x) => !x.file.type.startsWith("image/") && !x.file.type.startsWith("video/"));
 
   // Clipboard paste listener
   useEffect(() => {
@@ -319,6 +328,10 @@ export default function HeroSection({
     selectedFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
     setSelectedFiles([]);
     setPassword("");
+    setDescription("");
+    setIsPublic(true);
+    setShowEmailOrLock(false);
+    setRecipientEmail("");
     setErrorMsg(null);
   };
 
@@ -816,6 +829,140 @@ export default function HeroSection({
                 >
                   <Link className="w-3.5 h-3.5" />
                   url'den yükle
+                </button>
+              </div>
+            </motion.div>
+          ) : hasNonMedia ? (
+            /* Dedicated Raw File Upload Screen (Exact match to user screenshot reference) */
+            <motion.div
+              key="raw-file-upload-state"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.25 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xl max-w-2xl mx-auto text-left text-slate-800 dark:text-slate-100"
+              id="raw-file-upload-panel"
+            >
+              {/* File list header & items */}
+              <div className="space-y-3.5 mb-6 border-b border-slate-200 dark:border-slate-800 pb-5">
+                {selectedFiles.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="font-extrabold text-slate-900 dark:text-white text-base truncate">
+                        {item.file.name}
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400 italic text-sm font-semibold shrink-0">
+                        ({item.file.size >= 1024 * 1024 * 1024 
+                          ? `${(item.file.size / (1024 * 1024)).toFixed(1)} Mb` 
+                          : formatSize(item.file.size)})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(item.id)}
+                      className="text-red-500 hover:text-red-700 transition-colors p-1 shrink-0 cursor-pointer"
+                      title="Dosyayı Sili"
+                    >
+                      <X className="w-5 h-5 stroke-[2.5]" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Açıklama */}
+              <div className="mb-5">
+                <label className="block text-sm font-extrabold text-slate-800 dark:text-slate-200 mb-2">
+                  Açıklama:
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="w-full p-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 shadow-xs resize-y"
+                  placeholder="Dosya hakkında isteğe bağlı bir açıklama ekleyin..."
+                />
+              </div>
+
+              {/* Herkese açık checkbox */}
+              <div className="mb-6">
+                <label className="inline-flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                  />
+                  <span className="text-sm font-extrabold text-slate-800 dark:text-slate-200">
+                    Herkese açık
+                  </span>
+                </label>
+              </div>
+
+              {/* E-posta İle Gönder Veya Dosyaları Şifrele Toggle & Form */}
+              <div className="mb-8">
+                <button
+                  type="button"
+                  onClick={() => setShowEmailOrLock(!showEmailOrLock)}
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-extrabold hover:underline flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Lock className="w-4 h-4 text-blue-500" />
+                  <span>E-posta İle Gönder Veya Dosyaları Şifrele</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showEmailOrLock ? "rotate-180" : ""}`} />
+                </button>
+
+                {showEmailOrLock && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-4 p-4 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-4 text-left"
+                  >
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Şifre Koruması (İndirme Şifresi):
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Dosyayı kilitlemek için şifre girin..."
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">
+                        E-posta İle Gönder (Alıcı Adresi):
+                      </label>
+                      <input
+                        type="email"
+                        value={recipientEmail}
+                        onChange={(e) => setRecipientEmail(e.target.value)}
+                        placeholder="ornek@eposta.com"
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Bottom Buttons */}
+              <div className="flex items-center justify-between gap-4 pt-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-7 py-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-sm rounded-xl transition-all cursor-pointer shadow-xs"
+                >
+                  Dosya Ekle
+                </button>
+
+                <button
+                  type="button"
+                  onClick={triggerUpload}
+                  disabled={isUploading}
+                  className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-extrabold text-sm rounded-xl shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+                >
+                  Yüklemeye Başla
                 </button>
               </div>
             </motion.div>
