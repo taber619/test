@@ -181,11 +181,11 @@ export default function AnnouncementBanner({
           <div className={`absolute inset-0 bg-gradient-to-r ${badge.glow} pointer-events-none opacity-70`}></div>
           <div className={`absolute top-0 left-0 right-0 h-[2px] ${badge.accentLine}`}></div>
 
-          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4">
             
             {/* Left Side: Badge + Title + Content */}
-            <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-              <span className={`flex-none px-2.5 py-1 rounded-xl text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 border ${badge.bg}`}>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1 w-full">
+              <span className={`flex-none px-2.5 py-1 rounded-xl text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 border ${badge.bg} shrink-0`}>
                 <span className="relative flex h-2 w-2">
                   <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${badge.ping} opacity-75`}></span>
                   <span className={`relative inline-flex rounded-full h-2 w-2 ${badge.ping}`}></span>
@@ -195,23 +195,23 @@ export default function AnnouncementBanner({
               </span>
 
               {/* Animating Announcement Content */}
-              <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="min-w-0 flex-1 w-full">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentIdx}
-                    initial={{ y: 12, opacity: 0 }}
+                    initial={{ y: 8, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -12, opacity: 0 }}
+                    exit={{ y: -8, opacity: 0 }}
                     transition={{ duration: 0.22, ease: "easeOut" }}
-                    className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2"
+                    className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2"
                   >
                     {currentAnn.title && (
-                      <span className="text-xs font-black text-white tracking-tight shrink-0 flex items-center gap-1">
+                      <span className="text-xs sm:text-sm font-black text-white tracking-tight shrink-0 flex items-center gap-1.5">
                         {currentAnn.title}
-                        <span className="hidden sm:inline text-slate-500">•</span>
+                        <span className="hidden sm:inline text-slate-400">•</span>
                       </span>
                     )}
-                    <p className="text-xs font-bold text-slate-200 tracking-tight leading-relaxed truncate">
+                    <p className="text-xs sm:text-sm font-semibold text-slate-100 tracking-tight leading-relaxed break-words whitespace-normal">
                       {currentAnn.text}
                     </p>
                   </motion.div>
@@ -220,7 +220,7 @@ export default function AnnouncementBanner({
             </div>
 
             {/* Right Side: Interactive Action, Navigation & Close */}
-            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            <div className="flex items-center gap-2 self-end md:self-center shrink-0">
               {/* Action Button if specified */}
               {currentAnn.actionText && (
                 <button
