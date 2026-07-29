@@ -377,7 +377,7 @@ export default function App() {
           onUploadSuccess={handleUrlUploadSuccess}
           userId={currentUser?.id}
           currentUser={currentUser}
-          onOpenVipModal={() => setShowVipModal(true)}
+          onOpenVipModal={() => setIsVipModalOpen(true)}
         />
       );
     }
@@ -576,7 +576,7 @@ export default function App() {
           homepageSubtitle={siteConfig?.homepageSubtitle}
           currentUser={currentUser}
           siteConfig={siteConfig}
-          onOpenVipModal={() => setShowVipModal(true)}
+          onOpenVipModal={() => setIsVipModalOpen(true)}
         />
 
         {/* Real-time stats */}

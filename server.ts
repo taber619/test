@@ -399,6 +399,7 @@ async function startServer() {
     guestResetIntervalHours?: number;
     lastGuestResetTime?: number;
     registeredMaxMb?: number;
+    vipMaxMb?: number;
     registeredMaxUploadCount?: number;
     requireEmailVerification?: boolean;
     adsEnabled?: boolean;
@@ -747,6 +748,7 @@ async function startServer() {
             guestResetIntervalHours: data.guestResetIntervalHours !== undefined ? Number(data.guestResetIntervalHours) : defaultSiteConfig.guestResetIntervalHours,
             lastGuestResetTime: data.lastGuestResetTime !== undefined ? Number(data.lastGuestResetTime) : defaultSiteConfig.lastGuestResetTime,
             registeredMaxMb: data.registeredMaxMb !== undefined ? Number(data.registeredMaxMb) : defaultSiteConfig.registeredMaxMb,
+            vipMaxMb: data.vipMaxMb !== undefined ? Number(data.vipMaxMb) : defaultSiteConfig.vipMaxMb,
             registeredMaxUploadCount: data.registeredMaxUploadCount !== undefined ? Number(data.registeredMaxUploadCount) : defaultSiteConfig.registeredMaxUploadCount,
             requireEmailVerification: data.requireEmailVerification !== undefined ? !!data.requireEmailVerification : defaultSiteConfig.requireEmailVerification,
             adsEnabled: data.adsEnabled !== undefined ? !!data.adsEnabled : defaultSiteConfig.adsEnabled,
