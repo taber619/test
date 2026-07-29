@@ -258,61 +258,135 @@ export default function App() {
       const results: ClientImage[] = [];
 
       for (const file of files) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("name", file.name);
-        formData.append("mimeType", file.type || "application/octet-stream");
-        formData.append("size", String(file.size));
-        formData.append("deleteAfter", deleteAfter);
-        if (password) formData.append("password", password);
-        if (currentUser?.id) formData.append("userId", currentUser.id);
-        if (guestToken) formData.append("guestToken", guestToken);
-        if (watermarkOptions?.watermarkText) formData.append("watermarkText", watermarkOptions.watermarkText);
-        if (watermarkOptions?.watermarkOpacity !== undefined) formData.append("watermarkOpacity", String(watermarkOptions.watermarkOpacity));
-        if (watermarkOptions?.watermarkColor) formData.append("watermarkColor", watermarkOptions.watermarkColor);
-        if (watermarkOptions?.watermarkSize !== undefined) formData.append("watermarkSize", String(watermarkOptions.watermarkSize));
-        if (watermarkOptions?.watermarkPosition) formData.append("watermarkPosition", watermarkOptions.watermarkPosition);
+        // Robust single file uploader with retries and base64 JSON fallback
+        const uploadSingleFileWithRetry = async (): Promise<any> => {
+          const maxRetries = 2;
 
-        // Create an XMLHttpRequest to support real upload progress tracking
-        const uploadResult = await new Promise<any>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("POST", "/api/upload");
+          // Primary method: XHR Multipart Form-Data
+          const attemptXhr = (): Promise<any> => {
+            return new Promise((resolve, reject) => {
+              const formData = new FormData();
+              formData.append("file", file);
+              formData.append("name", file.name);
+              formData.append("mimeType", file.type || "application/octet-stream");
+              formData.append("size", String(file.size));
+              formData.append("deleteAfter", deleteAfter);
+              if (password) formData.append("password", password);
+              if (currentUser?.id) formData.append("userId", currentUser.id);
+              if (guestToken) formData.append("guestToken", guestToken);
+              if (watermarkOptions?.watermarkText) formData.append("watermarkText", watermarkOptions.watermarkText);
+              if (watermarkOptions?.watermarkOpacity !== undefined) formData.append("watermarkOpacity", String(watermarkOptions.watermarkOpacity));
+              if (watermarkOptions?.watermarkColor) formData.append("watermarkColor", watermarkOptions.watermarkColor);
+              if (watermarkOptions?.watermarkSize !== undefined) formData.append("watermarkSize", String(watermarkOptions.watermarkSize));
+              if (watermarkOptions?.watermarkPosition) formData.append("watermarkPosition", watermarkOptions.watermarkPosition);
 
-          // Track progress of the current file being sent over the network
-          xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) {
-              const currentFileRatio = event.loaded / event.total;
-              const currentFileUploadedBytes = currentFileRatio * file.size;
-              const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
-              
-              const percent = Math.min(99, Math.round((totalUploaded / totalFilesSize) * 100));
-              setUploadProgress(percent);
-            }
+              const xhr = new XMLHttpRequest();
+              xhr.open("POST", "/api/upload");
+              xhr.timeout = 10 * 60 * 1000; // 10 minute timeout
+
+              xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable && event.total > 0) {
+                  const currentFileRatio = event.loaded / event.total;
+                  const currentFileUploadedBytes = currentFileRatio * file.size;
+                  const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
+                  const percent = Math.min(99, Math.round((totalUploaded / totalFilesSize) * 100));
+                  setUploadProgress(percent);
+                }
+              };
+
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  try {
+                    resolve(JSON.parse(xhr.responseText));
+                  } catch (e) {
+                    reject({ isNetworkError: false, message: "Sunucudan geçersiz yanıt alındı." });
+                  }
+                } else {
+                  try {
+                    const errData = JSON.parse(xhr.responseText);
+                    reject({ isNetworkError: false, message: errData.error || "Görsel veya dosya yüklenemedi." });
+                  } catch (e) {
+                    reject({ isNetworkError: true, message: `Yükleme başarısız (Sunucu Yanıt Kodu: ${xhr.status})` });
+                  }
+                }
+              };
+
+              xhr.onerror = () => {
+                reject({ isNetworkError: true, message: "Sunucuya bağlanırken bir ağ hatası oluştu." });
+              };
+
+              xhr.ontimeout = () => {
+                reject({ isNetworkError: true, message: "Yükleme zaman aşımına uğradı." });
+              };
+
+              xhr.onabort = () => {
+                reject({ isNetworkError: false, message: "Yükleme işlemi iptal edildi." });
+              };
+
+              xhr.send(formData);
+            });
           };
 
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                resolve(JSON.parse(xhr.responseText));
-              } catch (e) {
-                reject(new Error("Sunucudan geçersiz yanıt alındı."));
+          // Try XHR Multipart with retries
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+              if (attempt > 0) {
+                await new Promise((res) => setTimeout(res, attempt * 1000));
               }
+              return await attemptXhr();
+            } catch (err: any) {
+              if (!err.isNetworkError || attempt === maxRetries) {
+                if (!err.isNetworkError) {
+                  throw new Error(err.message || "Yükleme hatası.");
+                }
+              }
+            }
+          }
+
+          // Fallback: Convert file to base64 payload if multipart XHR experienced network/proxy glitches
+          try {
+            const base64Data = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const res = reader.result as string;
+                resolve(res.includes("base64,") ? res.split("base64,")[1] : res);
+              };
+              reader.onerror = () => reject(new Error("Dosya okuma hatası"));
+              reader.readAsDataURL(file);
+            });
+
+            const res = await fetch("/api/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: file.name,
+                mimeType: file.type || "application/octet-stream",
+                size: file.size,
+                data: base64Data,
+                deleteAfter,
+                password: password || undefined,
+                userId: currentUser?.id,
+                guestToken,
+                watermarkText: watermarkOptions?.watermarkText,
+                watermarkOpacity: watermarkOptions?.watermarkOpacity,
+                watermarkColor: watermarkOptions?.watermarkColor,
+                watermarkSize: watermarkOptions?.watermarkSize,
+                watermarkPosition: watermarkOptions?.watermarkPosition,
+              }),
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+              return data;
             } else {
-              try {
-                const errData = JSON.parse(xhr.responseText);
-                reject(new Error(errData.error || "Görsel veya dosya yüklenemedi."));
-              } catch (e) {
-                reject(new Error(`Yükleme başarısız (Kod: ${xhr.status})`));
-              }
+              throw new Error(data.error || "Yükleme başarısız oldu.");
             }
-          };
+          } catch (fallbackErr: any) {
+            throw new Error(fallbackErr.message || "Sunucuya bağlanırken ağ hatası oluştu. Lütfen bağlantınızı kontrol edip tekrar deneyin.");
+          }
+        };
 
-          xhr.onerror = () => {
-            reject(new Error("Sunucuya bağlanırken bir ağ hatası oluştu."));
-          };
-
-          xhr.send(formData);
-        });
+        const uploadResult = await uploadSingleFileWithRetry();
 
         // Add this file's full size to the accumulated total of prior uploaded files
         uploadedBytesPriorFiles += file.size;

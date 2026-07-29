@@ -36,7 +36,13 @@ import {
   KeyRound,
   Bell,
   FileText,
-  Tag
+  Tag,
+  Bug,
+  AlertCircle,
+  Terminal,
+  Activity,
+  Clock,
+  HardDrive
 } from "lucide-react";
 import { SiteConfig, AdBanner, AdRequest, BankAccount, PaymentRequest, PaymentGatewayConfig, AnnouncementItem } from "../types";
 
@@ -65,6 +71,20 @@ interface AdminImage {
   userId: string | null;
 }
 
+interface ErrorLogItem {
+  id: string;
+  timestamp: number;
+  type: "upload" | "auth" | "db" | "server" | "email";
+  message: string;
+  details?: string;
+  ip?: string;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
+  userId?: string;
+  statusCode?: number;
+}
+
 interface AdminViewProps {
   onBack: () => void;
 }
@@ -75,7 +95,21 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [authError, setAuthError] = useState("");
   
   // Tab states
-  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp" | "ads" | "vip" | "security">("settings");
+  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp" | "ads" | "vip" | "security" | "errors">("settings");
+  
+  // Error Tracking States
+  const [errorLogs, setErrorLogs] = useState<ErrorLogItem[]>([]);
+  const [errorLogStats, setErrorLogStats] = useState({
+    totalErrors: 0,
+    uploadErrors: 0,
+    last24hErrors: 0,
+    systemStatus: "healthy"
+  });
+  const [errorLogFilterType, setErrorLogFilterType] = useState<string>("all");
+  const [errorLogSearch, setErrorLogSearch] = useState<string>("");
+  const [isLoadingErrorLogs, setIsLoadingErrorLogs] = useState<boolean>(false);
+  const [selectedErrorDetail, setSelectedErrorDetail] = useState<ErrorLogItem | null>(null);
+  const [logClearSuccess, setLogClearSuccess] = useState<string>("");
   
   // Structured Announcements Builder States
   const [structuredAnnouncements, setStructuredAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -605,6 +639,59 @@ export default function AdminView({ onBack }: AdminViewProps) {
     }
   };
 
+  const fetchErrorLogs = async (type = errorLogFilterType, search = errorLogSearch) => {
+    setIsLoadingErrorLogs(true);
+    try {
+      const queryParams = new URLSearchParams();
+      if (type && type !== "all") queryParams.append("type", type);
+      if (search && search.trim()) queryParams.append("search", search.trim());
+
+      const res = await fetch(`/api/admin/error-logs?${queryParams.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setErrorLogs(data.logs || []);
+          if (data.stats) {
+            setErrorLogStats(data.stats);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Fetch error logs error:", err);
+    } finally {
+      setIsLoadingErrorLogs(false);
+    }
+  };
+
+  const handleClearErrorLogs = async () => {
+    if (!window.confirm("Tüm sunucu ve dosya yükleme hata loglarını silmek istediğinizden emin misiniz?")) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/error-logs/clear", { method: "POST" });
+      if (res.ok) {
+        setLogClearSuccess("Tüm hata logları temizlendi.");
+        setTimeout(() => setLogClearSuccess(""), 3000);
+        fetchErrorLogs();
+      }
+    } catch (e) {
+      console.error("Clear error logs failed:", e);
+    }
+  };
+
+  const handleCreateTestErrorLog = async () => {
+    try {
+      const res = await fetch("/api/admin/error-logs/test", { method: "POST" });
+      if (res.ok) {
+        setLogClearSuccess("Örnek test yükleme hatası oluşturuldu.");
+        setTimeout(() => setLogClearSuccess(""), 3000);
+        fetchErrorLogs();
+      }
+    } catch (e) {
+      console.error("Test error log creation failed:", e);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       setIsLoading(true);
@@ -617,7 +704,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
         fetchModerationLogs(),
         fetchSmtpConfig(),
         fetchAdRequests(),
-        fetchPaymentRequests()
+        fetchPaymentRequests(),
+        fetchErrorLogs()
       ]).finally(() => {
         setIsLoading(false);
       });
@@ -1129,6 +1217,22 @@ export default function AdminView({ onBack }: AdminViewProps) {
         >
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
           🛡️ Güvenlik & Gizlilik
+        </button>
+
+        <button
+          id="admin-errors-tab"
+          onClick={() => {
+            setActiveSubTab("errors");
+            fetchErrorLogs();
+          }}
+          className={`px-5 py-3 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeSubTab === "errors"
+              ? "border-red-500 text-red-500 font-extrabold"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <Bug className="w-4 h-4 text-red-500" />
+          🚨 Hata Takip Paneli {errorLogStats.last24hErrors > 0 && <span className="px-1.5 py-0.5 text-[10px] bg-red-100 text-red-600 rounded-full font-extrabold">{errorLogStats.last24hErrors}</span>}
         </button>
       </div>
 
@@ -3936,6 +4040,347 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </div>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ERROR TRACKING PANEL SUBTAB */}
+      {activeSubTab === "errors" && (
+        <div className="space-y-6">
+          {/* Header & Quick Action Buttons */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Bug className="w-5 h-5 text-red-500" />
+                  Hata Takip Paneli (Sunucu & Dosya Yükleme Logları)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Son dosya yükleme başarısızlıkları, Multer limit aşımları, engelli kullanıcı erişimleri ve sunucu tarafı hata kayıtlarını gerçek zamanlı takip edin.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => fetchErrorLogs()}
+                  disabled={isLoadingErrorLogs}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingErrorLogs ? "animate-spin" : ""}`} />
+                  Yenile
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCreateTestErrorLog}
+                  className="px-4 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-600" />
+                  Test Hatası Simüle Et
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearErrorLogs}
+                  disabled={errorLogs.length === 0}
+                  className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Logları Temizle
+                </button>
+              </div>
+            </div>
+
+            {logClearSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                {logClearSuccess}
+              </div>
+            )}
+          </div>
+
+          {/* Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Toplam Kayıtlı Hata</p>
+                <h4 className="text-2xl font-black text-slate-900 mt-1">{errorLogStats.totalErrors}</h4>
+              </div>
+              <div className="w-11 h-11 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center border border-red-100">
+                <Bug className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Yükleme Hataları</p>
+                <h4 className="text-2xl font-black text-slate-900 mt-1">{errorLogStats.uploadErrors}</h4>
+              </div>
+              <div className="w-11 h-11 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center border border-amber-100">
+                <HardDrive className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Son 24 Saat Hataları</p>
+                <h4 className="text-2xl font-black text-slate-900 mt-1">{errorLogStats.last24hErrors}</h4>
+              </div>
+              <div className="w-11 h-11 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center border border-rose-100">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sistem Sağlık Durumu</p>
+                <h4 className="text-sm font-black mt-1 flex items-center gap-1.5 text-emerald-600">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {errorLogStats.systemStatus === "healthy" ? "Normal & Kararlı" : "Dikkat İnceleme"}
+                </h4>
+              </div>
+              <div className="w-11 h-11 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-100">
+                <Activity className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Filter & Search Controls */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative w-full md:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Hata mesajı, dosya adı, IP veya detay ara..."
+                value={errorLogSearch}
+                onChange={(e) => {
+                  setErrorLogSearch(e.target.value);
+                  fetchErrorLogs(errorLogFilterType, e.target.value);
+                }}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:bg-white"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+              {[
+                { id: "all", label: "Tüm Hatalar" },
+                { id: "upload", label: "Dosya Yükleme" },
+                { id: "auth", label: "Kullanıcı / Yetki" },
+                { id: "db", label: "Veritabanı" },
+                { id: "server", label: "Sunucu" },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => {
+                    setErrorLogFilterType(f.id);
+                    fetchErrorLogs(f.id, errorLogSearch);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    errorLogFilterType === f.id
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Error Logs List */}
+          <div className="bg-white border border-slate-200 shadow-sm rounded-3xl overflow-hidden">
+            {isLoadingErrorLogs ? (
+              <div className="p-12 text-center text-slate-400 text-xs font-semibold flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-red-500" />
+                Hata logları yükleniyor...
+              </div>
+            ) : errorLogs.length === 0 ? (
+              <div className="p-12 text-center space-y-3">
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-extrabold text-slate-800">Kayıtlı Hata Bulunmuyor</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Seçilen kriterlere uygun herhangi bir dosya yükleme veya sunucu hatası kaydı mevcut değil.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {errorLogs.map((log) => {
+                  return (
+                    <div key={log.id} className="p-5 hover:bg-slate-50/80 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${
+                            log.type === "upload" 
+                              ? "bg-red-100 text-red-700 border border-red-200"
+                              : log.type === "auth"
+                              ? "bg-amber-100 text-amber-700 border border-amber-200"
+                              : log.type === "db"
+                              ? "bg-purple-100 text-purple-700 border border-purple-200"
+                              : "bg-slate-100 text-slate-700 border border-slate-200"
+                          }`}>
+                            {log.type === "upload" ? "Dosya Yükleme" : log.type === "auth" ? "Yetkilendirme" : log.type === "db" ? "Veritabanı" : "Sunucu"}
+                          </span>
+
+                          {log.statusCode && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-mono font-bold">
+                              HTTP {log.statusCode}
+                            </span>
+                          )}
+
+                          <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(log.timestamp).toLocaleString("tr-TR")}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs font-bold text-slate-800 break-words flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                          {log.message}
+                        </h4>
+
+                        {log.details && (
+                          <p className="text-[11px] text-slate-500 line-clamp-2 font-mono bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            {log.details}
+                          </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pt-0.5">
+                          {log.fileName && (
+                            <span className="font-semibold text-slate-600 flex items-center gap-1">
+                              📁 Dosya: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-800">{log.fileName}</code>
+                            </span>
+                          )}
+                          {log.fileSize ? (
+                            <span>
+                              Boyut: <strong>{(log.fileSize / (1024 * 1024)).toFixed(2)} MB</strong>
+                            </span>
+                          ) : null}
+                          {log.ip && (
+                            <span className="font-mono text-slate-500">
+                              IP: {log.ip}
+                            </span>
+                          )}
+                          {log.userId && (
+                            <span className="text-blue-600 font-semibold">
+                              Üye ID: {log.userId}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedErrorDetail(log)}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-slate-500" />
+                          Detay Göster
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Modal for viewing full error detail */}
+          {selectedErrorDetail && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-red-500" />
+                    Hata Log Detayları [{selectedErrorDetail.id}]
+                  </h3>
+                  <button
+                    onClick={() => setSelectedErrorDetail(null)}
+                    className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4 overflow-y-auto font-sans">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Zaman Stamp</span>
+                      <span className="font-bold text-slate-800">{new Date(selectedErrorDetail.timestamp).toLocaleString("tr-TR")}</span>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Hata Türü</span>
+                      <span className="font-extrabold text-red-600 uppercase">{selectedErrorDetail.type}</span>
+                    </div>
+
+                    {selectedErrorDetail.fileName && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 col-span-2">
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Dosya Adı & Boyutu</span>
+                        <span className="font-bold text-slate-800 font-mono">{selectedErrorDetail.fileName}</span>
+                        {selectedErrorDetail.fileSize ? <span className="text-slate-500 text-[11px] ml-2">({(selectedErrorDetail.fileSize / (1024 * 1024)).toFixed(2)} MB)</span> : null}
+                      </div>
+                    )}
+
+                    {selectedErrorDetail.ip && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">İstemci IP</span>
+                        <span className="font-mono text-slate-800">{selectedErrorDetail.ip}</span>
+                      </div>
+                    )}
+
+                    {selectedErrorDetail.statusCode && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">HTTP Durum Kodu</span>
+                        <span className="font-mono font-bold text-slate-800">{selectedErrorDetail.statusCode}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Hata Başlığı / Mesajı</label>
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-bold">
+                      {selectedErrorDetail.message}
+                    </div>
+                  </div>
+
+                  {selectedErrorDetail.details && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Detaylı Stack Trace / Log Metni</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedErrorDetail.details || "");
+                            alert("Hata detayları panoya kopyalandı!");
+                          }}
+                          className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Kopyala
+                        </button>
+                      </div>
+                      <pre className="p-4 bg-slate-900 text-emerald-400 rounded-2xl text-[11px] font-mono overflow-x-auto whitespace-pre-wrap max-h-60 leading-relaxed border border-slate-800">
+                        {selectedErrorDetail.details}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                  <button
+                    onClick={() => setSelectedErrorDetail(null)}
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

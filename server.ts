@@ -5,8 +5,23 @@ import nodemailer from "nodemailer";
 import dns from "dns";
 import multer from "multer";
 
+const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const diskStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + (file.originalname || "dosya"));
+  }
+});
+
 const uploadMiddleware = multer({
-  storage: multer.memoryStorage(),
+  storage: diskStorage,
   limits: { fileSize: 5 * 1024 * 1024 * 1024 } // 5 GB max file upload
 });
 
@@ -52,7 +67,8 @@ interface StoredImage {
   name: string;
   mimeType: string;
   size: number;
-  data: string; // Base64 encoded string (used in in-memory fallback, or loaded on demand in Firestore helper)
+  data: string; // Base64 encoded string
+  filePath?: string;
   uploadedAt: number;
   deleteAfter: "1h" | "1d" | "1w" | "1m" | "never";
   password?: string;
@@ -64,6 +80,36 @@ interface StoredImage {
   watermarkColor?: string;
   watermarkSize?: number;
   watermarkPosition?: string;
+}
+
+export interface ServerErrorLog {
+  id: string;
+  timestamp: number;
+  type: "upload" | "auth" | "db" | "server" | "email";
+  message: string;
+  details?: string;
+  ip?: string;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
+  userId?: string;
+  statusCode?: number;
+}
+
+const systemErrorLogs: ServerErrorLog[] = [];
+const MAX_ERROR_LOGS = 500;
+
+function logServerError(log: Omit<ServerErrorLog, "id" | "timestamp">) {
+  const newLog: ServerErrorLog = {
+    id: "err_" + Math.random().toString(36).substring(2, 12),
+    timestamp: Date.now(),
+    ...log,
+  };
+  systemErrorLogs.unshift(newLog);
+  if (systemErrorLogs.length > MAX_ERROR_LOGS) {
+    systemErrorLogs.pop();
+  }
+  console.error(`[SYSTEM_ERROR_LOG][${log.type.toUpperCase()}] ${log.message}`, log.details || "");
 }
 
 interface StoredUser {
@@ -1546,19 +1592,22 @@ async function startServer() {
     };
   }
 
-  async function dbSaveImage(image: StoredImage, fileData: string | Buffer, imagesStore: Record<string, StoredImage>) {
+  async function dbSaveImage(image: StoredImage, fileData: string | Buffer | null, imagesStore: Record<string, StoredImage>, filePath?: string) {
+    image.filePath = filePath;
     if (useFirebase && db) {
       try {
         let chunks: string[] = [];
-        if (Buffer.isBuffer(fileData)) {
-          const chunkSize = 600 * 1024;
-          let offset = 0;
-          while (offset < fileData.length) {
-            chunks.push(fileData.subarray(offset, offset + chunkSize).toString("base64"));
-            offset += chunkSize;
+        if (!filePath && fileData) {
+          if (Buffer.isBuffer(fileData)) {
+            const chunkSize = 600 * 1024;
+            let offset = 0;
+            while (offset < fileData.length) {
+              chunks.push(fileData.subarray(offset, offset + chunkSize).toString("base64"));
+              offset += chunkSize;
+            }
+          } else {
+            chunks = chunkString(fileData || "", CHUNK_SIZE);
           }
-        } else {
-          chunks = chunkString(fileData || "", CHUNK_SIZE);
         }
 
         const meta = {
@@ -1572,6 +1621,7 @@ async function startServer() {
           deleteToken: image.deleteToken,
           views: image.views,
           userId: image.userId || null,
+          filePath: filePath || null,
           chunkCount: chunks.length,
           watermarkText: image.watermarkText || null,
           watermarkOpacity: image.watermarkOpacity !== undefined ? image.watermarkOpacity : null,
@@ -1583,20 +1633,22 @@ async function startServer() {
         // Save metadata
         await setDoc(doc(db, "images", image.id), meta);
 
-        // Save chunks in parallel batches of 20 to avoid Firestore network congestion
-        const batchSize = 20;
-        for (let i = 0; i < chunks.length; i += batchSize) {
-          const batch = chunks.slice(i, i + batchSize);
-          await Promise.all(
-            batch.map((chunk, idx) => {
-              const chunkIndex = i + idx;
-              return setDoc(doc(db, "image_chunks", `${image.id}_${chunkIndex}`), {
-                imageId: image.id,
-                chunkIndex,
-                data: chunk,
-              });
-            })
-          );
+        // Save chunks in parallel batches of 20
+        if (chunks.length > 0) {
+          const batchSize = 20;
+          for (let i = 0; i < chunks.length; i += batchSize) {
+            const batch = chunks.slice(i, i + batchSize);
+            await Promise.all(
+              batch.map((chunk, idx) => {
+                const chunkIndex = i + idx;
+                return setDoc(doc(db, "image_chunks", `${image.id}_${chunkIndex}`), {
+                  imageId: image.id,
+                  chunkIndex,
+                  data: chunk,
+                });
+              })
+            );
+          }
         }
         return;
       } catch (e) {
@@ -1604,7 +1656,7 @@ async function startServer() {
       }
     }
 
-    const base64Str = Buffer.isBuffer(fileData) ? fileData.toString("base64") : fileData;
+    const base64Str = Buffer.isBuffer(fileData) ? fileData.toString("base64") : (fileData || "");
     imagesStore[image.id] = { ...image, data: base64Str };
   }
 
@@ -1615,16 +1667,20 @@ async function startServer() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const meta = docSnap.data();
-          
-          // Fetch chunks
-          const chunkCount = meta.chunkCount || 0;
-          const chunkPromises = [];
-          for (let i = 0; i < chunkCount; i++) {
-            chunkPromises.push(getDoc(doc(db, "image_chunks", `${id}_${i}`)));
+          let fullData = "";
+
+          if (meta.filePath && fs.existsSync(meta.filePath)) {
+            // File exists on disk, no need to reconstruct base64
+          } else if (meta.chunkCount > 0) {
+            const chunkCount = meta.chunkCount || 0;
+            const chunkPromises = [];
+            for (let i = 0; i < chunkCount; i++) {
+              chunkPromises.push(getDoc(doc(db, "image_chunks", `${id}_${i}`)));
+            }
+            const chunkSnaps = await Promise.all(chunkPromises);
+            const chunks = chunkSnaps.map(snap => snap.exists() ? snap.data()?.data || "" : "");
+            fullData = chunks.join("");
           }
-          const chunkSnaps = await Promise.all(chunkPromises);
-          const chunks = chunkSnaps.map(snap => snap.exists() ? snap.data()?.data || "" : "");
-          const fullData = chunks.join("");
 
           return {
             id: meta.id,
@@ -1632,6 +1688,7 @@ async function startServer() {
             mimeType: meta.mimeType,
             size: meta.size,
             data: fullData,
+            filePath: meta.filePath || undefined,
             uploadedAt: meta.uploadedAt,
             deleteAfter: meta.deleteAfter,
             password: meta.password || undefined,
@@ -1740,6 +1797,9 @@ async function startServer() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const meta = docSnap.data();
+          if (meta.filePath && fs.existsSync(meta.filePath)) {
+            try { fs.unlinkSync(meta.filePath); } catch (e) {}
+          }
           
           // Delete metadata
           await deleteDoc(docRef);
@@ -1760,6 +1820,9 @@ async function startServer() {
 
     const image = imagesStore[id];
     if (image) {
+      if (image.filePath && fs.existsSync(image.filePath)) {
+        try { fs.unlinkSync(image.filePath); } catch (e) {}
+      }
       delete imagesStore[id];
       return image;
     }
@@ -2330,19 +2393,39 @@ async function startServer() {
   });
 
   // Handle Image & File Upload
-  app.post("/api/upload", uploadMiddleware.single("file"), async (req: any, res: any) => {
+  app.post("/api/upload", (req: any, res: any, next: any) => {
+    uploadMiddleware.single("file")(req, res, (err: any) => {
+      if (err) {
+        console.error("Multer upload error:", err);
+        logServerError({
+          type: "upload",
+          message: err.message || "Multer dosya yükleme hatası",
+          details: err.stack || String(err),
+          ip: extractClientIp(req),
+          fileName: req.body?.name || req.file?.originalname,
+          fileSize: Number(req.body?.size) || req.file?.size,
+          statusCode: 400
+        });
+        return res.status(400).json({ error: err.message || "Dosya yüklenirken bir hata oluştu." });
+      }
+      next();
+    });
+  }, async (req: any, res: any) => {
+    let name = req.body?.name;
+    let mimeType = req.body?.mimeType;
+    let size = Number(req.body?.size) || 0;
+    const userId = req.body?.userId;
+
     try {
-      let name = req.body.name;
-      let mimeType = req.body.mimeType;
-      let size = Number(req.body.size) || 0;
       let fileData: string | Buffer = "";
+      let filePath: string | undefined = undefined;
 
       if (req.file) {
-        fileData = req.file.buffer;
+        filePath = req.file.path;
         name = name || req.file.originalname;
         mimeType = mimeType || req.file.mimetype;
         size = size || req.file.size;
-      } else if (req.body.data) {
+      } else if (req.body?.data) {
         let rawData = req.body.data;
         if (rawData.includes("base64,")) {
           rawData = rawData.split("base64,")[1];
@@ -2353,7 +2436,6 @@ async function startServer() {
       const { 
         deleteAfter, 
         password, 
-        userId,
         guestToken,
         watermarkText,
         watermarkOpacity,
@@ -2362,13 +2444,27 @@ async function startServer() {
         watermarkPosition 
       } = req.body;
 
-      if (!fileData || (typeof fileData === "string" && !fileData.length)) {
+      if (!req.file && (!fileData || (typeof fileData === "string" && !fileData.length))) {
+        logServerError({
+          type: "upload",
+          message: "Eksik dosya verisi",
+          details: "İstemciden gelen istekte dosya veya base64 verisi bulunamadı.",
+          ip: extractClientIp(req),
+          userId: userId || undefined,
+          statusCode: 400
+        });
         res.status(400).json({ error: "Eksik dosya verisi!" });
         return;
       }
 
       const config = await dbGetConfig();
       const fileSize = Number(size) || (req.file ? req.file.size : 0);
+
+      const cleanupTempFile = () => {
+        if (req.file?.path && fs.existsSync(req.file.path)) {
+          try { fs.unlinkSync(req.file.path); } catch (e) {}
+        }
+      };
 
       let uRecord: any = null;
       if (userId) {
@@ -2386,14 +2482,40 @@ async function startServer() {
       if (userId) {
         // Registered User check
         if (uRecord && uRecord.isBanned) {
-          res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${uRecord.banReason ? ` Neden: ${uRecord.banReason}` : ''}` });
+          cleanupTempFile();
+          const errMsg = `Hesabınız engellendiği için yeni görsel/video/dosya yükleyemezsiniz.${uRecord.banReason ? ` Neden: ${uRecord.banReason}` : ''}`;
+          logServerError({
+            type: "upload",
+            message: "Engellenmiş kullanıcı yükleme engeli",
+            details: errMsg,
+            ip: extractClientIp(req),
+            fileName: name,
+            fileSize,
+            fileType: mimeType,
+            userId,
+            statusCode: 403
+          });
+          res.status(403).json({ error: errMsg });
           return;
         }
 
         const userMaxMb = isVipUser ? (config.vipMaxMb ?? 5000) : (config.registeredMaxMb ?? 1000);
         if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
+          cleanupTempFile();
+          const errMsg = `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB), ${isVipUser ? 'VIP' : 'standart'} üye boyut limitini (${userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(0)} GB` : `${userMaxMb} MB`}) aşıyor.`;
+          logServerError({
+            type: "upload",
+            message: "Üye boyutu limiti aşıldı",
+            details: errMsg,
+            ip: extractClientIp(req),
+            fileName: name,
+            fileSize,
+            fileType: mimeType,
+            userId,
+            statusCode: 400
+          });
           res.status(400).json({ 
-            error: `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB), ${isVipUser ? 'VIP' : 'standart'} üye boyut limitini (${userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(0)} GB` : `${userMaxMb} MB`}) aşıyor.${!isVipUser ? " 5 GB'a kadar dosya yüklemek için lütfen PRO VIP üyeliğe geçin!" : ""}` 
+            error: `${errMsg}${!isVipUser ? " 5 GB'a kadar dosya yüklemek için lütfen PRO VIP üyeliğe geçin!" : ""}` 
           });
           return;
         }
@@ -2401,8 +2523,20 @@ async function startServer() {
         // Guest user check
         const guestMaxMb = config.guestMaxMb ?? 20;
         if (fileSize > guestMaxMb * 1024 * 1024) {
+          cleanupTempFile();
+          const errMsg = `Misafir kullanıcılar en fazla ${guestMaxMb} MB boyutunda dosya yükleyebilir.`;
+          logServerError({
+            type: "upload",
+            message: "Misafir kullanıcı dosya boyutu limiti aşıldı",
+            details: `Boyut: ${(fileSize / (1024 * 1024)).toFixed(1)} MB, Limit: ${guestMaxMb} MB, IP: ${extractClientIp(req)}`,
+            ip: extractClientIp(req),
+            fileName: name,
+            fileSize,
+            fileType: mimeType,
+            statusCode: 400
+          });
           res.status(400).json({ 
-            error: `Misafir kullanıcılar en fazla ${guestMaxMb} MB boyutunda dosya yükleyebilir. Sınırsız yükleme yapmak için lütfen ücretsiz üye olun!`,
+            error: `${errMsg} Sınırsız yükleme yapmak için lütfen ücretsiz üye olun!`,
             guestLimitReached: true,
             limitType: "size"
           });
@@ -2418,8 +2552,20 @@ async function startServer() {
         const currentCount = await getEffectiveGuestCount(token, clientIp);
 
         if (currentCount >= guestMaxCount) {
+          cleanupTempFile();
+          const errMsg = `Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Limitiniz doldu!`;
+          logServerError({
+            type: "upload",
+            message: "Misafir yükleme sayısı limiti doldu",
+            details: `Mevcut yükleme sayısı: ${currentCount}, İzin verilen limit: ${guestMaxCount}, IP: ${clientIp}`,
+            ip: clientIp,
+            fileName: name,
+            fileSize,
+            fileType: mimeType,
+            statusCode: 400
+          });
           res.status(400).json({ 
-            error: `Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Limitiniz doldu! Sınırsız yükleme yapmak için lütfen ücretsiz üye olun.`,
+            error: `${errMsg} Sınırsız yükleme yapmak için lütfen ücretsiz üye olun.`,
             guestLimitReached: true,
             limitType: "count",
             guestMaxUploadCount: guestMaxCount,
@@ -2443,7 +2589,8 @@ async function startServer() {
         name: name || "dosya.bin",
         mimeType: mimeType || "application/octet-stream",
         size: fileSize || 0,
-        data: "", // We don't store raw data directly in metadata
+        data: "", // Stored on disk
+        filePath,
         uploadedAt: Date.now(),
         deleteAfter: effectiveDeleteAfter as any,
         password: password || undefined,
@@ -2457,7 +2604,7 @@ async function startServer() {
         watermarkPosition: watermarkPosition || undefined,
       };
 
-      await dbSaveImage(img, fileData, images);
+      await dbSaveImage(img, fileData, images, filePath);
 
       if (!userId) {
         const clientIp = extractClientIp(req);
@@ -2477,6 +2624,17 @@ async function startServer() {
       });
     } catch (err: any) {
       console.error("Upload error:", err);
+      logServerError({
+        type: "upload",
+        message: err?.message || "Resim/Dosya yüklenirken kritik sunucu hatası oluştu",
+        details: err?.stack || String(err),
+        ip: extractClientIp(req),
+        fileName: name,
+        fileSize: Number(size) || 0,
+        fileType: mimeType,
+        userId: userId || undefined,
+        statusCode: 500
+      });
       res.status(500).json({ error: "Resim yüklenirken bir sunucu hatası oluştu." });
     }
   });
@@ -4146,6 +4304,79 @@ async function startServer() {
     }
   });
 
+  // --- ADMIN ERROR TRACKING ENDPOINTS ---
+  
+  // Get system error logs
+  app.get("/api/admin/error-logs", async (req, res) => {
+    try {
+      const { type, search } = req.query;
+      let filtered = [...systemErrorLogs];
+
+      if (type && type !== "all") {
+        filtered = filtered.filter((l) => l.type === type);
+      }
+      if (search && typeof search === "string" && search.trim()) {
+        const s = search.toLowerCase();
+        filtered = filtered.filter(
+          (l) =>
+            l.message.toLowerCase().includes(s) ||
+            (l.details && l.details.toLowerCase().includes(s)) ||
+            (l.fileName && l.fileName.toLowerCase().includes(s)) ||
+            (l.ip && l.ip.toLowerCase().includes(s))
+        );
+      }
+
+      const uploadErrorCount = systemErrorLogs.filter((l) => l.type === "upload").length;
+      const now = Date.now();
+      const last24hCount = systemErrorLogs.filter((l) => now - l.timestamp < 24 * 60 * 60 * 1000).length;
+
+      res.json({
+        success: true,
+        logs: filtered,
+        stats: {
+          totalErrors: systemErrorLogs.length,
+          uploadErrors: uploadErrorCount,
+          last24hErrors: last24hCount,
+          systemStatus: last24hCount > 20 ? "warning" : "healthy",
+        },
+      });
+    } catch (err) {
+      console.error("Get error logs error:", err);
+      res.status(500).json({ error: "Hata logları getirilemedi." });
+    }
+  });
+
+  // Clear system error logs
+  app.post("/api/admin/error-logs/clear", async (req, res) => {
+    try {
+      systemErrorLogs.length = 0;
+      res.json({ success: true, message: "Hata logları başarıyla temizlendi." });
+    } catch (err) {
+      console.error("Clear error logs error:", err);
+      res.status(500).json({ error: "Loglar temizlenirken hata oluştu." });
+    }
+  });
+
+  // Generate test error log
+  app.post("/api/admin/error-logs/test", async (req, res) => {
+    try {
+      logServerError({
+        type: "upload",
+        message: "Test Yükleme Hatası (Simüle Edildi)",
+        details: "Admin panelinden test amacıyla tetiklenmiş dosya yükleme hatası log örneği.",
+        ip: extractClientIp(req),
+        fileName: "ornek_gorsel_hata_test.png",
+        fileSize: 15420000,
+        fileType: "image/png",
+        statusCode: 400,
+      });
+      res.json({ success: true, message: "Test hatası başarıyla oluşturuldu." });
+    } catch (err) {
+      console.error("Test error log error:", err);
+      res.status(500).json({ error: "Test hatası oluşturulamadı." });
+    }
+  });
+
   // --- VIP & PAYMENT ENDPOINTS ---
 
   // User submits a Payment Request (Havale/EFT or Credit Card notification)
@@ -4342,9 +4573,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Ensure high timeouts for large file uploads and slow clients
+  server.timeout = 10 * 60 * 1000; // 10 minutes
+  server.keepAliveTimeout = 120 * 1000; // 2 minutes
+  server.headersTimeout = 125 * 1000; // 125 seconds
 }
 
 startServer().catch(err => {
