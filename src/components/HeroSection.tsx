@@ -206,14 +206,56 @@ export default function HeroSection({
     }
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(Array.from(e.target.files), "image");
+    }
+  };
+
+  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(Array.from(e.target.files), "video");
+    }
+  };
+
+  const handleArchiveFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(Array.from(e.target.files), "file");
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       processFiles(Array.from(e.target.files));
     }
   };
 
-  const processFiles = (files: File[]) => {
-    const validFiles = files;
+  const processFiles = (files: File[], category?: "image" | "video" | "file") => {
+    const isImg = (f: File) => f.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i.test(f.name);
+    const isVid = (f: File) => f.type.startsWith("video/") || /\.(mp4|webm|mov|avi|mkv|m4v|flv|wmv)$/i.test(f.name);
+
+    let validFiles = files;
+
+    if (category === "image") {
+      validFiles = files.filter(isImg);
+      if (validFiles.length === 0) {
+        setErrorMsg("Lütfen sadece fotoğraf/görsel (JPG, PNG, GIF, WEBP vb.) dosyaları seçiniz.");
+        return;
+      }
+    } else if (category === "video") {
+      validFiles = files.filter(isVid);
+      if (validFiles.length === 0) {
+        setErrorMsg("Lütfen sadece video (MP4, WEBM, MOV vb.) dosyaları seçiniz.");
+        return;
+      }
+    } else if (category === "file") {
+      validFiles = files.filter((f) => !isImg(f) && !isVid(f));
+      if (validFiles.length === 0) {
+        setErrorMsg("Dosya yükle bölümünde fotoğraf ve video yüklenemez! Fotoğraflar ve videolar için lütfen 'Resim Yükle' veya 'Video Yükle' butonlarını kullanınız.");
+        return;
+      }
+    }
+
     if (validFiles.length === 0) {
       setErrorMsg("Lütfen geçerli bir dosya yükleyin.");
       return;
@@ -229,9 +271,11 @@ export default function HeroSection({
     const currentCount = selectedFiles.length;
     const incoming: SelectedFile[] = [];
 
+    const maxFilesAllowed = (currentUser && isVip) ? 25 : 10;
+
     for (const f of validFiles) {
-      if (currentCount + incoming.length >= 10) {
-        setErrorMsg("Aynı anda en fazla 10 dosya yükleyebilirsiniz.");
+      if (currentCount + incoming.length >= maxFilesAllowed) {
+        setErrorMsg(`Aynı anda en fazla ${maxFilesAllowed} dosya yükleyebilirsiniz.${!isVip ? " PRO VIP üyeliğe geçerek tek seferde 25 dosya yükleyebilirsiniz!" : ""}`);
         break;
       }
 
@@ -513,7 +557,7 @@ export default function HeroSection({
         <input
           type="file"
           ref={imageInputRef}
-          onChange={handleFileChange}
+          onChange={handleImageChange}
           multiple
           accept="image/*"
           className="hidden"
@@ -522,7 +566,7 @@ export default function HeroSection({
         <input
           type="file"
           ref={videoInputRef}
-          onChange={handleFileChange}
+          onChange={handleVideoChange}
           multiple
           accept="video/*"
           className="hidden"
@@ -531,9 +575,9 @@ export default function HeroSection({
         <input
           type="file"
           ref={fileInputRef}
-          onChange={handleFileChange}
+          onChange={handleArchiveFileChange}
           multiple
-          accept="*"
+          accept=".zip,.rar,.7z,.pdf,.docx,.doc,.txt,.xlsx,.pptx,.tar,.gz,.iso"
           className="hidden"
           id="hidden-file-input"
         />
@@ -733,7 +777,7 @@ export default function HeroSection({
                     <FolderOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     <span>Dosya Yükle</span>
                   </div>
-                  <span className="text-[10px] text-slate-300 font-normal">Toplu Resim / Video</span>
+                  <span className="text-[10px] text-slate-300 font-normal">ZIP, RAR, 7Z, PDF, DOCX</span>
                 </button>
 
                 {/* Kamerayla Çek Button */}
@@ -789,7 +833,7 @@ export default function HeroSection({
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 mb-6">
                 <h3 className="font-extrabold text-slate-800 dark:text-white text-base flex items-center gap-1.5">
                   <ImageIcon className="w-5 h-5 text-blue-600" />
-                  Seçilen Görseller ({selectedFiles.length}/10)
+                  Seçilen Dosyalar ({selectedFiles.length}/{(currentUser && isVip) ? 25 : 10})
                 </h3>
                 <button
                   onClick={clearAll}

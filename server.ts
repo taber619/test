@@ -3,6 +3,12 @@ import path from "path";
 import fs from "fs";
 import nodemailer from "nodemailer";
 import dns from "dns";
+import multer from "multer";
+
+const uploadMiddleware = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 * 1024 } // 5 GB max file upload
+});
 
 // Force IPv4 as default DNS resolution order to prevent ENETUNREACH on containers without IPv6
 if (dns && typeof dns.setDefaultResultOrder === "function") {
@@ -1540,10 +1546,21 @@ async function startServer() {
     };
   }
 
-  async function dbSaveImage(image: StoredImage, base64Data: string, imagesStore: Record<string, StoredImage>) {
+  async function dbSaveImage(image: StoredImage, fileData: string | Buffer, imagesStore: Record<string, StoredImage>) {
     if (useFirebase && db) {
       try {
-        const chunks = chunkString(base64Data, CHUNK_SIZE);
+        let chunks: string[] = [];
+        if (Buffer.isBuffer(fileData)) {
+          const chunkSize = 600 * 1024;
+          let offset = 0;
+          while (offset < fileData.length) {
+            chunks.push(fileData.subarray(offset, offset + chunkSize).toString("base64"));
+            offset += chunkSize;
+          }
+        } else {
+          chunks = chunkString(fileData || "", CHUNK_SIZE);
+        }
+
         const meta = {
           id: image.id,
           name: image.name,
@@ -1566,22 +1583,29 @@ async function startServer() {
         // Save metadata
         await setDoc(doc(db, "images", image.id), meta);
 
-        // Save chunks in parallel
-        const chunkPromises = chunks.map((chunk, i) => 
-          setDoc(doc(db, "image_chunks", `${image.id}_${i}`), {
-            imageId: image.id,
-            chunkIndex: i,
-            data: chunk,
-          })
-        );
-        await Promise.all(chunkPromises);
+        // Save chunks in parallel batches of 20 to avoid Firestore network congestion
+        const batchSize = 20;
+        for (let i = 0; i < chunks.length; i += batchSize) {
+          const batch = chunks.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map((chunk, idx) => {
+              const chunkIndex = i + idx;
+              return setDoc(doc(db, "image_chunks", `${image.id}_${chunkIndex}`), {
+                imageId: image.id,
+                chunkIndex,
+                data: chunk,
+              });
+            })
+          );
+        }
         return;
       } catch (e) {
         console.error("Firebase save image error:", e);
       }
     }
 
-    imagesStore[image.id] = { ...image, data: base64Data };
+    const base64Str = Buffer.isBuffer(fileData) ? fileData.toString("base64") : fileData;
+    imagesStore[image.id] = { ...image, data: base64Str };
   }
 
   async function dbGetImage(id: string, imagesStore: Record<string, StoredImage>): Promise<StoredImage | null> {
@@ -2305,14 +2329,28 @@ async function startServer() {
     }
   });
 
-  // Handle Image Upload
-  app.post("/api/upload", async (req, res) => {
+  // Handle Image & File Upload
+  app.post("/api/upload", uploadMiddleware.single("file"), async (req: any, res: any) => {
     try {
+      let name = req.body.name;
+      let mimeType = req.body.mimeType;
+      let size = Number(req.body.size) || 0;
+      let fileData: string | Buffer = "";
+
+      if (req.file) {
+        fileData = req.file.buffer;
+        name = name || req.file.originalname;
+        mimeType = mimeType || req.file.mimetype;
+        size = size || req.file.size;
+      } else if (req.body.data) {
+        let rawData = req.body.data;
+        if (rawData.includes("base64,")) {
+          rawData = rawData.split("base64,")[1];
+        }
+        fileData = rawData;
+      }
+
       const { 
-        name, 
-        mimeType, 
-        size, 
-        data, 
         deleteAfter, 
         password, 
         userId,
@@ -2324,13 +2362,13 @@ async function startServer() {
         watermarkPosition 
       } = req.body;
 
-      if (!data || !mimeType || !name) {
-        res.status(400).json({ error: "Eksik resim verisi!" });
+      if (!fileData || (typeof fileData === "string" && !fileData.length)) {
+        res.status(400).json({ error: "Eksik dosya verisi!" });
         return;
       }
 
       const config = await dbGetConfig();
-      const fileSize = Number(size) || 0;
+      const fileSize = Number(size) || (req.file ? req.file.size : 0);
 
       let uRecord: any = null;
       if (userId) {
@@ -2394,12 +2432,6 @@ async function startServer() {
       const id = generateId(6);
       const deleteToken = "del_" + generateId(12);
 
-      // Store base64 data (strip prefix if present, like 'data:image/png;base64,')
-      let base64Data = data;
-      if (data.includes("base64,")) {
-        base64Data = data.split("base64,")[1];
-      }
-
       // Permanent ("never") storage is strictly reserved for PRO VIP members
       let effectiveDeleteAfter = deleteAfter || (isVipUser ? "never" : "1m");
       if (effectiveDeleteAfter === "never" && !isVipUser) {
@@ -2408,9 +2440,9 @@ async function startServer() {
 
       const img: StoredImage = {
         id,
-        name: name || "resim.jpg",
-        mimeType: mimeType || "image/jpeg",
-        size: size || 0,
+        name: name || "dosya.bin",
+        mimeType: mimeType || "application/octet-stream",
+        size: fileSize || 0,
         data: "", // We don't store raw data directly in metadata
         uploadedAt: Date.now(),
         deleteAfter: effectiveDeleteAfter as any,
@@ -2425,7 +2457,7 @@ async function startServer() {
         watermarkPosition: watermarkPosition || undefined,
       };
 
-      await dbSaveImage(img, base64Data, images);
+      await dbSaveImage(img, fileData, images);
 
       if (!userId) {
         const clientIp = extractClientIp(req);

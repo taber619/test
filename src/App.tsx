@@ -258,28 +258,25 @@ export default function App() {
       const results: ClientImage[] = [];
 
       for (const file of files) {
-        const base64Data = await fileToBase64(file);
-        const payload = {
-          name: file.name,
-          mimeType: file.type,
-          size: file.size,
-          data: base64Data,
-          deleteAfter,
-          password,
-          userId: currentUser?.id || undefined,
-          guestToken,
-          watermarkText: watermarkOptions?.watermarkText,
-          watermarkOpacity: watermarkOptions?.watermarkOpacity,
-          watermarkColor: watermarkOptions?.watermarkColor,
-          watermarkSize: watermarkOptions?.watermarkSize,
-          watermarkPosition: watermarkOptions?.watermarkPosition,
-        };
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("name", file.name);
+        formData.append("mimeType", file.type || "application/octet-stream");
+        formData.append("size", String(file.size));
+        formData.append("deleteAfter", deleteAfter);
+        if (password) formData.append("password", password);
+        if (currentUser?.id) formData.append("userId", currentUser.id);
+        if (guestToken) formData.append("guestToken", guestToken);
+        if (watermarkOptions?.watermarkText) formData.append("watermarkText", watermarkOptions.watermarkText);
+        if (watermarkOptions?.watermarkOpacity !== undefined) formData.append("watermarkOpacity", String(watermarkOptions.watermarkOpacity));
+        if (watermarkOptions?.watermarkColor) formData.append("watermarkColor", watermarkOptions.watermarkColor);
+        if (watermarkOptions?.watermarkSize !== undefined) formData.append("watermarkSize", String(watermarkOptions.watermarkSize));
+        if (watermarkOptions?.watermarkPosition) formData.append("watermarkPosition", watermarkOptions.watermarkPosition);
 
         // Create an XMLHttpRequest to support real upload progress tracking
         const uploadResult = await new Promise<any>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", "/api/upload");
-          xhr.setRequestHeader("Content-Type", "application/json");
 
           // Track progress of the current file being sent over the network
           xhr.upload.onprogress = (event) => {
@@ -303,7 +300,7 @@ export default function App() {
             } else {
               try {
                 const errData = JSON.parse(xhr.responseText);
-                reject(new Error(errData.error || "Görsel yüklenemedi."));
+                reject(new Error(errData.error || "Görsel veya dosya yüklenemedi."));
               } catch (e) {
                 reject(new Error(`Yükleme başarısız (Kod: ${xhr.status})`));
               }
@@ -314,7 +311,7 @@ export default function App() {
             reject(new Error("Sunucuya bağlanırken bir ağ hatası oluştu."));
           };
 
-          xhr.send(JSON.stringify(payload));
+          xhr.send(formData);
         });
 
         // Add this file's full size to the accumulated total of prior uploaded files
