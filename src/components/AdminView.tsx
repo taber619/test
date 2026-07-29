@@ -3281,6 +3281,209 @@ export default function AdminView({ onBack }: AdminViewProps) {
             </div>
           </form>
 
+          {/* 1.5. PAYTR & SANAL POS ENTEGRASYON PANELERİ */}
+          <form onSubmit={handleSaveConfig} className="bg-slate-900 border border-blue-500/30 shadow-xl rounded-3xl p-6 sm:p-8 space-y-6 text-slate-100">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-black text-blue-400 uppercase tracking-wide flex items-center gap-2">
+                  <CreditCard className="w-6 h-6 text-blue-400" />
+                  💳 PayTR Sanal POS & Otomatik Kart Ödemesi Entegrasyonu
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  PayTR.com Sanal POS hesabınızı bağlayarak kredi/banka kartı ödemelerini otomatik alabilir ve VIP üyelikleri anında aktifleştirebilirsiniz.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {saveSuccess ? "✓ Kaydedildi!" : "PayTR Ayarlarını Kaydet"}
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Enable / Disable Gateway & Provider Select */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                  <div>
+                    <label className="text-xs font-black text-white block">Sanal POS Ödeme Altyapısı Statüsü</label>
+                    <span className="text-[11px] text-slate-400 block mt-0.5">
+                      {siteConfig.paymentGatewayConfig?.enabled ? "🟢 PayTR Aktif (Kart Ödemeleri Açık)" : "🔴 Pasif (Yalnızca Havale/EFT Kabul Edilir)"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = siteConfig.paymentGatewayConfig || { enabled: false, provider: "paytr" };
+                      setSiteConfig({
+                        ...siteConfig,
+                        paymentGatewayConfig: {
+                          ...cur,
+                          enabled: !cur.enabled
+                        }
+                      });
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${siteConfig.paymentGatewayConfig?.enabled ? "bg-emerald-500" : "bg-slate-700"}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${siteConfig.paymentGatewayConfig?.enabled ? "translate-x-5" : "translate-x-0"}`} />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-300 mb-2">
+                    Ödeme Sağlayıcı Seçimi
+                  </label>
+                  <select
+                    value={siteConfig.paymentGatewayConfig?.provider || "paytr"}
+                    onChange={(e) => {
+                      const p = e.target.value as any;
+                      setSiteConfig({
+                        ...siteConfig,
+                        paymentGatewayConfig: {
+                          ...(siteConfig.paymentGatewayConfig || { enabled: true }),
+                          provider: p
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="paytr">💳 PayTR Sanal POS (Türkiye - Tavsiye Edilen)</option>
+                    <option value="shopier">🛍️ Shopier (Alternatif)</option>
+                    <option value="iyzico">🔷 İyzico Sanal POS</option>
+                    <option value="stripe">🌐 Stripe (Uluslararası)</option>
+                    <option value="custom">🏦 Manuel Kart / Havale Bildirimi</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* API Credentials */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-300 mb-1.5">
+                    Mağaza No (Merchant ID)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Örn: 123456"
+                    value={siteConfig.paymentGatewayConfig?.merchantId || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSiteConfig({
+                        ...siteConfig,
+                        paymentGatewayConfig: {
+                          ...(siteConfig.paymentGatewayConfig || { enabled: true, provider: "paytr" }),
+                          merchantId: v
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-blue-400 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">PayTR Mağaza Paneli -&gt; Bilgi menüsünden alınır.</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-300 mb-1.5">
+                    API Key (Mağaza Parola)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="PayTR API Key"
+                    value={siteConfig.paymentGatewayConfig?.apiKey || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSiteConfig({
+                        ...siteConfig,
+                        paymentGatewayConfig: {
+                          ...(siteConfig.paymentGatewayConfig || { enabled: true, provider: "paytr" }),
+                          apiKey: v
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-blue-400 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">PayTR tarafındaki API Anahtarı</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-300 mb-1.5">
+                    API Secret (Gizli Anahtar)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="PayTR API Secret"
+                    value={siteConfig.paymentGatewayConfig?.apiSecret || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSiteConfig({
+                        ...siteConfig,
+                        paymentGatewayConfig: {
+                          ...(siteConfig.paymentGatewayConfig || { enabled: true, provider: "paytr" }),
+                          apiSecret: v
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-blue-400 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">PayTR Mağaza Gizli Anahtarı (Salt)</span>
+                </div>
+              </div>
+
+              {/* PayTR Callback Webhook URL Box */}
+              <div className="bg-slate-950 p-5 rounded-2xl border border-blue-500/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    PayTR Bildirim URL (Callback / Webhook URL)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const callbackUrl = `${window.location.protocol}//${window.location.host}/api/paytr/callback`;
+                      navigator.clipboard.writeText(callbackUrl);
+                      alert("PayTR Bildirim URL'si panoya kopyalandı:\n" + callbackUrl);
+                    }}
+                    className="text-[11px] font-bold text-blue-400 hover:text-blue-300 bg-blue-950/80 border border-blue-800/80 px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    📋 URL'yi Kopyala
+                  </button>
+                </div>
+                <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 break-all select-all">
+                  {typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}/api/paytr/callback` : "https://siteniz.com/api/paytr/callback"}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  ⚠️ <strong>Önemli:</strong> PayTR mağaza panelinize girip <strong>Ayarlar -&gt; Bildirim URL (Callback URL)</strong> kısmına yukarıdaki adresi yapıştırmalısınız. Ödeme tamamlandığında PayTR bu adrese bildirim gönderir ve VIP üyeliği sistem anında aktifleştirir.
+                </p>
+              </div>
+
+              {/* Step by Step PayTR Setup Guide */}
+              <div className="p-5 bg-blue-950/30 border border-blue-900/60 rounded-2xl space-y-3">
+                <h4 className="text-xs font-black text-blue-300 uppercase tracking-wider flex items-center gap-2">
+                  <span>📖 PayTR Başvuru &amp; Bağlama Rehberi (Adım Adım)</span>
+                </h4>
+                <ol className="text-xs text-slate-300 space-y-2 list-decimal list-inside leading-relaxed">
+                  <li>
+                    <strong>PayTR'ye Başvurun:</strong> <a href="https://www.paytr.com" target="_blank" rel="noreferrer" className="text-blue-400 underline font-bold">paytr.com</a> adresine giderek Sanal POS başvurusu yapın (Şahıs şirketi veya kurumsal firma önerilir).
+                  </li>
+                  <li>
+                    <strong>Mağaza Bilgilerinizi Alın:</strong> PayTR onayının ardından PayTR Mağaza Paneline giriş yapın. Sol menüden <strong>Bilgi</strong> sekmesine tıklayın.
+                  </li>
+                  <li>
+                    <strong>Anahtarları Yapıştırın:</strong> Ekranda görünen <code>Mağaza No (Merchant ID)</code>, <code>API Key</code> ve <code>API Secret</code> değerlerini yukarıdaki form alanlarına kopyalayıp yapıştırın.
+                  </li>
+                  <li>
+                    <strong>Bildirim URL'sini Tanımlayın:</strong> PayTR panelinde <strong>Ayarlar -&gt; Bildirim URL</strong> kısmına yukarıda verilen <code>https://.../api/paytr/callback</code> adresini kaydedin.
+                  </li>
+                  <li>
+                    <strong>Tamamlandı:</strong> "PayTR Ayarlarını Kaydet" butonuna basın. Artık müşteriler kart ile VIP üyelik aldıklarında 3D Secure güvencesiyle öder ve üyeliği saniyeler içinde otomatik başlar!
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </form>
+
           {/* 2. BANK ACCOUNTS & HAVALE MANAGEMENT */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-slate-100">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
