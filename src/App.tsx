@@ -14,6 +14,7 @@ import MiniChat from "./components/MiniChat";
 import AdContactModal from "./components/AdContactModal";
 import AdBannerSection from "./components/AdBannerSection";
 import VipModal from "./components/VipModal";
+import AnnouncementBanner from "./components/AnnouncementBanner";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -21,6 +22,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+  const [cachedMaintenance] = useState(() => localStorage.getItem("inanresim_maintenance_mode") === "true");
   const [theme] = useState<"dark">("dark");
 
   useEffect(() => {
@@ -38,6 +41,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSiteConfig(data);
+        if (data.maintenanceModeEnabled !== undefined) {
+          localStorage.setItem("inanresim_maintenance_mode", String(data.maintenanceModeEnabled));
+        }
 
         // Check if there is a new server-side boot ID or update
         if (data.appVersion) {
@@ -50,6 +56,8 @@ export default function App() {
       }
     } catch (e) {
       console.error("Failed to load site config:", e);
+    } finally {
+      setIsConfigLoaded(true);
     }
   };
 
@@ -539,100 +547,11 @@ export default function App() {
 
     return (
       <div id="homepage-main">
-        {siteConfig?.announcementEnabled && !isAnnDismissed && (
-          (() => {
-            const list = (siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean);
-            if (list.length === 0) return null;
-            const currentText = list[currentAnnIdx] || "";
-            return (
-              <div className="max-w-5xl mx-auto px-4 pt-6" id="site-announcement-container">
-                <div 
-                  className="relative overflow-hidden bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-4 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-300"
-                  id="site-announcement-toast"
-                >
-                  {/* Left accent color strip */}
-                  <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-blue-500 via-indigo-500 to-purple-600"></div>
-                  
-                  {/* Left Side: Badge & Animating Text */}
-                  <div className="flex items-center gap-3 min-w-0 flex-1 pl-1.5">
-                    <span className="flex-none px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-blue-100/30 dark:border-blue-900/30">
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500"></span>
-                      </span>
-                      Duyuru
-                    </span>
-                    
-                    {/* Sliding text wrapper */}
-                    <div className="min-w-0 flex-1 relative min-h-[24px] flex items-center overflow-hidden">
-                      <AnimatePresence mode="wait">
-                        <motion.p
-                          key={currentAnnIdx}
-                          initial={{ y: 12, opacity: 0 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          exit={{ y: -12, opacity: 0 }}
-                          transition={{ duration: 0.28, ease: "easeOut" }}
-                          className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 tracking-tight leading-relaxed"
-                        >
-                          {currentText}
-                        </motion.p>
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
-                  {/* Right Side: Navigation, View All & Dismiss */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    {list.length > 1 && (
-                      <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-950/50 p-1 rounded-xl border border-slate-200/40 dark:border-slate-800/60 text-[10px] font-extrabold text-slate-500">
-                        <button
-                          type="button"
-                          onClick={() => setCurrentAnnIdx((prev) => (prev - 1 + list.length) % list.length)}
-                          className="hover:bg-slate-200 dark:hover:bg-slate-850 p-1 rounded-lg transition-colors cursor-pointer text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                          title="Önceki"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                        <span className="px-1 text-[9px] font-black tabular-nums">{currentAnnIdx + 1} / {list.length}</span>
-                        <button
-                          type="button"
-                          onClick={() => setCurrentAnnIdx((prev) => (prev + 1) % list.length)}
-                          className="hover:bg-slate-200 dark:hover:bg-slate-850 p-1 rounded-lg transition-colors cursor-pointer text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                          title="Sonraki"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => setShowAllAnnouncements(true)}
-                      className="text-[10px] font-black text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline shrink-0 cursor-pointer bg-blue-50/50 dark:bg-blue-950/20 px-2 py-1 rounded-lg border border-blue-100/30 dark:border-blue-900/20"
-                    >
-                      Hepsini Gör ({list.length})
-                    </button>
-
-                    <div className="w-px h-4 bg-slate-200 dark:bg-slate-800 hidden sm:block"></div>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsAnnDismissed(true)}
-                      className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
-                      title="Kapat"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })()
+        {siteConfig && (
+          <AnnouncementBanner
+            siteConfig={siteConfig}
+            onOpenVipModal={() => setIsVipModalOpen(true)}
+          />
         )}
 
         {/* Modal for viewing all announcements */}
@@ -909,7 +828,7 @@ export default function App() {
     }
   };
 
-  const isMaintenanceActive = siteConfig?.maintenanceModeEnabled && !isAdminState;
+  const isMaintenanceActive = (siteConfig ? siteConfig.maintenanceModeEnabled : cachedMaintenance) && !isAdminState;
 
   if (isMaintenanceActive) {
     return (
@@ -1017,6 +936,7 @@ export default function App() {
         onLogout={handleLogout}
         theme="dark"
         onOpenVipModal={() => setIsVipModalOpen(true)}
+        siteConfig={siteConfig}
       />
 
       {/* Header Ad Banners */}
@@ -1125,7 +1045,7 @@ export default function App() {
       />
 
       {/* Bottom Footer block */}
-      <Footer onOpenAdsModal={() => setShowAdModal(true)} />
+      <Footer onOpenAdsModal={() => setShowAdModal(true)} siteConfig={siteConfig} />
     </div>
   );
 }

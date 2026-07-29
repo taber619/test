@@ -1254,6 +1254,32 @@ export default function AdminView({ onBack }: AdminViewProps) {
             </button>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">🌐 Site Marka / Logo İsmi</label>
+              <input
+                type="text"
+                value={siteConfig.siteName ?? "resimresim.com"}
+                onChange={(e) => setSiteConfig({ ...siteConfig, siteName: e.target.value })}
+                placeholder="Örn: resimresim.com veya HızlıResim"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">Sitenin logo, menü ve başlıklarında görünecek site marka adı.</span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">🔗 Site Alan Adı / Domain</label>
+              <input
+                type="text"
+                value={siteConfig.siteDomain ?? "resimresim.com"}
+                onChange={(e) => setSiteConfig({ ...siteConfig, siteDomain: e.target.value })}
+                placeholder="Örn: resimresim.com"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">E-posta ve bağlantılarda kullanılan ana domain adresi.</span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Ana Başlık (Title)</label>
@@ -1586,9 +1612,9 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Maksimum Dosya Boyutu (MB)</label>
                     <input
                       type="number"
-                      min="1"
-                      value={siteConfig.guestMaxMb ?? 20}
-                      onChange={(e) => setSiteConfig({ ...siteConfig, guestMaxMb: Number(e.target.value) })}
+                      min="0"
+                      value={siteConfig.guestMaxMb === 0 ? "" : (siteConfig.guestMaxMb ?? 20)}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, guestMaxMb: e.target.value === "" ? 0 : Number(e.target.value) })}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 20 (Üye olmadan en fazla 20 MB yükleyebilir)</span>
@@ -1597,9 +1623,9 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Maksimum Yükleme Adedi</label>
                     <input
                       type="number"
-                      min="1"
-                      value={siteConfig.guestMaxUploadCount ?? 5}
-                      onChange={(e) => setSiteConfig({ ...siteConfig, guestMaxUploadCount: Number(e.target.value) })}
+                      min="0"
+                      value={siteConfig.guestMaxUploadCount === 0 ? "" : (siteConfig.guestMaxUploadCount ?? 5)}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, guestMaxUploadCount: e.target.value === "" ? 0 : Number(e.target.value) })}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 5 (Misafir kullanıcı toplamda en fazla 5 resim/video yükleyebilir)</span>
@@ -1698,8 +1724,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     <input
                       type="number"
                       min="0"
-                      value={siteConfig.registeredMaxMb ?? 1000}
-                      onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxMb: Number(e.target.value) })}
+                      value={siteConfig.registeredMaxMb === 0 ? "" : (siteConfig.registeredMaxMb ?? 1000)}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxMb: e.target.value === "" ? 0 : Number(e.target.value) })}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 1000 (Üyeler için dosya boyutu sınırı. 1000 MB = 1 GB. 0 = Sınırsız)</span>
@@ -1709,8 +1735,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     <input
                       type="number"
                       min="0"
-                      value={siteConfig.registeredMaxUploadCount ?? 0}
-                      onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxUploadCount: Number(e.target.value) })}
+                      value={siteConfig.registeredMaxUploadCount === 0 ? "" : (siteConfig.registeredMaxUploadCount ?? 0)}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxUploadCount: e.target.value === "" ? 0 : Number(e.target.value) })}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 0 (Kayıtlı üyeler için yükleme adedi. 0 = Sınırsız yükleme)</span>
@@ -1730,8 +1756,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     <input
                       type="number"
                       min="0"
-                      value={siteConfig.vipMaxMb ?? 5000}
-                      onChange={(e) => setSiteConfig({ ...siteConfig, vipMaxMb: Number(e.target.value) })}
+                      value={siteConfig.vipMaxMb === 0 ? "" : (siteConfig.vipMaxMb ?? 5000)}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, vipMaxMb: e.target.value === "" ? 0 : Number(e.target.value) })}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 5000 (VIP üyeler için dosya/video boyutu sınırı. 5000 MB = 5 GB)</span>
@@ -3391,10 +3417,10 @@ export default function AdminView({ onBack }: AdminViewProps) {
                 </label>
                 <input
                   type="number"
-                  min="1"
-                  value={siteConfig.vipMonthlyPrice ?? 99}
+                  min="0"
+                  value={siteConfig.vipMonthlyPrice === 0 ? "" : (siteConfig.vipMonthlyPrice ?? 99)}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
+                    const val = e.target.value === "" ? 0 : Number(e.target.value);
                     const disc = siteConfig.vipAnnualDiscountPercent ?? 20;
                     const autoAnnual = Math.round(val * 12 * (1 - disc / 100));
                     setSiteConfig({
@@ -3415,9 +3441,9 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   type="number"
                   min="0"
                   max="90"
-                  value={siteConfig.vipAnnualDiscountPercent ?? 20}
+                  value={siteConfig.vipAnnualDiscountPercent === 0 ? "" : (siteConfig.vipAnnualDiscountPercent ?? 20)}
                   onChange={(e) => {
-                    const disc = Number(e.target.value);
+                    const disc = e.target.value === "" ? 0 : Number(e.target.value);
                     const val = siteConfig.vipMonthlyPrice ?? 99;
                     const autoAnnual = Math.round(val * 12 * (1 - disc / 100));
                     setSiteConfig({

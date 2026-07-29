@@ -108,6 +108,8 @@ export interface AnnouncementItem {
 }
 
 export interface SiteConfig {
+  siteName?: string;
+  siteDomain?: string;
   homepageTitle: string;
   homepageSubtitle: string;
   announcementEnabled: boolean;

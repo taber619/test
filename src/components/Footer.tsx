@@ -1,10 +1,15 @@
 import React from "react";
+import { SiteConfig } from "../types";
 
 interface FooterProps {
   onOpenAdsModal?: () => void;
+  siteConfig?: SiteConfig | null;
 }
 
-export default function Footer({ onOpenAdsModal }: FooterProps) {
+export default function Footer({ onOpenAdsModal, siteConfig }: FooterProps) {
+  const domain = siteConfig?.siteDomain || "resimresim.com";
+  const name = siteConfig?.siteName || "resimresim.com";
+
   const showTerms = (e: React.MouseEvent) => {
     e.preventDefault();
     alert("Kullanım Şartları:\n1. T.C. kanunlarına aykırı görseller yüklenemez.\n2. Telif hakkı ihlali barındıran içerikler silinir.");
@@ -25,7 +30,7 @@ export default function Footer({ onOpenAdsModal }: FooterProps) {
       <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
         <a href="#privacy" onClick={showPrivacy} className="hover:text-blue-400 transition-colors">Gizlilik Politikası</a>
         <a href="#rules" onClick={showTerms} className="hover:text-blue-400 transition-colors">Kullanım Şartları</a>
-        <a href="mailto:destek@inanresim.com" className="hover:text-blue-400 transition-colors">İletişim</a>
+        <a href={`mailto:destek@${domain}`} className="hover:text-blue-400 transition-colors">İletişim ({domain})</a>
         <a href="#api-doc" onClick={showApiDocs} className="hover:text-blue-400 transition-colors">API Dokümantasyonu</a>
         {onOpenAdsModal && (
           <button
@@ -38,7 +43,7 @@ export default function Footer({ onOpenAdsModal }: FooterProps) {
         )}
       </div>
       <div className="text-center sm:text-right">
-        © 2026 <span className="font-bold text-slate-300">İnanResim</span>. Tüm hakları saklıdır.
+        © 2026 <span className="font-bold text-slate-300">{name}</span>. Tüm hakları saklıdır.
       </div>
     </footer>
   );

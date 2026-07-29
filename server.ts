@@ -433,6 +433,8 @@ async function startServer() {
   }
 
   interface SiteConfig {
+    siteName?: string;
+    siteDomain?: string;
     homepageTitle: string;
     homepageSubtitle: string;
     announcementEnabled: boolean;
@@ -624,7 +626,9 @@ async function startServer() {
   let inMemoryChatSlowMode = false;
 
   const defaultSiteConfig: SiteConfig = {
-    homepageTitle: "İnanResim - Hızlı ve Güvenilir Resim Paylaşımı",
+    siteName: "resimresim.com",
+    siteDomain: "resimresim.com",
+    homepageTitle: "resimresim.com - Hızlı ve Güvenilir Resim Paylaşımı",
     homepageSubtitle: "Saniyeler içinde resim yükleyin, şifreleyin, paylaşın veya otomatik silinmesini sağlayın.",
     announcementEnabled: true,
     announcementText: "Yönetici Duyurusu: Yeni İnanResim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz.",
@@ -783,6 +787,8 @@ async function startServer() {
           const computedAnnualP = Math.round(monthlyP * 12 * (1 - (discPct / 100)));
 
           return {
+            siteName: data.siteName ?? defaultSiteConfig.siteName,
+            siteDomain: data.siteDomain ?? defaultSiteConfig.siteDomain,
             homepageTitle: data.homepageTitle ?? defaultSiteConfig.homepageTitle,
             homepageSubtitle: data.homepageSubtitle ?? defaultSiteConfig.homepageSubtitle,
             announcementEnabled: data.announcementEnabled ?? defaultSiteConfig.announcementEnabled,

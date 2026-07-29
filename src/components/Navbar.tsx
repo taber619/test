@@ -14,7 +14,7 @@ import {
   Info,
   Crown
 } from "lucide-react";
-import { ActiveTab, ClientUser } from "../types";
+import { ActiveTab, ClientUser, SiteConfig } from "../types";
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -24,6 +24,7 @@ interface NavbarProps {
   theme?: "light" | "dark";
   onToggleTheme?: () => void;
   onOpenVipModal?: () => void;
+  siteConfig?: SiteConfig | null;
 }
 
 export default function Navbar({ 
@@ -33,7 +34,8 @@ export default function Navbar({
   onLogout, 
   theme = "dark", 
   onToggleTheme,
-  onOpenVipModal
+  onOpenVipModal,
+  siteConfig
 }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +109,18 @@ export default function Navbar({
         </div>
         <div className="flex flex-col">
           <span className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-none">
-            inanresim<span className="text-blue-600 dark:text-blue-400">.com</span>
+            {(() => {
+              const name = siteConfig?.siteName || "resimresim.com";
+              if (name.includes(".")) {
+                const parts = name.split(".");
+                return (
+                  <>
+                    {parts[0]}<span className="text-blue-600 dark:text-blue-400">.{parts.slice(1).join(".")}</span>
+                  </>
+                );
+              }
+              return name;
+            })()}
           </span>
           <span className="text-[9px] text-slate-500 dark:text-slate-400 font-extrabold tracking-widest uppercase mt-0.5">
             HIZLI RESİM PAYLAŞIMI
