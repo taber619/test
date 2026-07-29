@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Download, Eye, Calendar, HardDrive, ShieldAlert, Key, Copy, Check, ArrowLeft, ExternalLink, Lock, QrCode } from "lucide-react";
+import { Download, Eye, Calendar, HardDrive, ShieldAlert, Key, Copy, Check, ArrowLeft, ExternalLink, Lock, QrCode, Archive } from "lucide-react";
 import { ClientImage } from "../types";
 import QRCodeShareModal from "./QRCodeShareModal";
 
@@ -228,7 +228,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
         </button>
 
         <span className="text-xs bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-extrabold px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/40">
-          {meta?.mimeType?.startsWith("video/") ? "Aktif Video" : "Aktif Görsel"}
+          {meta?.mimeType?.startsWith("video/") ? "Aktif Video" : meta?.mimeType?.startsWith("image/") ? "Aktif Görsel" : "Aktif Dosya / Arşiv"}
         </span>
       </div>
 
@@ -266,13 +266,22 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
                   </div>
                 )}
               </div>
-            ) : (
+            ) : meta?.mimeType?.startsWith("image/") ? (
               <img
                 src={verifiedDataUrl || ""}
                 alt={meta?.name}
                 className="max-h-[510px] w-auto rounded-2xl object-contain"
                 referrerPolicy="no-referrer"
               />
+            ) : (
+              <div className="w-full h-full min-h-[250px] bg-slate-900 rounded-2xl flex flex-col items-center justify-center p-6 text-white text-center">
+                <Archive className="w-16 h-16 text-amber-400 mb-3 animate-pulse" />
+                <h3 className="text-lg font-black text-amber-300 mb-1">{meta?.name}</h3>
+                <p className="text-xs text-slate-400 mb-4">{meta?.size ? `${(meta.size / (1024 * 1024)).toFixed(2)} MB` : ""}</p>
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {meta?.name?.split('.').pop()?.toUpperCase() || "DOSYA"} ARŞİVİ
+                </span>
+              </div>
             )}
           </div>
 

@@ -2862,6 +2862,34 @@ async function startServer() {
     });
   });
 
+  // GET Me (Returns up-to-date user profile including VIP status)
+  app.get("/api/auth/me", async (req, res) => {
+    const userId = req.query.userId as string;
+    if (!userId) {
+      return res.status(400).json({ error: "Kullanıcı ID gerekli." });
+    }
+    try {
+      const allUsers = await dbGetAllUsers(users);
+      const user = allUsers.find(u => u.id === userId);
+      if (!user) {
+        return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+      }
+      res.json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        isVip: !!user.isVip,
+        vipPlan: user.vipPlan,
+        vipExpireAt: user.vipExpireAt,
+        isBanned: !!user.isBanned,
+        createdAt: user.createdAt
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Kullanıcı bilgisi alınamadı." });
+    }
+  });
+
   // Login
   app.post("/api/auth/login", async (req, res) => {
     const { email, password } = req.body;
@@ -3812,78 +3840,7 @@ async function startServer() {
   // Update site config (Admin only)
   app.post("/api/admin/config", async (req, res) => {
     try {
-      const { 
-        homepageTitle, 
-        homepageSubtitle, 
-        announcementEnabled, 
-        announcementText,
-        announcements,
-        statsOffset,
-        usersOffset,
-        todayOffset,
-        maintenanceModeEnabled,
-        miniChatEnabled,
-        guestMaxMb,
-        guestMaxUploadCount,
-        guestAutoResetMode,
-        guestAutoResetHour,
-        guestResetIntervalHours,
-        lastGuestResetTime,
-        registeredMaxMb,
-        registeredMaxUploadCount,
-        requireEmailVerification,
-        adsEnabled,
-        adsContactEmail,
-        adsContactTelegram,
-        adsContactInfo,
-        adsList,
-        structuredAnnouncements,
-        securityIpLoggingEnabled,
-        securityHotlinkProtection,
-        securityWatermarkDefault,
-        securityForceHttpsHeaders,
-        securityKvkkNoticeEnabled,
-        securityMaxLoginAttempts,
-        privacyPolicyText,
-        termsOfServiceText
-      } = req.body;
-
-      const updated = await dbSaveConfig({
-        homepageTitle,
-        homepageSubtitle,
-        announcementEnabled: !!announcementEnabled,
-        announcementText,
-        announcements: announcements || (announcementText ? [announcementText] : []),
-        structuredAnnouncements,
-        statsOffset: statsOffset !== undefined ? Number(statsOffset) : undefined,
-        usersOffset: usersOffset !== undefined ? Number(usersOffset) : undefined,
-        todayOffset: todayOffset !== undefined ? Number(todayOffset) : undefined,
-        maintenanceModeEnabled: maintenanceModeEnabled !== undefined ? !!maintenanceModeEnabled : undefined,
-        miniChatEnabled: miniChatEnabled !== undefined ? !!miniChatEnabled : undefined,
-        guestMaxMb: guestMaxMb !== undefined ? Number(guestMaxMb) : undefined,
-        guestMaxUploadCount: guestMaxUploadCount !== undefined ? Number(guestMaxUploadCount) : undefined,
-        guestAutoResetMode,
-        guestAutoResetHour: guestAutoResetHour !== undefined ? Number(guestAutoResetHour) : undefined,
-        guestResetIntervalHours: guestResetIntervalHours !== undefined ? Number(guestResetIntervalHours) : undefined,
-        lastGuestResetTime: lastGuestResetTime !== undefined ? Number(lastGuestResetTime) : undefined,
-        registeredMaxMb: registeredMaxMb !== undefined ? Number(registeredMaxMb) : undefined,
-        registeredMaxUploadCount: registeredMaxUploadCount !== undefined ? Number(registeredMaxUploadCount) : undefined,
-        requireEmailVerification: requireEmailVerification !== undefined ? !!requireEmailVerification : undefined,
-        adsEnabled: adsEnabled !== undefined ? !!adsEnabled : undefined,
-        adsContactEmail,
-        adsContactTelegram,
-        adsContactInfo,
-        adsList,
-        securityIpLoggingEnabled: securityIpLoggingEnabled !== undefined ? !!securityIpLoggingEnabled : undefined,
-        securityHotlinkProtection: securityHotlinkProtection !== undefined ? !!securityHotlinkProtection : undefined,
-        securityWatermarkDefault: securityWatermarkDefault !== undefined ? !!securityWatermarkDefault : undefined,
-        securityForceHttpsHeaders: securityForceHttpsHeaders !== undefined ? !!securityForceHttpsHeaders : undefined,
-        securityKvkkNoticeEnabled: securityKvkkNoticeEnabled !== undefined ? !!securityKvkkNoticeEnabled : undefined,
-        securityMaxLoginAttempts: securityMaxLoginAttempts !== undefined ? Number(securityMaxLoginAttempts) : undefined,
-        privacyPolicyText,
-        termsOfServiceText
-      });
-
+      const updated = await dbSaveConfig(req.body || {});
       res.json({ success: true, config: updated });
     } catch (err) {
       console.error("Save config error:", err);

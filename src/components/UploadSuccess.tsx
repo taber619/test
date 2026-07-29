@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar, Video, Image, QrCode } from "lucide-react";
+import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar, Video, Image, QrCode, Archive, FileText } from "lucide-react";
 import { ClientImage } from "../types";
 import QRCodeShareModal from "./QRCodeShareModal";
 
@@ -95,7 +95,7 @@ export default function UploadSuccess({
             >
               {/* Thumbnail and Info */}
               <div className="lg:col-span-4 flex flex-col gap-4">
-                <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 group">
+                <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 group flex items-center justify-center">
                   {img.mimeType?.startsWith("video/") ? (
                     <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-xl">
                       <video
@@ -126,13 +126,20 @@ export default function UploadSuccess({
                         </div>
                       )}
                     </div>
-                  ) : (
+                  ) : img.mimeType?.startsWith("image/") ? (
                     <img
                       src={img.directUrl}
                       alt={img.name}
                       className="w-full h-full object-contain"
                       referrerPolicy="no-referrer"
                     />
+                  ) : (
+                    <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center p-4 text-white">
+                      <Archive className="w-10 h-10 text-amber-400 mb-2 animate-bounce" />
+                      <span className="text-xs font-black uppercase tracking-wider text-amber-300 bg-amber-950/60 border border-amber-800/60 px-2.5 py-1 rounded-lg">
+                        {img.name.split('.').pop()?.toUpperCase() || "DOSYA"}
+                      </span>
+                    </div>
                   )}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <a
@@ -154,10 +161,15 @@ export default function UploadSuccess({
                         <Video className="w-3 h-3" />
                         Video
                       </span>
-                    ) : (
+                    ) : img.mimeType?.startsWith("image/") ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
                         <Image className="w-3 h-3" />
                         Görsel
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/40">
+                        <Archive className="w-3 h-3" />
+                        Dosya / Arşiv
                       </span>
                     )}
                   </div>

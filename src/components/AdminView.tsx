@@ -462,6 +462,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
       if (res.ok && data.success) {
         fetchPaymentRequests();
         fetchUsers();
+        window.dispatchEvent(new Event("user_session_updated"));
         alert("✓ Ödeme onaylandı ve kullanıcı PRO VIP yapıldı!");
       } else {
         alert(data.error || "Onaylama başarısız.");
@@ -495,24 +496,58 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const handleToggleVipUser = async (userId: string, currentIsVip: boolean) => {
     const nextState = !currentIsVip;
     const plan = nextState ? (prompt("VIP üyelik süresi seçin (monthly / yearly):", "monthly") || "monthly") : "monthly";
+    const selectedPlan = plan === "yearly" ? "yearly" : "monthly";
+
+    // Optimistic UI update in admin users list instantly!
+    setUsersList(prev => prev.map(u => {
+      if (u.id === userId) {
+        return {
+          ...u,
+          isVip: nextState,
+          vipPlan: nextState ? selectedPlan : undefined,
+          vipExpireAt: nextState ? Date.now() + ((selectedPlan === "yearly" ? 365 : 30) * 86400000) : undefined
+        };
+      }
+      return u;
+    }));
+
     try {
       const res = await fetch(`/api/admin/users/${userId}/vip`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isVip: nextState, plan })
+        body: JSON.stringify({ isVip: nextState, plan: selectedPlan })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         fetchUsers();
+
+        // Check if currently logged in session is modified
+        const stored = localStorage.getItem("hizli_resim_user");
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            if (parsed.id === userId) {
+              const updated = {
+                ...parsed,
+                isVip: nextState,
+                vipPlan: nextState ? selectedPlan : undefined
+              };
+              localStorage.setItem("hizli_resim_user", JSON.stringify(updated));
+            }
+          } catch (e) {}
+        }
+        window.dispatchEvent(new Event("user_session_updated"));
       } else {
         alert(data.error || "İşlem başarısız.");
+        fetchUsers();
       }
     } catch (err) {
       alert("Hata oluştu.");
+      fetchUsers();
     }
   };
 
-  const handleAddBankAccount = (e: React.FormEvent) => {
+  const handleAddBankAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBankName.trim() || !newIban.trim() || !newAccountHolder.trim()) {
       alert("Lütfen Banka Adı, Hesap Sahibi ve IBAN alanlarını doldurun.");
@@ -531,19 +566,43 @@ export default function AdminView({ onBack }: AdminViewProps) {
 
     const currentBanks = siteConfig.bankAccounts || [];
     const updatedBanks = [...currentBanks, newAcc];
-    setSiteConfig(prev => ({ ...prev, bankAccounts: updatedBanks }));
+    const updatedConfig = { ...siteConfig, bankAccounts: updatedBanks };
+    setSiteConfig(updatedConfig);
 
     setNewBankName("");
     setNewAccountHolder("");
     setNewIban("");
     setNewBranchCode("");
     setNewBankDesc("");
+
+    try {
+      await fetch("/api/admin/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedConfig)
+      });
+      alert("✓ Yeni banka hesabı başarıyla eklendi ve kaydedildi!");
+    } catch (e) {
+      console.error("Bank account save error:", e);
+    }
   };
 
-  const handleDeleteBankAccount = (bankId: string) => {
-    if (!confirm("Bu banka hesabını silmek istediğinize emin misiniz?")) return;
+  const handleDeleteBankAccount = async (bankId: string) => {
+    if (!confirm("Bu banka hesabını (IBAN) silmek istediğinize emin misiniz?")) return;
     const updatedBanks = (siteConfig.bankAccounts || []).filter(b => b.id !== bankId);
-    setSiteConfig(prev => ({ ...prev, bankAccounts: updatedBanks }));
+    const updatedConfig = { ...siteConfig, bankAccounts: updatedBanks };
+    setSiteConfig(updatedConfig);
+
+    try {
+      await fetch("/api/admin/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedConfig)
+      });
+      alert("✓ Banka hesabı (IBAN) başarıyla silindi ve kaydedildi!");
+    } catch (e) {
+      console.error("Bank account delete error:", e);
+    }
   };
 
   useEffect(() => {
@@ -1341,14 +1400,13 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </div>
 
               <div className="mb-3">
-                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Duyuru İçerik Mesajı *</label>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Duyuru İçerik Mesajı (Yayınlanacak Detay Metni)</label>
                 <textarea
                   rows={2}
                   value={annText}
                   onChange={(e) => setAnnText(e.target.value)}
                   placeholder="Duyuru detay metnini giriniz..."
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
                 />
               </div>
 

@@ -102,15 +102,65 @@ export default function App() {
   const [uploadedImages, setUploadedImages] = useState<ClientImage[]>([]);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
 
+  // Realtime User Session Syncing (VIP Updates, Banned status)
+  const syncUserSession = async (userToSync?: ClientUser | null) => {
+    const stored = localStorage.getItem("hizli_resim_user");
+    let activeId = userToSync?.id || currentUser?.id;
+    if (!activeId && stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        activeId = parsed.id;
+      } catch (e) {}
+    }
+    if (!activeId) return;
+
+    try {
+      const res = await fetch(`/api/auth/me?userId=${activeId}`);
+      if (res.ok) {
+        const me = await res.json();
+        setCurrentUser(me);
+        localStorage.setItem("hizli_resim_user", JSON.stringify(me));
+      }
+    } catch (e) {
+      console.error("User session sync error:", e);
+    }
+  };
+
   // Parse custom parameters on mount (to support shareable preview links: /?view=image-detail&id=xyz)
   useEffect(() => {
     // Load local auth session if any
     const stored = localStorage.getItem("hizli_resim_user");
     if (stored) {
       try {
-        setCurrentUser(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        setCurrentUser(parsed);
+        syncUserSession(parsed);
       } catch (e) {}
     }
+
+    const handleSessionUpdate = () => {
+      const updatedStored = localStorage.getItem("hizli_resim_user");
+      if (updatedStored) {
+        try {
+          const parsed = JSON.parse(updatedStored);
+          setCurrentUser(parsed);
+          syncUserSession(parsed);
+        } catch (e) {}
+      }
+    };
+
+    window.addEventListener("user_session_updated", handleSessionUpdate);
+    
+    // Periodically sync logged-in user profile (every 5 seconds)
+    const userSyncInterval = setInterval(() => {
+      const currentStored = localStorage.getItem("hizli_resim_user");
+      if (currentStored) {
+        try {
+          const parsed = JSON.parse(currentStored);
+          syncUserSession(parsed);
+        } catch (e) {}
+      }
+    }, 5000);
 
     const checkRoute = () => {
       const params = new URLSearchParams(window.location.search);
@@ -136,7 +186,11 @@ export default function App() {
     checkRoute();
     // Watch history changes
     window.addEventListener("popstate", checkRoute);
-    return () => window.removeEventListener("popstate", checkRoute);
+    return () => {
+      window.removeEventListener("popstate", checkRoute);
+      window.removeEventListener("user_session_updated", handleSessionUpdate);
+      clearInterval(userSyncInterval);
+    };
   }, []);
 
   const handleLoginSuccess = (user: ClientUser) => {

@@ -20,7 +20,10 @@ import {
   Zap,
   Clock,
   Play,
-  Video
+  Video,
+  Archive,
+  FileText,
+  File
 } from "lucide-react";
 import { processImage } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
@@ -210,9 +213,9 @@ export default function HeroSection({
   };
 
   const processFiles = (files: File[]) => {
-    const validFiles = files.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    const validFiles = files;
     if (validFiles.length === 0) {
-      setErrorMsg("Lütfen geçerli bir görsel (JPG, PNG, GIF, WEBP) veya video (MP4, WEBM, vb.) yükleyin.");
+      setErrorMsg("Lütfen geçerli bir dosya yükleyin.");
       return;
     }
 
@@ -251,7 +254,7 @@ export default function HeroSection({
       incoming.push({
         id: "file-" + Date.now() + "-" + Math.random(),
         file: f,
-        previewUrl: URL.createObjectURL(f),
+        previewUrl: f.type.startsWith("image/") || f.type.startsWith("video/") ? URL.createObjectURL(f) : "",
       });
     }
 
@@ -282,8 +285,8 @@ export default function HeroSection({
     try {
       const processedFiles = await Promise.all(
         selectedFiles.map(async (item) => {
-          // Skip WebP / canvas processing on raw GIF files or video files to preserve quality and video playback
-          if (item.file.type === "image/gif" || item.file.type.startsWith("video/")) {
+          // Skip canvas processing on non-image files (GIF, video, ZIP, RAR, PDF, 7Z, etc.)
+          if (item.file.type === "image/gif" || item.file.type.startsWith("video/") || !item.file.type.startsWith("image/")) {
             return item.file;
           }
           try {
@@ -530,7 +533,7 @@ export default function HeroSection({
           ref={fileInputRef}
           onChange={handleFileChange}
           multiple
-          accept="image/*,video/*"
+          accept="*"
           className="hidden"
           id="hidden-file-input"
         />
@@ -830,25 +833,32 @@ export default function HeroSection({
                               VIDEO
                             </span>
                           </div>
-                        ) : (
+                        ) : item.file.type.startsWith("image/") ? (
                           <img
                             src={item.previewUrl}
                             alt={item.file.name}
                             className="w-full h-full object-cover"
                           />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white p-2 relative">
+                            <Archive className="w-8 h-8 text-amber-400 mb-1" />
+                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              {item.file.name.split('.').pop()?.toUpperCase() || "DOSYA"}
+                            </span>
+                          </div>
                         )}
                         
                         {/* Floating Delete Button */}
                         <button
                           onClick={() => removeFile(item.id)}
                           className="absolute top-1.5 right-1.5 p-1 bg-black/60 text-white hover:bg-black/80 rounded-full transition-colors cursor-pointer z-10"
-                          title={item.file.type.startsWith("video/") ? "Videoyu Kaldır" : "Görseli Kaldır"}
+                          title="Dosyayı Kaldır"
                         >
                           <X className="w-3 h-3" />
                         </button>
 
                         {/* Floating Edit Button (Pencil Icon) */}
-                        {!item.file.type.startsWith("video/") && (
+                        {item.file.type.startsWith("image/") && (
                           <button
                             onClick={() => setEditingFile(item)}
                             className="absolute bottom-1.5 right-1.5 p-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-full transition-colors cursor-pointer z-10 shadow-md shadow-blue-500/20 flex items-center justify-center"
