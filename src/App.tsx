@@ -13,6 +13,7 @@ import AdminView from "./components/AdminView";
 import MiniChat from "./components/MiniChat";
 import AdContactModal from "./components/AdContactModal";
 import AdBannerSection from "./components/AdBannerSection";
+import VipModal from "./components/VipModal";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -81,6 +82,7 @@ export default function App() {
   const [isAnnDismissed, setIsAnnDismissed] = useState(false);
   const [showAllAnnouncements, setShowAllAnnouncements] = useState(false);
   const [showAdModal, setShowAdModal] = useState(false);
+  const [isVipModalOpen, setIsVipModalOpen] = useState(false);
 
   useEffect(() => {
     if (!siteConfig || !siteConfig.announcementEnabled) return;
@@ -374,6 +376,8 @@ export default function App() {
           onBack={() => setActiveTab("home")}
           onUploadSuccess={handleUrlUploadSuccess}
           userId={currentUser?.id}
+          currentUser={currentUser}
+          onOpenVipModal={() => setShowVipModal(true)}
         />
       );
     }
@@ -572,6 +576,7 @@ export default function App() {
           homepageSubtitle={siteConfig?.homepageSubtitle}
           currentUser={currentUser}
           siteConfig={siteConfig}
+          onOpenVipModal={() => setShowVipModal(true)}
         />
 
         {/* Real-time stats */}
@@ -643,10 +648,10 @@ export default function App() {
                   Sınırsız İnanResim Ayrıcalıkları
                 </span>
                 <h3 className="text-xl sm:text-2xl font-black tracking-tight">
-                  Üye Olun, Sınırsız 1 GB Dosya Transferi İle Tanışın!
+                  Üye Olun 1 GB, PRO VIP İle 5 GB Transfer & Süresiz Saklama Kazanın!
                 </h3>
                 <p className="text-xs sm:text-sm text-blue-100 max-w-2xl leading-relaxed">
-                  İnanResim'e tamamen ücretsiz üye olarak tek seferde <strong>1 GB'a (1000 MB) kadar büyük boyutlu resim, video ve belgeleri</strong> sınırsız şekilde yükleyebilir; gelişmiş galeri panelinde toplu seçim ve silme yapabilirsiniz.
+                  İnanResim'e tamamen ücretsiz üye olarak tek seferde <strong>1 GB'a (1000 MB) kadar</strong> resim ve video yükleyebilirsiniz. Tek seferde <strong>5 GB (5000 MB) dosya yükleme</strong> ve <strong>Süresiz Kalıcı Depolama</strong> ayrıcalığı için PRO VIP paketlerimizi inceleyin!
                 </p>
               </div>
 
@@ -886,6 +891,7 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         theme="dark"
+        onOpenVipModal={() => setIsVipModalOpen(true)}
       />
 
       {/* Header Ad Banners */}
@@ -971,6 +977,18 @@ export default function App() {
         isOpen={showAdModal}
         onClose={() => setShowAdModal(false)}
         siteConfig={siteConfig || undefined}
+      />
+
+      {/* PRO VIP Subscription Modal */}
+      <VipModal
+        isOpen={isVipModalOpen}
+        onClose={() => setIsVipModalOpen(false)}
+        currentUser={currentUser}
+        siteConfig={siteConfig || undefined}
+        onVipSuccess={() => {
+          fetchSiteConfig();
+          // Reload user or update status if needed
+        }}
       />
 
       {/* Footer Banner Ad */}

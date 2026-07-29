@@ -55,6 +55,7 @@ interface HeroSectionProps {
   homepageSubtitle?: string;
   currentUser?: any | null;
   siteConfig?: any | null;
+  onOpenVipModal?: () => void;
 }
 
 export default function HeroSection({
@@ -67,11 +68,13 @@ export default function HeroSection({
   homepageSubtitle = "Türkiye'nin en hızlı resim yükleme platformu.",
   currentUser,
   siteConfig,
+  onOpenVipModal,
 }: HeroSectionProps) {
+  const isVip = currentUser && (currentUser.isVip || currentUser.role === "admin");
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [deleteAfter, setDeleteAfter] = useState<string>("never");
+  const [deleteAfter, setDeleteAfter] = useState<string>(isVip ? "never" : "1m");
   const [password, setPassword] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isAdModalOpen, setIsAdModalOpen] = useState<boolean>(false);
@@ -229,15 +232,19 @@ export default function HeroSection({
         break;
       }
 
-      const limitMb = !currentUser ? guestMaxMb : ((siteConfig?.registeredMaxMb ?? 1000) || 1000);
-      const isVideo = f.type.startsWith("video/");
+      const limitMb = !currentUser 
+        ? guestMaxMb 
+        : (isVip ? (siteConfig?.vipMaxMb ?? 5000) : ((siteConfig?.registeredMaxMb ?? 1000) || 1000));
       const maxSizeBytes = limitMb * 1024 * 1024;
       
       if (maxSizeBytes > 0 && f.size > maxSizeBytes) {
         if (!currentUser) {
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. 1 GB'a kadar dosya yüklemek ve sınırsız paylaşım yapmak için lütfen ücretsiz üye olun!`);
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. 1 GB'a kadar yüklemek için ücretsiz üye olun veya 5 GB'a kadar yüklemek için PRO VIP olun!`);
+        } else if (!isVip) {
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), standart üye limitini (1 GB / 1000 MB) aşıyor. Tek seferde 5 GB'a (5000 MB) kadar dosya ve video yüklemek için lütfen PRO VIP üyeliğe geçin!`);
+          if (onOpenVipModal) onOpenVipModal();
         } else {
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), izin verilen üyelik limitini (${limitMb} MB) aşıyor.`);
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), VIP dosya boyut limitini (${limitMb >= 1000 ? `${(limitMb/1000).toFixed(0)} GB` : `${limitMb} MB`}) aşıyor.`);
         }
         continue;
       }
@@ -452,16 +459,30 @@ export default function HeroSection({
           )}
         </div>
       ) : (
-        <div className="mb-4 flex items-center justify-between px-4 py-2 bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl animate-fade-in" id="registered-quota-badge">
+        <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 px-4 py-2 ${isVip ? "bg-amber-500/10 border border-amber-500/30 text-amber-200" : "bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40"} rounded-2xl animate-fade-in`} id="registered-quota-badge">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-            <span className="text-xs font-extrabold text-emerald-900 dark:text-emerald-300">
-              Kayıtlı Üye ({currentUser.username}): Üyelik Yükleme Limiti ({siteConfig?.registeredMaxMb ? (siteConfig.registeredMaxMb >= 1000 ? `${(siteConfig.registeredMaxMb / 1000).toFixed(0)} GB` : `${siteConfig.registeredMaxMb} MB`) : "1 GB"})
+            <span className={`w-2 h-2 rounded-full ${isVip ? "bg-amber-400" : "bg-emerald-500"} animate-pulse shrink-0`}></span>
+            <span className={`text-xs font-extrabold ${isVip ? "text-amber-800 dark:text-amber-300" : "text-emerald-900 dark:text-emerald-300"}`}>
+              {isVip ? (
+                <>👑 PRO VIP Üye ({currentUser.username}): Yükleme Limiti 5 GB (5000 MB) • Süresiz Saklama Aktif</>
+              ) : (
+                <>Kayıtlı Üye ({currentUser.username}): Yükleme Limiti 1 GB (1000 MB)</>
+              )}
             </span>
           </div>
-          <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-2.5 py-1 rounded-full">
-            Sınırsız
-          </span>
+          {!isVip ? (
+            <button
+              type="button"
+              onClick={onOpenVipModal}
+              className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-300 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/80 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-700/60 flex items-center gap-1 transition-all cursor-pointer"
+            >
+              👑 5 GB & Süresiz Saklama İçin VIP Ol
+            </button>
+          ) : (
+            <span className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2.5 py-1 rounded-full border border-amber-300/60">
+              👑 PRO VIP
+            </span>
+          )}
         </div>
       )}
 
@@ -731,7 +752,13 @@ export default function HeroSection({
                 <span className="bg-slate-200/70 dark:bg-slate-800/80 px-2.5 py-1 rounded-md text-slate-700 dark:text-slate-300">DESTEKLENEN: GÖRSEL, VİDEO & TÜM MEDYA DOSYALARI</span>
                 <div className="h-1.5 w-1.5 bg-slate-400 dark:bg-slate-700 rounded-full hidden sm:block"></div>
                 <span className="bg-slate-200/70 dark:bg-slate-800/80 px-2.5 py-1 rounded-md text-slate-700 dark:text-slate-300">
-                  {!currentUser ? `MİSAFİR: MAX ${guestMaxMb} MB` : `ÜYE LİMİTİ: 1 GB (1000 MB)`}
+                  {!currentUser ? (
+                    `MİSAFİR: MAX ${guestMaxMb} MB`
+                  ) : isVip ? (
+                    `👑 PRO VIP LİMİTİ: 5 GB (5000 MB)`
+                  ) : (
+                    `ÜYE LİMİTİ: 1 GB (1000 MB)`
+                  )}
                 </span>
                 <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>
                 <button
@@ -848,20 +875,45 @@ export default function HeroSection({
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 shadow-sm">
               {/* Expire settings */}
               <div>
-                <label className="text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wide block mb-2 pl-0.5">
-                  Otomatik Silinme Süresi
+                <label className="text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wide flex items-center justify-between mb-2 pl-0.5">
+                  <span>Otomatik Silinme Süresi</span>
+                  {!isVip && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-black flex items-center gap-1">
+                      👑 Süresiz: VIP Özel
+                    </span>
+                  )}
                 </label>
                 <select
                   value={deleteAfter}
-                  onChange={(e) => setDeleteAfter(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "never" && !isVip) {
+                      setErrorMsg("👑 Süresiz (kalıcı) saklama yalnızca PRO VIP üyelere özeldir! Standart üyeler için maksimum saklama süresi 1 aydır.");
+                      setDeleteAfter("1m");
+                      if (onOpenVipModal) onOpenVipModal();
+                    } else {
+                      setDeleteAfter(val);
+                    }
+                  }}
                   className="w-full text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer hover:border-slate-300"
                 >
-                  <option value="never">Süresiz (Kalıcı)</option>
-                  <option value="1h">1 Saat Sonra Sil</option>
-                  <option value="1d">1 Gün Sonra Sil</option>
+                  <option value="never">
+                    {isVip ? "Süresiz (Kalıcı Saklama — PRO VIP)" : "🔒 Süresiz (Kalıcı Saklama) — 👑 Yalnızca PRO VIP Üyelere Özel"}
+                  </option>
+                  <option value="1m">1 Ay Sonra Sil (Maksimum Standart Süre)</option>
                   <option value="1w">1 Hafta Sonra Sil</option>
-                  <option value="1m">1 Ay Sonra Sil</option>
+                  <option value="1d">1 Gün Sonra Sil</option>
+                  <option value="1h">1 Saat Sonra Sil</option>
                 </select>
+                {!isVip && (
+                  <button
+                    type="button"
+                    onClick={onOpenVipModal}
+                    className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold mt-1.5 flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    👑 Süresiz kalıcı saklama için PRO VIP üye olun
+                  </button>
+                )}
               </div>
 
               {/* Password setting */}

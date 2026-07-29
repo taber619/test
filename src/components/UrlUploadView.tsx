@@ -5,11 +5,14 @@ interface UrlUploadViewProps {
   onBack: () => void;
   onUploadSuccess: (uploadedImg: any) => void;
   userId?: string;
+  currentUser?: any | null;
+  onOpenVipModal?: () => void;
 }
 
-export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUploadViewProps) {
+export default function UrlUploadView({ onBack, onUploadSuccess, userId, currentUser, onOpenVipModal }: UrlUploadViewProps) {
+  const isVip = currentUser && (currentUser.isVip || currentUser.role === "admin");
   const [url, setUrl] = useState("");
-  const [deleteAfter, setDeleteAfter] = useState("never");
+  const [deleteAfter, setDeleteAfter] = useState(isVip ? "never" : "1m");
   const [password, setPassword] = useState("");
   const [addWatermark, setAddWatermark] = useState(false);
   const [watermarkText, setWatermarkText] = useState("© HızlıResim");
@@ -130,16 +133,36 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId }: UrlUp
               </label>
               <select
                 value={deleteAfter}
-                onChange={(e) => setDeleteAfter(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "never" && !isVip) {
+                    setErrorMsg("👑 Süresiz (kalıcı) saklama yalnızca PRO VIP üyelere özeldir! Standart üyeler için fotoğraflar ve tüm medyalar maksimum 1 ay saklanabilir.");
+                    setDeleteAfter("1m");
+                    if (onOpenVipModal) onOpenVipModal();
+                  } else {
+                    setDeleteAfter(val);
+                  }
+                }}
                 disabled={loading}
                 className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
-                <option value="never">Süresiz (Kalıcı)</option>
-                <option value="1h">1 Saat Sonra Sil</option>
-                <option value="1d">1 Gün Sonra Sil</option>
+                <option value="never">
+                  {isVip ? "Süresiz (Kalıcı Saklama — PRO VIP)" : "🔒 Süresiz (Kalıcı Saklama) — 👑 Yalnızca PRO VIP Üyelere Özel"}
+                </option>
+                <option value="1m">1 Ay Sonra Sil (Maksimum Standart Süre)</option>
                 <option value="1w">1 Hafta Sonra Sil</option>
-                <option value="1m">1 Ay Sonra Sil</option>
+                <option value="1d">1 Gün Sonra Sil</option>
+                <option value="1h">1 Saat Sonra Sil</option>
               </select>
+              {!isVip && (
+                <button
+                  type="button"
+                  onClick={onOpenVipModal}
+                  className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold mt-1.5 flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  👑 Süresiz kalıcı saklama için PRO VIP üye olun
+                </button>
+              )}
             </div>
 
             {/* Password input */}

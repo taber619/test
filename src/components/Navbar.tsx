@@ -11,7 +11,8 @@ import {
   ChevronDown, 
   Code,
   Sparkles,
-  Info
+  Info,
+  Crown
 } from "lucide-react";
 import { ActiveTab, ClientUser } from "../types";
 
@@ -22,6 +23,7 @@ interface NavbarProps {
   onLogout: () => void;
   theme?: "light" | "dark";
   onToggleTheme?: () => void;
+  onOpenVipModal?: () => void;
 }
 
 export default function Navbar({ 
@@ -30,7 +32,8 @@ export default function Navbar({
   currentUser, 
   onLogout, 
   theme = "dark", 
-  onToggleTheme 
+  onToggleTheme,
+  onOpenVipModal
 }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -126,6 +129,16 @@ export default function Navbar({
           Ana Sayfa
         </button>
 
+        {/* PRO VIP Button */}
+        <button
+          id="nav-btn-vip"
+          onClick={onOpenVipModal}
+          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md shadow-amber-500/20 hover:scale-105 transition-all cursor-pointer flex items-center gap-1.5 animate-pulse"
+        >
+          <Crown className="w-4 h-4 text-slate-950" />
+          <span>PRO VIP</span>
+        </button>
+
         {/* User Auth Status Area */}
         {currentUser ? (
           /* Profile Dropdown trigger (Keeps navbar extremely pristine) */
@@ -138,8 +151,11 @@ export default function Navbar({
               <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow-inner shadow-white/10 uppercase">
                 {currentUser.username.charAt(0)}
               </div>
-              <span className="hidden md:inline-block text-xs font-bold text-slate-700 dark:text-slate-200 truncate max-w-[100px]">
+              <span className="hidden md:inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200 truncate max-w-[120px]">
                 @{currentUser.username}
+                {currentUser.isVip && (
+                  <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" title="PRO VIP Üye" />
+                )}
               </span>
               <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
             </button>
@@ -160,12 +176,29 @@ export default function Navbar({
                       {currentUser.username}
                       <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0 animate-pulse" title="Çevrimiçi"></span>
                     </h4>
-                    <span className="text-[10px] text-slate-400 font-bold block">Üye Hesabı</span>
+                    {currentUser.isVip ? (
+                      <span className="text-[10px] text-amber-400 font-extrabold flex items-center gap-1 mt-0.5">
+                        <Crown className="w-3 h-3 text-amber-400" /> PRO VIP Üye
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-bold block">Standart Üye</span>
+                    )}
                   </div>
                 </div>
 
                 {/* Dropdown Menu Items */}
                 <div className="space-y-1 mt-3">
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      onOpenVipModal?.();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-black text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <Crown className="w-4 h-4 text-amber-400" />
+                    {currentUser.isVip ? "PRO VIP Üyelik Detayları" : "👑 PRO VIP'e Yükselt"}
+                  </button>
+
                   <button
                     onClick={() => handleMenuClick("gallery")}
                     className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${

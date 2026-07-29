@@ -24,9 +24,21 @@ import {
   DollarSign,
   ExternalLink,
   Edit3,
-  Globe
+  Globe,
+  Crown,
+  CreditCard,
+  Building2,
+  CheckCircle2,
+  XCircle,
+  Copy,
+  Sparkles,
+  ShieldCheck,
+  KeyRound,
+  Bell,
+  FileText,
+  Tag
 } from "lucide-react";
-import { SiteConfig, AdBanner, AdRequest } from "../types";
+import { SiteConfig, AdBanner, AdRequest, BankAccount, PaymentRequest, PaymentGatewayConfig, AnnouncementItem } from "../types";
 
 interface AdminUser {
   id: string;
@@ -36,6 +48,9 @@ interface AdminUser {
   emailVerified?: boolean;
   isBanned?: boolean;
   banReason?: string;
+  isVip?: boolean;
+  vipExpireAt?: number;
+  vipPlan?: "monthly" | "yearly" | null;
 }
 
 interface AdminImage {
@@ -60,7 +75,25 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [authError, setAuthError] = useState("");
   
   // Tab states
-  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp" | "ads">("settings");
+  const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp" | "ads" | "vip" | "security">("settings");
+  
+  // Structured Announcements Builder States
+  const [structuredAnnouncements, setStructuredAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [annTitle, setAnnTitle] = useState("");
+  const [annText, setAnnText] = useState("");
+  const [annCategory, setAnnCategory] = useState<"info" | "warning" | "campaign" | "maintenance" | "update" | "security">("update");
+  const [annPriority, setAnnPriority] = useState<"low" | "normal" | "high">("high");
+  const [annActionText, setAnnActionText] = useState("");
+  const [annActionUrl, setAnnActionUrl] = useState("");
+  const [showAnnModal, setShowAnnModal] = useState(false);
+  
+  // VIP & Payment states
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
+  const [newBankName, setNewBankName] = useState("");
+  const [newAccountHolder, setNewAccountHolder] = useState("");
+  const [newIban, setNewIban] = useState("");
+  const [newBranchCode, setNewBranchCode] = useState("");
+  const [newBankDesc, setNewBankDesc] = useState("");
   
   // Ad Management states
   const [newBannerTitle, setNewBannerTitle] = useState("");
@@ -288,6 +321,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
       if (res.ok) {
         setSiteConfig(data);
         setAnnouncements(data.announcements || (data.announcementText ? [data.announcementText] : []));
+        setStructuredAnnouncements(data.structuredAnnouncements || []);
       }
     } catch (e) {
       console.error("Config fetch error", e);
@@ -408,6 +442,110 @@ export default function AdminView({ onBack }: AdminViewProps) {
     }
   };
 
+  const fetchPaymentRequests = async () => {
+    try {
+      const res = await fetch("/api/admin/payment-requests");
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        setPaymentRequests(data);
+      }
+    } catch (e) {
+      console.error("Fetch payment requests error:", e);
+    }
+  };
+
+  const handleApprovePayment = async (requestId: string) => {
+    if (!confirm("Bu ödeme bildirimini onaylamak ve kullanıcıyı PRO VIP üye yapmak istediğinize emin misiniz?")) return;
+    try {
+      const res = await fetch(`/api/admin/payment-requests/${requestId}/approve`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchPaymentRequests();
+        fetchUsers();
+        alert("✓ Ödeme onaylandı ve kullanıcı PRO VIP yapıldı!");
+      } else {
+        alert(data.error || "Onaylama başarısız.");
+      }
+    } catch (err) {
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleRejectPayment = async (requestId: string) => {
+    const reason = prompt("Lütfen red nedenini belirtin:", "Ödeme dekontu/bilgileri doğrulanamadı.");
+    if (reason === null) return;
+    try {
+      const res = await fetch(`/api/admin/payment-requests/${requestId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rejectionReason: reason })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchPaymentRequests();
+        alert("Reddedildi.");
+      } else {
+        alert(data.error || "Reddetme başarısız.");
+      }
+    } catch (err) {
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleToggleVipUser = async (userId: string, currentIsVip: boolean) => {
+    const nextState = !currentIsVip;
+    const plan = nextState ? (prompt("VIP üyelik süresi seçin (monthly / yearly):", "monthly") || "monthly") : "monthly";
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/vip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isVip: nextState, plan })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchUsers();
+      } else {
+        alert(data.error || "İşlem başarısız.");
+      }
+    } catch (err) {
+      alert("Hata oluştu.");
+    }
+  };
+
+  const handleAddBankAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBankName.trim() || !newIban.trim() || !newAccountHolder.trim()) {
+      alert("Lütfen Banka Adı, Hesap Sahibi ve IBAN alanlarını doldurun.");
+      return;
+    }
+
+    const newAcc: BankAccount = {
+      id: "bank_" + Date.now(),
+      bankName: newBankName.trim(),
+      accountHolder: newAccountHolder.trim(),
+      iban: newIban.trim().toUpperCase(),
+      branchCode: newBranchCode.trim(),
+      description: newBankDesc.trim(),
+      isActive: true
+    };
+
+    const currentBanks = siteConfig.bankAccounts || [];
+    const updatedBanks = [...currentBanks, newAcc];
+    setSiteConfig(prev => ({ ...prev, bankAccounts: updatedBanks }));
+
+    setNewBankName("");
+    setNewAccountHolder("");
+    setNewIban("");
+    setNewBranchCode("");
+    setNewBankDesc("");
+  };
+
+  const handleDeleteBankAccount = (bankId: string) => {
+    if (!confirm("Bu banka hesabını silmek istediğinize emin misiniz?")) return;
+    const updatedBanks = (siteConfig.bankAccounts || []).filter(b => b.id !== bankId);
+    setSiteConfig(prev => ({ ...prev, bankAccounts: updatedBanks }));
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       setIsLoading(true);
@@ -419,7 +557,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
         fetchChatSlowMode(),
         fetchModerationLogs(),
         fetchSmtpConfig(),
-        fetchAdRequests()
+        fetchAdRequests(),
+        fetchPaymentRequests()
       ]).finally(() => {
         setIsLoading(false);
       });
@@ -434,7 +573,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
       const res = await fetch("/api/admin/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...siteConfig, announcements }),
+        body: JSON.stringify({ ...siteConfig, announcements, structuredAnnouncements }),
       });
       if (res.ok) {
         setSaveSuccess(true);
@@ -903,6 +1042,35 @@ export default function AdminView({ onBack }: AdminViewProps) {
           <Megaphone className="w-4 h-4 text-amber-500" />
           Reklam Yönetimi & Bannerlar
         </button>
+
+        <button
+          id="admin-vip-tab"
+          onClick={() => {
+            setActiveSubTab("vip");
+            fetchPaymentRequests();
+          }}
+          className={`px-5 py-3 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeSubTab === "vip"
+              ? "border-amber-500 text-amber-500 font-extrabold"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <Crown className="w-4 h-4 text-amber-400" />
+          👑 PRO VIP & Ödemeler ({paymentRequests.filter(p => p.status === "pending").length} Yeni)
+        </button>
+
+        <button
+          id="admin-security-tab"
+          onClick={() => setActiveSubTab("security")}
+          className={`px-5 py-3 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeSubTab === "security"
+              ? "border-emerald-500 text-emerald-500 font-extrabold"
+              : "border-transparent text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          🛡️ Güvenlik & Gizlilik
+        </button>
       </div>
 
       {/* Tab Contents */}
@@ -952,8 +1120,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
           <div className="border-t border-slate-100 pt-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Yönetici Duyuru Panosu</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Sitenin en üstünde gösterilecek duyuruları ekleyin, sıralayın ve silin.</p>
+                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Bell className="w-4 h-4 text-blue-600" />
+                  Yönetici Duyuru Panosu & Hazır Taslaklar
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Sitenin en üstünde gösterilecek duyuruları ekleyin, kategorilendirin ve zengin hazır taslaklardan faydalanın.</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input 
@@ -966,84 +1137,274 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </label>
             </div>
 
-            {/* List of active announcements */}
-            {announcements.length > 0 ? (
-              <div className="space-y-2 mb-4">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Yayındaki Duyurular ({announcements.length})</span>
-                {announcements.map((ann, idx) => (
-                  <div key={idx} className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 px-4 py-2.5 rounded-xl">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{ann}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = announcements.filter((_, i) => i !== idx);
-                        setAnnouncements(next);
-                        // sync first announcement for legacy views
-                        setSiteConfig(prev => ({ ...prev, announcementText: next[0] || "" }));
-                      }}
-                      className="text-slate-400 hover:text-red-500 p-1 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+            {/* List of active structured announcements */}
+            {structuredAnnouncements.length > 0 ? (
+              <div className="space-y-2.5 mb-5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Yayındaki Gelişmiş Duyurular ({structuredAnnouncements.length})</span>
+                {structuredAnnouncements.map((ann) => (
+                  <div key={ann.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 rounded-2xl">
+                    <div className="flex items-start gap-3">
+                      <span className={`px-2.5 py-1 text-[10px] font-black rounded-lg uppercase tracking-wide flex items-center gap-1 shrink-0 ${
+                        ann.category === 'update' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                        ann.category === 'maintenance' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                        ann.category === 'campaign' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                        ann.category === 'security' ? 'bg-violet-100 text-violet-700 border border-violet-200' :
+                        ann.category === 'warning' ? 'bg-red-100 text-red-700 border border-red-200' :
+                        'bg-blue-100 text-blue-700 border border-blue-200'
+                      }`}>
+                        {ann.category === 'update' && '🚀 Güncelleme'}
+                        {ann.category === 'maintenance' && '🛠️ Bakım'}
+                        {ann.category === 'campaign' && '🎁 Kampanya'}
+                        {ann.category === 'security' && '🔒 Güvenlik'}
+                        {ann.category === 'warning' && '⚠️ Uyarı'}
+                        {ann.category === 'info' && 'ℹ️ Bilgi'}
+                      </span>
+                      <div>
+                        {ann.title && <h5 className="text-xs font-black text-slate-800 dark:text-slate-100">{ann.title}</h5>}
+                        <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">{ann.text}</p>
+                        {ann.actionText && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 mt-1">
+                            {ann.actionText} → {ann.actionUrl || "#"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = structuredAnnouncements.map(item => 
+                            item.id === ann.id ? { ...item, enabled: !item.enabled } : item
+                          );
+                          setStructuredAnnouncements(next);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                          ann.enabled !== false
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-200 text-slate-600 border-slate-300'
+                        }`}
+                      >
+                        {ann.enabled !== false ? 'Aktif' : 'Pasif'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = structuredAnnouncements.filter(item => item.id !== ann.id);
+                          setStructuredAnnouncements(next);
+                          const textList = next.map(a => a.text);
+                          setAnnouncements(textList);
+                          setSiteConfig(prev => ({ ...prev, announcementText: textList[0] || "" }));
+                        }}
+                        className="text-slate-400 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-400 italic mb-4">Şu an aktif duyuru bulunmuyor.</p>
+              <p className="text-xs text-slate-400 italic mb-4">Şu an yapılandırılmış aktif duyuru bulunmuyor.</p>
             )}
 
-            {/* Add new announcement form */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newAnnText}
-                onChange={(e) => setNewAnnText(e.target.value)}
-                placeholder="Yeni bir duyuru mesajı yazın..."
-                className="flex-grow px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs bg-slate-50/50 focus:bg-white"
-                disabled={!siteConfig.announcementEnabled}
-              />
-              <button
-                type="button"
-                disabled={!siteConfig.announcementEnabled || !newAnnText.trim()}
-                onClick={() => {
-                  const next = [...announcements, newAnnText.trim()];
-                  setAnnouncements(next);
-                  setNewAnnText("");
-                  setSiteConfig(prev => ({ ...prev, announcementText: next[0] || "" }));
-                }}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Ekle
-              </button>
-            </div>
-
-            {/* Ready-made Announcement Templates shortcuts */}
-            <div className="mt-4">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1.5">Hazır Duyuru Taslakları (Listeye Ekle)</span>
-              <div className="flex flex-wrap gap-2">
+            {/* Ready-made Announcement Templates Builder */}
+            <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 border border-slate-200/80 rounded-2xl p-4 mb-4">
+              <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                Hazır Duyuru Taslak Kütüphanesi (1-Tıkla Yayınla)
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {[
-                  { label: "🔧 Bakım Duyurusu", text: "🔧 Duyuru: Sistemlerimizde yapılacak kısa süreli bakım çalışması nedeniyle bu gece 02:00-04:00 saatleri arasında kesintiler yaşanabilir." },
-                  { label: "🌙 Gece Modu", text: "🌙 Yeni Özellik: Sitemize ses efektli Gece/Gündüz modu eklendi! Sağ üstteki butondan hemen deneyebilirsiniz." },
-                  { label: "🔒 Güvenlik", text: "🔒 Bilgilendirme: Hassas veya kişisel görselleriniz için şifre koruma ve otomatik silinme özelliklerimizi ücretsiz kullanabilirsiniz." },
-                  { label: "🚀 Limitler", text: "🚀 Bilgi: İnanResim üzerinde üye olmadan tek seferde maksimum 20MB dosya boyutuna kadar resim yükleyebilirsiniz!" },
-                  { label: "🎉 Bayram", text: "🎉 İnanResim ailesi olarak tüm kullanıcılarımızın bayramını ve tatilini en içten dileklerimizle kutlarız!" }
+                  {
+                    title: "🚀 İnanResim v3.0 Yayında!",
+                    text: "Yeni sürümümüz ile PRO VIP Üyelik, Gelişmiş Şifreli Görsel Paylaşımı ve Yüksek Hızlı Sunucular hizmetinizde.",
+                    category: "update" as const,
+                    priority: "high" as const,
+                    actionText: "VIP Özellikleri Gör",
+                    actionUrl: "#vip"
+                  },
+                  {
+                    title: "🛠️ Planlı Sistem Bakımı",
+                    text: "Sistemlerimizde yapılacak veritabanı optimizasyon çalışması nedeniyle bu gece 02:00-04:00 saatleri arasında kısa süreli kesintiler yaşanabilir.",
+                    category: "maintenance" as const,
+                    priority: "high" as const,
+                    actionText: "Sistem Durumu"
+                  },
+                  {
+                    title: "🎁 PRO VIP Yıllık İndirim Kampanyası!",
+                    text: "Sınırsız resim yükleme, doğrudan resim linkleri ve reklamsız deneyim sunan PRO VIP üyelikte %20 dev fırsat başladı!",
+                    category: "campaign" as const,
+                    priority: "high" as const,
+                    actionText: "Hemen VIP Ol",
+                    actionUrl: "#vip"
+                  },
+                  {
+                    title: "🔒 Uçtan Uca Şifreleme & KVKK Uyumlu",
+                    text: "Yüklediğiniz tüm hassas görseller 256-bit AES standartlarına uygun şifrelenmektedir. Gizliliğiniz %100 koruma altındadır.",
+                    category: "security" as const,
+                    priority: "normal" as const,
+                    actionText: "Gizlilik Politikası"
+                  },
+                  {
+                    title: "💬 7/24 Admin Canlı Destek",
+                    text: "Sorularınız veya geri bildirimleriniz için canlı chat panelinden yöneticilerimize anında mesaj gönderebilirsiniz.",
+                    category: "info" as const,
+                    priority: "low" as const,
+                    actionText: "Canlı Destek"
+                  },
+                  {
+                    title: "⚠️ Topluluk & Telif Kuralları Hatırlatması",
+                    text: "Telif hakkı ihlali içeren veya yasa dışı görseller sistemimiz tarafından tespit edildiğinde derhal silinmektedir.",
+                    category: "warning" as const,
+                    priority: "normal" as const,
+                    actionText: "Kuralları İncele"
+                  }
                 ].map((tpl, i) => (
                   <button
                     key={i}
                     type="button"
                     disabled={!siteConfig.announcementEnabled}
                     onClick={() => {
-                      const next = [...announcements, tpl.text];
-                      setAnnouncements(next);
-                      setSiteConfig(prev => ({ ...prev, announcementText: next[0] || "" }));
+                      const newAnn: AnnouncementItem = {
+                        id: `ann_${Date.now()}_${i}`,
+                        title: tpl.title,
+                        text: tpl.text,
+                        category: tpl.category,
+                        priority: tpl.priority,
+                        actionText: tpl.actionText,
+                        actionUrl: tpl.actionUrl,
+                        createdAt: Date.now(),
+                        enabled: true
+                      };
+                      const next = [newAnn, ...structuredAnnouncements];
+                      setStructuredAnnouncements(next);
+                      const textList = next.map(a => a.text);
+                      setAnnouncements(textList);
+                      setSiteConfig(prev => ({ ...prev, announcementText: textList[0] || "" }));
                     }}
-                    className="px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 disabled:opacity-50 text-slate-600 hover:text-blue-600 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                    className="text-left p-3 bg-white hover:bg-blue-50/50 border border-slate-200 hover:border-blue-300 disabled:opacity-50 rounded-xl transition-all cursor-pointer shadow-sm group"
                   >
-                    {tpl.label}
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-extrabold text-slate-800 group-hover:text-blue-600 transition-colors">{tpl.title}</span>
+                      <Plus className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0" />
+                    </div>
+                    <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{tpl.text}</p>
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Custom Structured Announcement Form */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4">
+              <h5 className="text-xs font-black text-slate-800 mb-3 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 text-blue-600" />
+                Özel Duyuru Oluştur
+              </h5>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Duyuru Başlığı</label>
+                  <input
+                    type="text"
+                    value={annTitle}
+                    onChange={(e) => setAnnTitle(e.target.value)}
+                    placeholder="Örn: Yıllık VIP Kampanyası"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Kategori</label>
+                  <select
+                    value={annCategory}
+                    onChange={(e) => setAnnCategory(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                  >
+                    <option value="update">🚀 Sürüm Güncellemesi</option>
+                    <option value="maintenance">🛠️ Sistem Bakımı</option>
+                    <option value="campaign">🎁 Kampanya / VIP Fırsatı</option>
+                    <option value="security">🔒 Güvenlik & Gizlilik</option>
+                    <option value="warning">⚠️ Topluluk Uyarısı</option>
+                    <option value="info">ℹ️ Genel Bilgilendirme</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Öncelik Seviyesi</label>
+                  <select
+                    value={annPriority}
+                    onChange={(e) => setAnnPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                  >
+                    <option value="high">🔥 Yüksek (En Üstte)</option>
+                    <option value="normal">⚡ Normal</option>
+                    <option value="low">💡 Düşük</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Duyuru İçerik Mesajı *</label>
+                <textarea
+                  rows={2}
+                  value={annText}
+                  onChange={(e) => setAnnText(e.target.value)}
+                  placeholder="Duyuru detay metnini giriniz..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Buton Metni (Opsiyonel)</label>
+                  <input
+                    type="text"
+                    value={annActionText}
+                    onChange={(e) => setAnnActionText(e.target.value)}
+                    placeholder="Örn: VIP Üyeliğe Geç"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Yönlendirme Bağlantısı (Opsiyonel)</label>
+                  <input
+                    type="text"
+                    value={annActionUrl}
+                    onChange={(e) => setAnnActionUrl(e.target.value)}
+                    placeholder="Örn: #vip veya https://..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={!siteConfig.announcementEnabled || !annText.trim()}
+                onClick={() => {
+                  const newAnn: AnnouncementItem = {
+                    id: `ann_${Date.now()}`,
+                    title: annTitle.trim() || undefined,
+                    text: annText.trim(),
+                    category: annCategory,
+                    priority: annPriority,
+                    actionText: annActionText.trim() || undefined,
+                    actionUrl: annActionUrl.trim() || undefined,
+                    createdAt: Date.now(),
+                    enabled: true
+                  };
+                  const next = [newAnn, ...structuredAnnouncements];
+                  setStructuredAnnouncements(next);
+                  const textList = next.map(a => a.text);
+                  setAnnouncements(textList);
+                  setAnnTitle("");
+                  setAnnText("");
+                  setAnnActionText("");
+                  setAnnActionUrl("");
+                  setSiteConfig(prev => ({ ...prev, announcementText: textList[0] || "" }));
+                }}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md"
+              >
+                <Plus className="w-4 h-4" />
+                Duyuruyu Yayınla
+              </button>
             </div>
           </div>
 
@@ -1191,6 +1552,34 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 0 (Kayıtlı üyeler için yükleme adedi. 0 = Sınırsız yükleme)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* PRO VIP Limits Card */}
+              <div className="p-4 bg-amber-50/50 border border-amber-200/80 rounded-2xl">
+                <h5 className="text-xs font-extrabold text-amber-900 mb-3 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  👑 PRO VIP Üye Limitleri
+                </h5>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">VIP Maksimum Dosya Boyutu (MB)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={siteConfig.vipMaxMb ?? 5000}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, vipMaxMb: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 5000 (VIP üyeler için dosya/video boyutu sınırı. 5000 MB = 5 GB)</span>
+                  </div>
+                  <div className="p-2.5 bg-amber-100/60 border border-amber-200 rounded-xl">
+                    <p className="text-[11px] font-extrabold text-amber-900 flex items-center gap-1">
+                      <span>👑 Kalıcı Depolama:</span>
+                      <span className="text-amber-700">VIP Üyelere Özel Süresiz Saklama Aktif</span>
+                    </p>
+                    <p className="text-[10px] text-amber-800/80 mt-0.5">Standart üyelerin içerikleri süresiz saklanamaz, VIP üyeler süresiz (kalıcı) seçeneğini kullanabilir.</p>
                   </div>
                 </div>
               </div>
@@ -1463,6 +1852,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   <tr className="border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                     <th className="py-3 px-4">Kullanıcı Adı</th>
                     <th className="py-3 px-4">E-posta</th>
+                    <th className="py-3 px-4">Üyelik Tipi</th>
                     <th className="py-3 px-4">Durum</th>
                     <th className="py-3 px-4">Kayıt Tarihi</th>
                     <th className="py-3 px-4 text-right">İşlemler</th>
@@ -1474,6 +1864,12 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       <td className="py-3.5 px-4 font-extrabold text-slate-800">
                         <div className="flex items-center gap-1.5">
                           <span>@{u.username}</span>
+                          {u.isVip && (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                              <Crown className="w-3 h-3 text-amber-400" />
+                              PRO VIP
+                            </span>
+                          )}
                           {u.isBanned && (
                             <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
                               <ShieldAlert className="w-3 h-3" />
@@ -1498,6 +1894,16 @@ export default function AdminView({ onBack }: AdminViewProps) {
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
+                        {u.isVip ? (
+                          <div className="text-[11px] font-bold text-amber-500 flex items-center gap-1">
+                            <Crown className="w-3.5 h-3.5" />
+                            <span>PRO VIP ({u.vipPlan === "yearly" ? "Yıllık" : "Aylık"})</span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-medium">Standart Üye</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
                         {u.isBanned ? (
                           <div className="text-[11px] text-rose-600 font-semibold" title={u.banReason}>
                             🚫 {u.banReason ? `Engelli (${u.banReason})` : "Hesap Engellendi"}
@@ -1517,6 +1923,20 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleVipUser(u.id, !!u.isVip)}
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all cursor-pointer ${
+                              u.isVip
+                                ? "bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-md"
+                                : "bg-slate-800 text-amber-400 border border-amber-500/30 hover:bg-slate-700"
+                            }`}
+                            title={u.isVip ? "VIP Statüsünü Kaldır" : "Kullanıcıyı VIP Yap"}
+                          >
+                            <Crown className="w-3.5 h-3.5" />
+                            {u.isVip ? "VIP İptal Et" : "VIP Yap"}
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => handleToggleBanUser(u.id, !!u.isBanned, u.username)}
@@ -2772,6 +3192,489 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* VIP Subtab Panel */}
+      {activeSubTab === "vip" && (
+        <div className="space-y-8" id="admin-vip-panel">
+          
+          {/* 1. VIP PRICING & AUTO-CALCULATOR PANEL */}
+          <form onSubmit={handleSaveConfig} className="bg-slate-900 border border-amber-500/30 shadow-xl rounded-3xl p-6 sm:p-8 space-y-6 text-slate-100">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-black text-amber-400 uppercase tracking-wide flex items-center gap-2">
+                  <Crown className="w-6 h-6 text-amber-400" />
+                  PRO VIP Üyelik Paketleri & Otomatik Fiyat Hesaplama
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Aylık paket ücretini değiştirdiğinizde, yıllık paket fiyatı belirlediğiniz indirim oranına göre otomatik olarak hesaplanır.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {saveSuccess ? "✓ Kaydedildi!" : "VIP Ayarlarını Kaydet"}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-300 mb-2">
+                  Aylık Paket Ücreti (₺ / Ay)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={siteConfig.vipMonthlyPrice ?? 99}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    const disc = siteConfig.vipAnnualDiscountPercent ?? 20;
+                    const autoAnnual = Math.round(val * 12 * (1 - disc / 100));
+                    setSiteConfig({
+                      ...siteConfig,
+                      vipMonthlyPrice: val,
+                      vipAnnualPrice: autoAnnual
+                    });
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-black text-white focus:outline-none focus:border-amber-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-300 mb-2">
+                  Yıllık Paket İndirim Oranı (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="90"
+                  value={siteConfig.vipAnnualDiscountPercent ?? 20}
+                  onChange={(e) => {
+                    const disc = Number(e.target.value);
+                    const val = siteConfig.vipMonthlyPrice ?? 99;
+                    const autoAnnual = Math.round(val * 12 * (1 - disc / 100));
+                    setSiteConfig({
+                      ...siteConfig,
+                      vipAnnualDiscountPercent: disc,
+                      vipAnnualPrice: autoAnnual
+                    });
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-black text-amber-400 focus:outline-none focus:border-amber-500 transition-all"
+                />
+              </div>
+
+              {/* Realtime Auto-Calculated Annual Price Display */}
+              <div className="bg-slate-950 p-4 rounded-2xl border border-amber-500/40 flex flex-col justify-center">
+                <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest">OTOMATİK HESAPLANAN YILLIK FİYAT</span>
+                <div className="text-2xl font-black text-white mt-1">
+                  ₺{siteConfig.vipAnnualPrice ?? Math.round((siteConfig.vipMonthlyPrice ?? 99) * 12 * 0.8)} <span className="text-xs text-slate-400 font-medium">/ yıl</span>
+                </div>
+                <p className="text-[11px] text-emerald-400 font-medium mt-1">
+                  Aylık ₺{Math.round((siteConfig.vipAnnualPrice ?? 950) / 12)}'ye geliyor (%{siteConfig.vipAnnualDiscountPercent ?? 20} Tasarruf)
+                </p>
+              </div>
+            </div>
+          </form>
+
+          {/* 2. BANK ACCOUNTS & HAVALE MANAGEMENT */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-amber-400" />
+                  Banka IBAN Hesapları (Havale / EFT İçin)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Müşterilerin havale yapacağı Ziraat, Garanti, Akbank vb. IBAN hesaplarını yönetin.
+                </p>
+              </div>
+            </div>
+
+            {/* Existing Banks List */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(siteConfig.bankAccounts || []).map((b) => (
+                <div key={b.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-black text-amber-400 uppercase">{b.bankName}</span>
+                    <p className="text-xs font-bold text-white">{b.accountHolder}</p>
+                    <p className="text-xs font-mono text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-800">{b.iban}</p>
+                    {b.branchCode && <p className="text-[10px] text-slate-500">Şube: {b.branchCode}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteBankAccount(b.id)}
+                    className="p-2 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/50 rounded-xl transition-all cursor-pointer"
+                    title="Sil"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add New Bank Account Form */}
+            <form onSubmit={handleAddBankAccount} className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Yeni Banka Hesabı Ekle</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  placeholder="Banka Adı (Örn: Ziraat Bankası)"
+                  value={newBankName}
+                  onChange={(e) => setNewBankName(e.target.value)}
+                  className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+                <input
+                  type="text"
+                  placeholder="Hesap Sahibi Adı Soyadı"
+                  value={newAccountHolder}
+                  onChange={(e) => setNewAccountHolder(e.target.value)}
+                  className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+                <input
+                  type="text"
+                  placeholder="TR00 0000 0000 0000 0000 0000 00"
+                  value={newIban}
+                  onChange={(e) => setNewIban(e.target.value)}
+                  className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  placeholder="Açıklama / Şube Kodu (İsteğe bağlı)"
+                  value={newBankDesc}
+                  onChange={(e) => setNewBankDesc(e.target.value)}
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" /> Banka Ekle
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* 3. PAYMENT REQUESTS QUEUE */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 text-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-emerald-400" />
+                  Gelen VIP Ödeme ve Havale Bildirimleri ({paymentRequests.length})
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Gelen kart ve havale ödemelerini inceleyin, tek tıkla onaylayarak VIP üyeliği aktifleştirin.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchPaymentRequests}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Yenile
+              </button>
+            </div>
+
+            {paymentRequests.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl text-slate-500 text-xs">
+                Henüz ödeme bildirimi bulunmuyor.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <th className="py-3 px-4">Kullanıcı</th>
+                      <th className="py-3 px-4">Paket & Tutar</th>
+                      <th className="py-3 px-4">Ödeme Yöntemi</th>
+                      <th className="py-3 px-4">Gönderen / Banka</th>
+                      <th className="py-3 px-4">Tarih</th>
+                      <th className="py-3 px-4">Durum</th>
+                      <th className="py-3 px-4 text-right">İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-xs">
+                    {paymentRequests.map((pr) => (
+                      <tr key={pr.id} className="hover:bg-slate-950/50 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-white">
+                          <div>
+                            <p>@{pr.username}</p>
+                            <p className="text-[10px] text-slate-500 font-normal">{pr.userEmail}</p>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-black text-amber-400">
+                          <div>
+                            <p>₺{pr.amount}</p>
+                            <span className="text-[10px] text-slate-400 font-medium uppercase">{pr.plan === "yearly" ? "Yıllık" : "Aylık"}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase border ${
+                            pr.paymentMethod === "card" 
+                              ? "bg-blue-950 text-blue-400 border-blue-800" 
+                              : "bg-amber-950 text-amber-400 border-amber-800"
+                          }`}>
+                            {pr.paymentMethod === "card" ? "💳 Kredi/Banka Kartı" : "🏦 Havale / EFT"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-300">
+                          <div>
+                            <p className="font-bold">{pr.senderName || pr.bankName || "-"}</p>
+                            {pr.cardNumberMasked && <p className="text-[10px] font-mono text-slate-500">{pr.cardNumberMasked}</p>}
+                            {pr.receiptNumber && <p className="text-[10px] text-slate-500">Ref: {pr.receiptNumber}</p>}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-400 whitespace-nowrap text-[11px]">
+                          {new Date(pr.createdAt).toLocaleString("tr-TR")}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {pr.status === "approved" && (
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-1 rounded-xl flex items-center gap-1 w-fit">
+                              <CheckCircle2 className="w-3 h-3" /> Onaylandı
+                            </span>
+                          )}
+                          {pr.status === "pending" && (
+                            <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 border border-amber-800/60 px-2.5 py-1 rounded-xl flex items-center gap-1 w-fit animate-pulse">
+                              ⏳ Onay Bekliyor
+                            </span>
+                          )}
+                          {pr.status === "rejected" && (
+                            <span className="text-[10px] font-bold text-rose-400 bg-rose-950/80 border border-rose-800/60 px-2.5 py-1 rounded-xl flex items-center gap-1 w-fit">
+                              <XCircle className="w-3 h-3" /> Reddedildi
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          {pr.status === "pending" ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleApprovePayment(pr.id)}
+                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-xl transition-all cursor-pointer shadow-md flex items-center gap-1"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Onayla
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRejectPayment(pr.id)}
+                                className="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                              >
+                                Reddet
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-600 font-medium">Tamamlandı</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* SUBTAB: SECURITY & PRIVACY */}
+      {activeSubTab === "security" && (
+        <div className="space-y-6">
+          <form onSubmit={handleSaveConfig} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-6">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                  Güvenlik & KVKK Gizlilik Yapılandırması
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Uçtan uca şifreleme, çerez ve KVKK bildirimi, hotlink koruması ve güvenlik politikalarını yönetin.
+                </p>
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shrink-0"
+              >
+                <Save className="w-4 h-4" />
+                Güvenlik Ayarlarını Kaydet
+              </button>
+            </div>
+
+            {/* Status overview cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Şifreleme Standartı</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-100">256-Bit AES Uçtan Uca</span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center gap-3">
+                <div className="p-2.5 bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">KVKK & Çerez Uyumlu</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-100">
+                    {siteConfig.securityKvkkNoticeEnabled !== false ? "Etkin (Aktif)" : "Devre Dışı"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-2xl flex items-center gap-3">
+                <div className="p-2.5 bg-violet-500/20 text-violet-600 dark:text-violet-400 rounded-xl">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Hotlink Bağlantı Kalkanı</span>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-100">
+                    {siteConfig.securityHotlinkProtection !== false ? "Korumalı" : "Korumasız"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Security Toggles Grid */}
+            <div className="space-y-4 mb-8">
+              <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                🛡️ Sistem Güvenlik ve Gizlilik Modları
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Toggle 1: KVKK Notice */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex items-center justify-between gap-4">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-blue-500" />
+                      KVKK & Çerez Bildirimi
+                    </h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Site ziyaretçilerine alt kısımda KVKK bilgilendirmesi ve çerez onay bildirim bandı gösterir.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={siteConfig.securityKvkkNoticeEnabled !== false}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, securityKvkkNoticeEnabled: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {/* Toggle 2: Hotlink Protection */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex items-center justify-between gap-4">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-violet-500" />
+                      Görsel Hotlink Koruma Modu
+                    </h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      İzinsiz harici web sitelerinin görsellerinizi doğrudan çekmesini ve bant genişliğinizi tüketmesini önler.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={siteConfig.securityHotlinkProtection !== false}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, securityHotlinkProtection: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {/* Toggle 3: Default Watermark */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex items-center justify-between gap-4">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      Varsayılan Görsel Filigranı (Watermark)
+                    </h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Yüklenen kamuya açık resimlere telif koruması amacıyla şeffaf "İnanResim" filigranı uygular.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={!!siteConfig.securityWatermarkDefault}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, securityWatermarkDefault: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {/* Toggle 4: Force HTTPS & Security Headers */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex items-center justify-between gap-4">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Lock className="w-4 h-4 text-emerald-500" />
+                      Sıkı HTTP Güvenlik Başlıkları (HSTS / Anti-XSS)
+                    </h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      XSS, Sniffing ve Clickjacking saldırılarına karşı tarayıcı düzeyinde kalkan sağlar.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={siteConfig.securityForceHttpsHeaders !== false}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, securityForceHttpsHeaders: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Privacy Policy & Terms Editor */}
+            <div className="space-y-6 border-t border-slate-100 dark:border-slate-800 pt-6">
+              <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-blue-500" />
+                Gizlilik Sözleşmesi & Kullanım Şartları Metinleri
+              </h4>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                  🔒 Gizlilik Politikası (Privacy Policy) Metni
+                </label>
+                <textarea
+                  rows={4}
+                  value={siteConfig.privacyPolicyText || "İnanResim Gizlilik Politikası: Kullanıcı verileri ve yüklenen görselleriniz 256-bit şifreleme standartlarına tabidir. İzniniz olmadan asla 3. şahıslarla paylaşılmaz."}
+                  onChange={(e) => setSiteConfig({ ...siteConfig, privacyPolicyText: e.target.value })}
+                  className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                  📜 Kullanım Şartları (Terms of Service) Metni
+                </label>
+                <textarea
+                  rows={4}
+                  value={siteConfig.termsOfServiceText || "İnanResim Kullanım Şartları: Yasalara aykırı, telif hakkı ihlali içeren veya zararlı içerik yüklemek kesinlikle yasaktır. İhlal eden hesaplar kısıtlanacaktır."}
+                  onChange={(e) => setSiteConfig({ ...siteConfig, termsOfServiceText: e.target.value })}
+                  className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+              </div>
+            </div>
+          </form>
         </div>
       )}
     </div>

@@ -2,6 +2,50 @@ export interface ClientUser {
   id: string;
   username: string;
   email: string;
+  isVip?: boolean;
+  vipExpireAt?: number;
+  vipPlan?: "monthly" | "yearly";
+}
+
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountHolder: string;
+  iban: string;
+  branchCode?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface PaymentGatewayConfig {
+  enabled: boolean;
+  provider: "paytr" | "shopier" | "iyzico" | "stripe" | "custom";
+  merchantId?: string;
+  apiKey?: string;
+  apiSecret?: string;
+  shopierFormUrl?: string;
+  customInstruction?: string;
+}
+
+export interface PaymentRequest {
+  id: string;
+  userId: string;
+  username: string;
+  userEmail: string;
+  plan: "monthly" | "yearly";
+  amount: number;
+  paymentMethod: "havale" | "card";
+  senderName?: string;
+  selectedBankId?: string;
+  bankName?: string;
+  transferNote?: string;
+  receiptNumber?: string;
+  receiptImgUrl?: string;
+  cardNumberMasked?: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: number;
+  reviewedAt?: number;
+  rejectionReason?: string;
 }
 
 export interface ClientImage {
@@ -50,12 +94,26 @@ export interface AdRequest {
   status: "new" | "read" | "contacted";
 }
 
+export interface AnnouncementItem {
+  id: string;
+  title?: string;
+  text: string;
+  category?: "info" | "warning" | "campaign" | "maintenance" | "update" | "security";
+  priority?: "low" | "normal" | "high";
+  actionUrl?: string;
+  actionText?: string;
+  createdAt?: number;
+  expiresAt?: number;
+  enabled?: boolean;
+}
+
 export interface SiteConfig {
   homepageTitle: string;
   homepageSubtitle: string;
   announcementEnabled: boolean;
   announcementText: string;
   announcements?: string[];
+  structuredAnnouncements?: AnnouncementItem[];
   statsOffset: number;
   usersOffset: number;
   todayOffset: number;
@@ -69,6 +127,7 @@ export interface SiteConfig {
   guestResetIntervalHours?: number;
   lastGuestResetTime?: number;
   registeredMaxMb?: number;
+  vipMaxMb?: number;
   registeredMaxUploadCount?: number;
   requireEmailVerification?: boolean;
   adsEnabled?: boolean;
@@ -76,4 +135,19 @@ export interface SiteConfig {
   adsContactTelegram?: string;
   adsContactInfo?: string;
   adsList?: AdBanner[];
+  vipMonthlyPrice?: number;
+  vipAnnualDiscountPercent?: number;
+  vipAnnualPrice?: number;
+  vipFeatures?: string[];
+  bankAccounts?: BankAccount[];
+  paymentGatewayConfig?: PaymentGatewayConfig;
+  // Security & Privacy Config
+  securityIpLoggingEnabled?: boolean;
+  securityHotlinkProtection?: boolean;
+  securityWatermarkDefault?: boolean;
+  securityForceHttpsHeaders?: boolean;
+  securityKvkkNoticeEnabled?: boolean;
+  securityMaxLoginAttempts?: number;
+  privacyPolicyText?: string;
+  termsOfServiceText?: string;
 }

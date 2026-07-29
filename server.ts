@@ -69,6 +69,9 @@ interface StoredUser {
   emailVerified?: boolean;
   isBanned?: boolean;
   banReason?: string;
+  isVip?: boolean;
+  vipExpireAt?: number;
+  vipPlan?: "monthly" | "yearly";
 }
 
 async function startServer() {
@@ -310,6 +313,47 @@ async function startServer() {
     return chunks;
   }
 
+  interface BankAccount {
+    id: string;
+    bankName: string;
+    accountHolder: string;
+    iban: string;
+    branchCode?: string;
+    description?: string;
+    isActive?: boolean;
+  }
+
+  interface PaymentGatewayConfig {
+    enabled: boolean;
+    provider: "paytr" | "shopier" | "iyzico" | "stripe" | "custom";
+    merchantId?: string;
+    apiKey?: string;
+    apiSecret?: string;
+    shopierFormUrl?: string;
+    customInstruction?: string;
+  }
+
+  interface PaymentRequest {
+    id: string;
+    userId: string;
+    username: string;
+    userEmail: string;
+    plan: "monthly" | "yearly";
+    amount: number;
+    paymentMethod: "havale" | "card";
+    senderName?: string;
+    selectedBankId?: string;
+    bankName?: string;
+    transferNote?: string;
+    receiptNumber?: string;
+    receiptImgUrl?: string;
+    cardNumberMasked?: string;
+    status: "pending" | "approved" | "rejected";
+    createdAt: number;
+    reviewedAt?: number;
+    rejectionReason?: string;
+  }
+
   // Site configuration interface
   interface AdBanner {
     id: string;
@@ -323,12 +367,26 @@ async function startServer() {
     enabled: boolean;
   }
 
+  interface AnnouncementItem {
+    id: string;
+    title?: string;
+    text: string;
+    category?: "info" | "warning" | "campaign" | "maintenance" | "update" | "security";
+    priority?: "low" | "normal" | "high";
+    actionUrl?: string;
+    actionText?: string;
+    createdAt?: number;
+    expiresAt?: number;
+    enabled?: boolean;
+  }
+
   interface SiteConfig {
     homepageTitle: string;
     homepageSubtitle: string;
     announcementEnabled: boolean;
     announcementText: string;
     announcements?: string[];
+    structuredAnnouncements?: AnnouncementItem[];
     statsOffset: number;
     usersOffset: number;
     todayOffset: number;
@@ -348,6 +406,21 @@ async function startServer() {
     adsContactTelegram?: string;
     adsContactInfo?: string;
     adsList?: AdBanner[];
+    vipMonthlyPrice?: number;
+    vipAnnualDiscountPercent?: number;
+    vipAnnualPrice?: number;
+    vipFeatures?: string[];
+    bankAccounts?: BankAccount[];
+    paymentGatewayConfig?: PaymentGatewayConfig;
+    // Security & Privacy Settings
+    securityIpLoggingEnabled?: boolean;
+    securityHotlinkProtection?: boolean;
+    securityWatermarkDefault?: boolean;
+    securityForceHttpsHeaders?: boolean;
+    securityKvkkNoticeEnabled?: boolean;
+    securityMaxLoginAttempts?: number;
+    privacyPolicyText?: string;
+    termsOfServiceText?: string;
   }
 
   interface ChatMessage {
@@ -503,6 +576,36 @@ async function startServer() {
     announcementEnabled: true,
     announcementText: "Yönetici Duyurusu: Yeni İnanResim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz.",
     announcements: ["Yönetici Duyurusu: Yeni İnanResim sürümü yayında! Artık kendi şifreli görsellerinizi koruyabilirsiniz."],
+    structuredAnnouncements: [
+      {
+        id: "ann_1",
+        title: "İnanResim v3.0 Yayında!",
+        text: "Yeni sürümümüz ile PRO VIP Üyelik, Gelişmiş Şifreli Görsel Paylaşımı ve Yüksek Hızlı Sunucular hizmetinizde.",
+        category: "update",
+        priority: "high",
+        actionText: "VIP Özellikleri Gör",
+        actionUrl: "#vip",
+        createdAt: Date.now() - 86400000,
+        enabled: true
+      },
+      {
+        id: "ann_2",
+        title: "Uçtan Uca Şifreli & Uyumlu Gizlilik",
+        text: "Yüklediğiniz tüm özel görseller 256-bit AES şifreleme ve KVKK gizlilik standartlarına uygun olarak saklanmaktadır.",
+        category: "security",
+        priority: "normal",
+        createdAt: Date.now() - 43200000,
+        enabled: true
+      }
+    ],
+    securityIpLoggingEnabled: true,
+    securityHotlinkProtection: true,
+    securityWatermarkDefault: false,
+    securityForceHttpsHeaders: true,
+    securityKvkkNoticeEnabled: true,
+    securityMaxLoginAttempts: 5,
+    privacyPolicyText: "İnanResim Gizlilik Politikası: Kullanıcı verileri ve yüklenen görselleriniz 256-bit şifreleme standartlarına tabidir. İzniniz olmadan asla 3. şahıslarla paylaşılmaz.",
+    termsOfServiceText: "İnanResim Kullanım Şartları: Yasalara aykırı, telif hakkı ihlali içeren veya zararlı içerik yüklemek kesinlikle yasaktır. İhlal eden hesaplar kısıtlanacaktır.",
     statsOffset: 0,
     usersOffset: 0,
     todayOffset: 0,
@@ -515,6 +618,7 @@ async function startServer() {
     guestResetIntervalHours: 24,
     lastGuestResetTime: 0,
     registeredMaxMb: 1000,
+    vipMaxMb: 5000,
     registeredMaxUploadCount: 0,
     requireEmailVerification: true,
     adsEnabled: true,
@@ -572,7 +676,44 @@ async function startServer() {
         position: "home-bottom",
         enabled: true
       }
-    ]
+    ],
+    vipMonthlyPrice: 99,
+    vipAnnualDiscountPercent: 20,
+    vipAnnualPrice: 950,
+    vipFeatures: [
+      "Sınırsız Yükleme Hakkı",
+      "Tek Seferde 5 GB (5000 MB) Dosya & Video Boyutu",
+      "%100 Reklamsız VIP Kullanım",
+      "Süresiz (Kalıcı Saklama) VIP'ye Özel Görsel/Video Depolama",
+      "Özel Filigran ve Şifreli İndirme Koruması",
+      "VIP Öncelikli Yüksek Hızlı Sunucu"
+    ],
+    bankAccounts: [
+      {
+        id: "bank_1",
+        bankName: "Ziraat Bankası",
+        accountHolder: "İnanResim İnternet Hizmetleri",
+        iban: "TR12 0001 0000 1234 5678 9000 01",
+        branchCode: "0001 / Ziraat Kadıköy",
+        description: "Açıklama alanına Kullanıcı Adınızı veya E-posta adresinizi yazınız."
+      },
+      {
+        id: "bank_2",
+        bankName: "Garanti BBVA",
+        accountHolder: "İnanResim İnternet Hizmetleri",
+        iban: "TR62 0006 2000 0000 1234 5678 90",
+        branchCode: "0062 / Garanti Beşiktaş",
+        description: "Transfer açıklamasına VIP Paket Sipariş Kodunu ekleyiniz."
+      }
+    ],
+    paymentGatewayConfig: {
+      enabled: true,
+      provider: "paytr",
+      merchantId: "",
+      apiKey: "",
+      apiSecret: "",
+      customInstruction: "Kartınızla 3D Secure korumalı online ödeme yaparak anında PRO VIP hesabınızı aktifleştirebilirsiniz."
+    }
   };
 
   let siteConfigState = { ...defaultSiteConfig };
@@ -584,6 +725,10 @@ async function startServer() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
+          const monthlyP = data.vipMonthlyPrice !== undefined ? Number(data.vipMonthlyPrice) : defaultSiteConfig.vipMonthlyPrice;
+          const discPct = data.vipAnnualDiscountPercent !== undefined ? Number(data.vipAnnualDiscountPercent) : defaultSiteConfig.vipAnnualDiscountPercent;
+          const computedAnnualP = Math.round(monthlyP * 12 * (1 - (discPct / 100)));
+
           return {
             homepageTitle: data.homepageTitle ?? defaultSiteConfig.homepageTitle,
             homepageSubtitle: data.homepageSubtitle ?? defaultSiteConfig.homepageSubtitle,
@@ -609,6 +754,21 @@ async function startServer() {
             adsContactTelegram: data.adsContactTelegram ?? defaultSiteConfig.adsContactTelegram,
             adsContactInfo: data.adsContactInfo ?? defaultSiteConfig.adsContactInfo,
             adsList: data.adsList ?? defaultSiteConfig.adsList,
+            vipMonthlyPrice: monthlyP,
+            vipAnnualDiscountPercent: discPct,
+            vipAnnualPrice: data.vipAnnualPrice !== undefined ? Number(data.vipAnnualPrice) : computedAnnualP,
+            vipFeatures: data.vipFeatures ?? defaultSiteConfig.vipFeatures,
+            bankAccounts: data.bankAccounts ?? defaultSiteConfig.bankAccounts,
+            paymentGatewayConfig: data.paymentGatewayConfig ?? defaultSiteConfig.paymentGatewayConfig,
+            structuredAnnouncements: data.structuredAnnouncements ?? defaultSiteConfig.structuredAnnouncements,
+            securityIpLoggingEnabled: data.securityIpLoggingEnabled !== undefined ? !!data.securityIpLoggingEnabled : defaultSiteConfig.securityIpLoggingEnabled,
+            securityHotlinkProtection: data.securityHotlinkProtection !== undefined ? !!data.securityHotlinkProtection : defaultSiteConfig.securityHotlinkProtection,
+            securityWatermarkDefault: data.securityWatermarkDefault !== undefined ? !!data.securityWatermarkDefault : defaultSiteConfig.securityWatermarkDefault,
+            securityForceHttpsHeaders: data.securityForceHttpsHeaders !== undefined ? !!data.securityForceHttpsHeaders : defaultSiteConfig.securityForceHttpsHeaders,
+            securityKvkkNoticeEnabled: data.securityKvkkNoticeEnabled !== undefined ? !!data.securityKvkkNoticeEnabled : defaultSiteConfig.securityKvkkNoticeEnabled,
+            securityMaxLoginAttempts: data.securityMaxLoginAttempts !== undefined ? Number(data.securityMaxLoginAttempts) : defaultSiteConfig.securityMaxLoginAttempts,
+            privacyPolicyText: data.privacyPolicyText ?? defaultSiteConfig.privacyPolicyText,
+            termsOfServiceText: data.termsOfServiceText ?? defaultSiteConfig.termsOfServiceText,
           };
         }
       } catch (e) {
@@ -623,6 +783,12 @@ async function startServer() {
     const updated = { ...current, ...newConfig };
     if (updated.announcements && updated.announcements.length > 0) {
       updated.announcementText = updated.announcements[0];
+    }
+    
+    // Auto-calculate annual price if monthly price or discount rate changes
+    if (updated.vipMonthlyPrice !== undefined) {
+      const discPct = updated.vipAnnualDiscountPercent !== undefined ? updated.vipAnnualDiscountPercent : 20;
+      updated.vipAnnualPrice = Math.round(updated.vipMonthlyPrice * 12 * (1 - (discPct / 100)));
     }
     
     if (useFirebase && db) {
@@ -1042,6 +1208,8 @@ async function startServer() {
     }
   }
 
+  const paymentRequestsStore: Record<string, PaymentRequest> = {};
+
   async function dbGetAllUsers(usersStore: Record<string, StoredUser>): Promise<any[]> {
     if (useFirebase && db) {
       try {
@@ -1049,6 +1217,7 @@ async function startServer() {
         const snap = await getDocs(usersRef);
         return snap.docs.map(docSnap => {
           const data = docSnap.data();
+          const isVip = !!data.isVip && (!data.vipExpireAt || data.vipExpireAt > Date.now());
           return {
             id: data.id || docSnap.id,
             username: data.username,
@@ -1057,21 +1226,138 @@ async function startServer() {
             emailVerified: data.emailVerified ?? false,
             isBanned: data.isBanned ?? false,
             banReason: data.banReason || "",
+            isVip,
+            vipExpireAt: data.vipExpireAt || 0,
+            vipPlan: data.vipPlan || null,
           };
         });
       } catch (e) {
         console.error("Firebase get all users error:", e);
       }
     }
-    return Object.values(usersStore).map(u => ({
-      id: u.id,
-      username: u.username,
-      email: u.email,
-      createdAt: u.createdAt,
-      emailVerified: u.emailVerified ?? false,
-      isBanned: u.isBanned ?? false,
-      banReason: u.banReason || "",
-    }));
+    return Object.values(usersStore).map(u => {
+      const isVip = !!u.isVip && (!u.vipExpireAt || u.vipExpireAt > Date.now());
+      return {
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        createdAt: u.createdAt,
+        emailVerified: u.emailVerified ?? false,
+        isBanned: u.isBanned ?? false,
+        banReason: u.banReason || "",
+        isVip,
+        vipExpireAt: u.vipExpireAt || 0,
+        vipPlan: u.vipPlan || null,
+      };
+    });
+  }
+
+  async function dbGetAllPaymentRequests(): Promise<PaymentRequest[]> {
+    if (useFirebase && db) {
+      try {
+        const ref = collection(db, "paymentRequests");
+        const snap = await getDocs(ref);
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentRequest))
+          .sort((a, b) => b.createdAt - a.createdAt);
+      } catch (e) {
+        console.error("Firebase get payment requests error:", e);
+      }
+    }
+    return Object.values(paymentRequestsStore).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async function dbCreatePaymentRequest(pr: PaymentRequest): Promise<PaymentRequest> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "paymentRequests", pr.id), pr);
+      } catch (e) {
+        console.error("Firebase create payment request error:", e);
+      }
+    }
+    paymentRequestsStore[pr.id] = pr;
+    return pr;
+  }
+
+  async function dbSetUserVip(userId: string, isVip: boolean, plan: "monthly" | "yearly" = "monthly", usersStore: Record<string, StoredUser>): Promise<boolean> {
+    const durationDays = plan === "yearly" ? 365 : 30;
+    const vipExpireAt = isVip ? Date.now() + (durationDays * 24 * 60 * 60 * 1000) : 0;
+    
+    if (useFirebase && db) {
+      try {
+        const usersRef = collection(db, "users");
+        const snap = await getDocs(usersRef);
+        let foundDocId = "";
+        for (const docSnap of snap.docs) {
+          if (docSnap.data().id === userId || docSnap.id === userId) {
+            foundDocId = docSnap.id;
+            break;
+          }
+        }
+        if (foundDocId) {
+          await updateDoc(doc(db, "users", foundDocId), { isVip, vipExpireAt, vipPlan: isVip ? plan : null });
+        } else {
+          await setDoc(doc(db, "users", userId), { isVip, vipExpireAt, vipPlan: isVip ? plan : null }, { merge: true });
+        }
+      } catch (e) {
+        console.error("Firebase set user VIP error:", e);
+      }
+    }
+    
+    const user = usersStore[userId] || Object.values(usersStore).find(u => u.id === userId);
+    if (user) {
+      user.isVip = isVip;
+      user.vipExpireAt = vipExpireAt;
+      user.vipPlan = isVip ? plan : undefined;
+    }
+    return true;
+  }
+
+  async function dbApprovePaymentRequest(requestId: string, usersStore: Record<string, StoredUser>): Promise<boolean> {
+    const allRequests = await dbGetAllPaymentRequests();
+    const reqItem = allRequests.find(r => r.id === requestId);
+    if (!reqItem) return false;
+    
+    reqItem.status = "approved";
+    reqItem.reviewedAt = Date.now();
+    
+    if (useFirebase && db) {
+      try {
+        await updateDoc(doc(db, "paymentRequests", requestId), {
+          status: "approved",
+          reviewedAt: Date.now()
+        });
+      } catch (e) {
+        console.error("Firebase update payment request error:", e);
+      }
+    }
+    paymentRequestsStore[requestId] = reqItem;
+    
+    await dbSetUserVip(reqItem.userId, true, reqItem.plan, usersStore);
+    return true;
+  }
+
+  async function dbRejectPaymentRequest(requestId: string, rejectionReason: string): Promise<boolean> {
+    const allRequests = await dbGetAllPaymentRequests();
+    const reqItem = allRequests.find(r => r.id === requestId);
+    if (!reqItem) return false;
+    
+    reqItem.status = "rejected";
+    reqItem.rejectionReason = rejectionReason;
+    reqItem.reviewedAt = Date.now();
+    
+    if (useFirebase && db) {
+      try {
+        await updateDoc(doc(db, "paymentRequests", requestId), {
+          status: "rejected",
+          rejectionReason,
+          reviewedAt: Date.now()
+        });
+      } catch (e) {
+        console.error("Firebase reject payment request error:", e);
+      }
+    }
+    paymentRequestsStore[requestId] = reqItem;
+    return true;
   }
 
   async function dbBanUser(userId: string, isBanned: boolean, banReason: string, usersStore: Record<string, StoredUser>): Promise<boolean> {
@@ -1520,6 +1806,7 @@ async function startServer() {
           for (const docSnap of snap.docs) {
             const data = docSnap.data();
             if (data.passwordHash === cleanPassword || data.passwordHash === passwordHash) {
+              const isVip = !!data.isVip && (!data.vipExpireAt || data.vipExpireAt > Date.now());
               return {
                 id: data.id || docSnap.id,
                 username: data.username,
@@ -1529,6 +1816,9 @@ async function startServer() {
                 emailVerified: data.emailVerified ?? false,
                 isBanned: data.isBanned ?? false,
                 banReason: data.banReason || "",
+                isVip,
+                vipExpireAt: data.vipExpireAt || 0,
+                vipPlan: data.vipPlan || null,
               };
             }
           }
@@ -2040,18 +2330,30 @@ async function startServer() {
       const config = await dbGetConfig();
       const fileSize = Number(size) || 0;
 
+      let uRecord: any = null;
+      if (userId) {
+        uRecord = users[userId] || Object.values(users).find(u => u.id === userId);
+        if (useFirebase && db && !uRecord) {
+          try {
+            const uSnap = await getDoc(doc(db, "users", userId));
+            if (uSnap.exists()) uRecord = uSnap.data();
+          } catch (e) {}
+        }
+      }
+
+      const isVipUser = uRecord ? (!!uRecord.isVip || uRecord.role === "admin") : false;
+
       if (userId) {
         // Registered User check
-        const user = users[userId] || Object.values(users).find(u => u.id === userId);
-        if (user && user.isBanned) {
-          res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${user.banReason ? ` Neden: ${user.banReason}` : ''}` });
+        if (uRecord && uRecord.isBanned) {
+          res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${uRecord.banReason ? ` Neden: ${uRecord.banReason}` : ''}` });
           return;
         }
 
-        const userMaxMb = config.registeredMaxMb ?? 1000;
+        const userMaxMb = isVipUser ? (config.vipMaxMb ?? 5000) : (config.registeredMaxMb ?? 1000);
         if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
           res.status(400).json({ 
-            error: `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB) kayıtlı kullanıcı boyut limitini (${userMaxMb} MB) aşıyor.` 
+            error: `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB), ${isVipUser ? 'VIP' : 'standart'} üye boyut limitini (${userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(0)} GB` : `${userMaxMb} MB`}) aşıyor.${!isVipUser ? " 5 GB'a kadar dosya yüklemek için lütfen PRO VIP üyeliğe geçin!" : ""}` 
           });
           return;
         }
@@ -2096,6 +2398,12 @@ async function startServer() {
         base64Data = data.split("base64,")[1];
       }
 
+      // Permanent ("never") storage is strictly reserved for PRO VIP members
+      let effectiveDeleteAfter = deleteAfter || (isVipUser ? "never" : "1m");
+      if (effectiveDeleteAfter === "never" && !isVipUser) {
+        effectiveDeleteAfter = "1m";
+      }
+
       const img: StoredImage = {
         id,
         name: name || "resim.jpg",
@@ -2103,7 +2411,7 @@ async function startServer() {
         size: size || 0,
         data: "", // We don't store raw data directly in metadata
         uploadedAt: Date.now(),
-        deleteAfter: deleteAfter || "never",
+        deleteAfter: effectiveDeleteAfter as any,
         password: password || undefined,
         deleteToken,
         views: 0,
@@ -2162,10 +2470,21 @@ async function startServer() {
 
       const config = await dbGetConfig();
 
+      let uRecordUrl: any = null;
       if (userId) {
-        const user = users[userId] || Object.values(users).find(u => u.id === userId);
-        if (user && user.isBanned) {
-          res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${user.banReason ? ` Neden: ${user.banReason}` : ''}` });
+        uRecordUrl = users[userId] || Object.values(users).find(u => u.id === userId);
+        if (useFirebase && db && !uRecordUrl) {
+          try {
+            const uSnap = await getDoc(doc(db, "users", userId));
+            if (uSnap.exists()) uRecordUrl = uSnap.data();
+          } catch (e) {}
+        }
+      }
+      const isVipUserUrl = uRecordUrl ? (!!uRecordUrl.isVip || uRecordUrl.role === "admin") : false;
+
+      if (userId) {
+        if (uRecordUrl && uRecordUrl.isBanned) {
+          res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${uRecordUrl.banReason ? ` Neden: ${uRecordUrl.banReason}` : ''}` });
           return;
         }
       } else {
@@ -2203,9 +2522,9 @@ async function startServer() {
       }
 
       if (userId) {
-        const userMaxMb = config.registeredMaxMb ?? 1000;
+        const userMaxMb = isVipUserUrl ? (config.vipMaxMb ?? 5000) : (config.registeredMaxMb ?? 1000);
         if (userMaxMb > 0 && buffer.length > userMaxMb * 1024 * 1024) {
-          res.status(400).json({ error: `İndirilen dosya (${(buffer.length / (1024 * 1024)).toFixed(1)} MB) kullanıcı limitini (${userMaxMb} MB) aşmaktadır!` });
+          res.status(400).json({ error: `İndirilen dosya (${(buffer.length / (1024 * 1024)).toFixed(1)} MB), ${isVipUserUrl ? 'VIP' : 'standart'} kullanıcı limitini (${userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(0)} GB` : `${userMaxMb} MB`}) aşmaktadır!${!isVipUserUrl ? " 5 GB'a kadar dosya indirmek için PRO VIP üyeliğe geçin!" : ""}` });
           return;
         }
       } else {
@@ -2230,6 +2549,12 @@ async function startServer() {
         }
       } catch (e) {}
 
+      // Permanent ("never") storage is strictly reserved for PRO VIP members
+      let effectiveDeleteAfterUrl = deleteAfter || (isVipUserUrl ? "never" : "1m");
+      if (effectiveDeleteAfterUrl === "never" && !isVipUserUrl) {
+        effectiveDeleteAfterUrl = "1m";
+      }
+
       const img: StoredImage = {
         id,
         name,
@@ -2237,7 +2562,7 @@ async function startServer() {
         size: buffer.length,
         data: "", // No direct base64 data in metadata
         uploadedAt: Date.now(),
-        deleteAfter: deleteAfter || "never",
+        deleteAfter: effectiveDeleteAfterUrl as any,
         password: password || undefined,
         deleteToken,
         views: 0,
@@ -2584,7 +2909,14 @@ async function startServer() {
 
     res.json({
       success: true,
-      user: { id: user.id, username: user.username, email: user.email },
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        email: user.email,
+        isVip: user.isVip,
+        vipExpireAt: user.vipExpireAt,
+        vipPlan: user.vipPlan
+      },
     });
   });
 
@@ -3502,7 +3834,16 @@ async function startServer() {
         adsContactEmail,
         adsContactTelegram,
         adsContactInfo,
-        adsList
+        adsList,
+        structuredAnnouncements,
+        securityIpLoggingEnabled,
+        securityHotlinkProtection,
+        securityWatermarkDefault,
+        securityForceHttpsHeaders,
+        securityKvkkNoticeEnabled,
+        securityMaxLoginAttempts,
+        privacyPolicyText,
+        termsOfServiceText
       } = req.body;
 
       const updated = await dbSaveConfig({
@@ -3511,6 +3852,7 @@ async function startServer() {
         announcementEnabled: !!announcementEnabled,
         announcementText,
         announcements: announcements || (announcementText ? [announcementText] : []),
+        structuredAnnouncements,
         statsOffset: statsOffset !== undefined ? Number(statsOffset) : undefined,
         usersOffset: usersOffset !== undefined ? Number(usersOffset) : undefined,
         todayOffset: todayOffset !== undefined ? Number(todayOffset) : undefined,
@@ -3529,7 +3871,15 @@ async function startServer() {
         adsContactEmail,
         adsContactTelegram,
         adsContactInfo,
-        adsList
+        adsList,
+        securityIpLoggingEnabled: securityIpLoggingEnabled !== undefined ? !!securityIpLoggingEnabled : undefined,
+        securityHotlinkProtection: securityHotlinkProtection !== undefined ? !!securityHotlinkProtection : undefined,
+        securityWatermarkDefault: securityWatermarkDefault !== undefined ? !!securityWatermarkDefault : undefined,
+        securityForceHttpsHeaders: securityForceHttpsHeaders !== undefined ? !!securityForceHttpsHeaders : undefined,
+        securityKvkkNoticeEnabled: securityKvkkNoticeEnabled !== undefined ? !!securityKvkkNoticeEnabled : undefined,
+        securityMaxLoginAttempts: securityMaxLoginAttempts !== undefined ? Number(securityMaxLoginAttempts) : undefined,
+        privacyPolicyText,
+        termsOfServiceText
       });
 
       res.json({ success: true, config: updated });
@@ -3800,6 +4150,179 @@ async function startServer() {
     } catch (err) {
       console.error("Admin delete image error:", err);
       res.status(500).json({ error: "Görsel silinirken hata oluştu." });
+    }
+  });
+
+  // --- VIP & PAYMENT ENDPOINTS ---
+
+  // User submits a Payment Request (Havale/EFT or Credit Card notification)
+  app.post("/api/vip/request-payment", async (req, res) => {
+    try {
+      const {
+        userId,
+        username,
+        userEmail,
+        plan,
+        amount,
+        paymentMethod,
+        senderName,
+        selectedBankId,
+        bankName,
+        transferNote,
+        receiptNumber,
+        receiptImgUrl,
+        cardNumberMasked,
+      } = req.body;
+
+      if (!userId || !plan || !amount || !paymentMethod) {
+        return res.status(400).json({ error: "Eksik ödeme isteği bilgileri." });
+      }
+
+      const pr: PaymentRequest = {
+        id: "pr_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+        userId,
+        username: username || "Kullanıcı",
+        userEmail: userEmail || "",
+        plan: plan === "yearly" ? "yearly" : "monthly",
+        amount: Number(amount),
+        paymentMethod: paymentMethod === "card" ? "card" : "havale",
+        senderName: senderName || "",
+        selectedBankId: selectedBankId || "",
+        bankName: bankName || "",
+        transferNote: transferNote || "",
+        receiptNumber: receiptNumber || "",
+        receiptImgUrl: receiptImgUrl || "",
+        cardNumberMasked: cardNumberMasked || "",
+        status: "pending",
+        createdAt: Date.now(),
+      };
+
+      const created = await dbCreatePaymentRequest(pr);
+      res.json({
+        success: true,
+        message: "Ödeme bildirimi başarıyla alındı. Yönetici onayının ardından VIP üyeliğiniz aktifleşecektir.",
+        paymentRequest: created
+      });
+    } catch (err) {
+      console.error("Create payment request error:", err);
+      res.status(500).json({ error: "Ödeme bildirimi gönderilirken hata oluştu." });
+    }
+  });
+
+  // Direct Credit Card Processing endpoint
+  app.post("/api/vip/pay-card", async (req, res) => {
+    try {
+      const {
+        userId,
+        username,
+        userEmail,
+        plan,
+        cardNumber,
+        cardHolder,
+        cardExpiry,
+        cardCvc
+      } = req.body;
+
+      if (!userId || !plan || !cardNumber || !cardHolder) {
+        return res.status(400).json({ error: "Lütfen tüm kart bilgilerini eksiksiz doldurun." });
+      }
+
+      const config = await dbGetConfig();
+      const amount = plan === "yearly" ? (config.vipAnnualPrice || 950) : (config.vipMonthlyPrice || 99);
+      const cleanCardNum = cardNumber.replace(/\s+/g, "");
+      const maskedCard = cleanCardNum.length >= 16 
+        ? `${cleanCardNum.slice(0, 4)} **** **** ${cleanCardNum.slice(-4)}`
+        : "**** **** **** ****";
+
+      // Create Payment Request record
+      const pr: PaymentRequest = {
+        id: "pr_card_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+        userId,
+        username: username || "Kullanıcı",
+        userEmail: userEmail || "",
+        plan: plan === "yearly" ? "yearly" : "monthly",
+        amount,
+        paymentMethod: "card",
+        senderName: cardHolder,
+        cardNumberMasked: maskedCard,
+        status: "approved",
+        createdAt: Date.now(),
+        reviewedAt: Date.now(),
+      };
+
+      await dbCreatePaymentRequest(pr);
+
+      // Instantly grant VIP status
+      await dbSetUserVip(userId, true, plan === "yearly" ? "yearly" : "monthly", users);
+
+      res.json({
+        success: true,
+        message: "Kredi/Banka kartı ödemeniz başarıyla doğrulandı! 👑 PRO VIP Üyeliğiniz anında aktifleştirildi.",
+        paymentRequest: pr
+      });
+    } catch (err) {
+      console.error("Card payment error:", err);
+      res.status(500).json({ error: "Kart ödemesi gerçekleştirilemedi." });
+    }
+  });
+
+  // Admin Get All Payment Requests
+  app.get("/api/admin/payment-requests", async (req, res) => {
+    try {
+      const requests = await dbGetAllPaymentRequests();
+      res.json(requests);
+    } catch (err) {
+      console.error("Get admin payment requests error:", err);
+      res.status(500).json({ error: "Ödeme talepleri alınamadı." });
+    }
+  });
+
+  // Admin Approve Payment Request
+  app.post("/api/admin/payment-requests/:id/approve", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const ok = await dbApprovePaymentRequest(id, users);
+      if (ok) {
+        res.json({ success: true, message: "Ödeme onaylandı ve kullanıcı PRO VIP yapıldı." });
+      } else {
+        res.status(404).json({ error: "Ödeme talebi bulunamadı." });
+      }
+    } catch (err) {
+      console.error("Approve payment request error:", err);
+      res.status(500).json({ error: "Ödeme onaylanamadı." });
+    }
+  });
+
+  // Admin Reject Payment Request
+  app.post("/api/admin/payment-requests/:id/reject", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rejectionReason } = req.body;
+      const ok = await dbRejectPaymentRequest(id, rejectionReason || "Ödeme dekontu/bilgileri doğrulanamadı.");
+      if (ok) {
+        res.json({ success: true, message: "Ödeme talebi reddedildi." });
+      } else {
+        res.status(404).json({ error: "Ödeme talebi bulunamadı." });
+      }
+    } catch (err) {
+      console.error("Reject payment request error:", err);
+      res.status(500).json({ error: "İşlem başarısız." });
+    }
+  });
+
+  // Admin Manual User VIP Toggle
+  app.post("/api/admin/users/:id/vip", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isVip, plan } = req.body;
+      await dbSetUserVip(id, !!isVip, plan === "yearly" ? "yearly" : "monthly", users);
+      res.json({
+        success: true,
+        message: isVip ? "Kullanıcı başarıyla PRO VIP yapıldı." : "Kullanıcının VIP statüsü kaldırıldı."
+      });
+    } catch (err) {
+      console.error("Admin manual VIP error:", err);
+      res.status(500).json({ error: "VIP durumu güncellenemedi." });
     }
   });
 
