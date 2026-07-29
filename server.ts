@@ -2652,10 +2652,12 @@ async function startServer() {
       }
 
       const buffer = Buffer.from(image.data, "base64");
+      const dispositionType = image.mimeType?.startsWith("image/") || image.mimeType?.startsWith("video/") ? "inline" : "attachment";
       res.writeHead(200, {
-        "Content-Type": image.mimeType,
+        "Content-Type": image.mimeType || "application/octet-stream",
         "Content-Length": buffer.length,
         "Cache-Control": "public, max-age=86400",
+        "Content-Disposition": `${dispositionType}; filename="${encodeURIComponent(image.name || 'dosya')}"`,
       });
       res.end(buffer);
     } catch (err) {

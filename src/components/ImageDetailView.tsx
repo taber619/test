@@ -289,11 +289,11 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
           <div className="flex flex-wrap gap-4">
             <a
               href={verifiedDataUrl || ""}
-              download={meta?.name || (meta?.mimeType?.startsWith("video/") ? "video.mp4" : "gorsel.jpg")}
+              download={meta?.name || (meta?.mimeType?.startsWith("video/") ? "video.mp4" : meta?.mimeType?.startsWith("image/") ? "gorsel.jpg" : "dosya")}
               className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-2xl shadow-md shadow-blue-500/20 transition-all cursor-pointer text-sm"
             >
               <Download className="w-4 h-4" />
-              {meta?.mimeType?.startsWith("video/") ? "Videoyu İndir" : "Görseli İndir"}
+              {meta?.mimeType?.startsWith("video/") ? "Videoyu İndir" : meta?.mimeType?.startsWith("image/") ? "Görseli İndir" : "Dosyayı İndir"}
             </a>
 
             <a
