@@ -533,13 +533,15 @@ export default function HeroSection({
             </span>
           </div>
           {!isVip ? (
-            <button
-              type="button"
-              onClick={onOpenVipModal}
-              className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-300 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/80 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-700/60 flex items-center gap-1 transition-all cursor-pointer"
-            >
-              👑 5 GB & Süresiz Saklama İçin VIP Ol
-            </button>
+            siteConfig?.vipEnabled !== false && (
+              <button
+                type="button"
+                onClick={onOpenVipModal}
+                className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-300 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/80 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-700/60 flex items-center gap-1 transition-all cursor-pointer"
+              >
+                👑 5 GB & Süresiz Saklama İçin VIP Ol
+              </button>
+            )
           ) : (
             <span className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2.5 py-1 rounded-full border border-amber-300/60">
               👑 PRO VIP
@@ -1080,7 +1082,7 @@ export default function HeroSection({
               <div>
                 <label className="text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wide flex items-center justify-between mb-2 pl-0.5">
                   <span>Otomatik Silinme Süresi</span>
-                  {!isVip && (
+                  {!isVip && siteConfig?.vipEnabled !== false && (
                     <span className="text-[10px] text-amber-600 dark:text-amber-400 font-black flex items-center gap-1">
                       👑 Süresiz: VIP Özel
                     </span>
@@ -1091,9 +1093,13 @@ export default function HeroSection({
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === "never" && !isVip) {
-                      setErrorMsg("👑 Süresiz (kalıcı) saklama yalnızca PRO VIP üyelere özeldir! Standart üyeler için maksimum saklama süresi 1 aydır.");
+                      if (siteConfig?.vipEnabled === false) {
+                        setErrorMsg("👑 Süresiz (kalıcı) saklama yalnızca PRO VIP üyelere özeldir! Standart üyeler için maksimum saklama süresi 1 aydır.");
+                      } else {
+                        setErrorMsg("👑 Süresiz (kalıcı) saklama yalnızca PRO VIP üyelere özeldir! Standart üyeler için maksimum saklama süresi 1 aydır.");
+                        if (onOpenVipModal) onOpenVipModal();
+                      }
                       setDeleteAfter("1m");
-                      if (onOpenVipModal) onOpenVipModal();
                     } else {
                       setDeleteAfter(val);
                     }
@@ -1108,7 +1114,7 @@ export default function HeroSection({
                   <option value="1d">1 Gün Sonra Sil</option>
                   <option value="1h">1 Saat Sonra Sil</option>
                 </select>
-                {!isVip && (
+                {!isVip && siteConfig?.vipEnabled !== false && (
                   <button
                     type="button"
                     onClick={onOpenVipModal}

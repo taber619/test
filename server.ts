@@ -461,6 +461,7 @@ async function startServer() {
     adsContactTelegram?: string;
     adsContactInfo?: string;
     adsList?: AdBanner[];
+    vipEnabled?: boolean;
     vipMonthlyPrice?: number;
     vipAnnualDiscountPercent?: number;
     vipAnnualPrice?: number;
@@ -734,6 +735,7 @@ async function startServer() {
         enabled: true
       }
     ],
+    vipEnabled: true,
     vipMonthlyPrice: 99,
     vipAnnualDiscountPercent: 20,
     vipAnnualPrice: 950,

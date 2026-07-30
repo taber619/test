@@ -1203,7 +1203,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
           }`}
         >
           <Crown className="w-4 h-4 text-amber-400" />
-          👑 PRO VIP & Ödemeler ({paymentRequests.filter(p => p.status === "pending").length} Yeni)
+          👑 PRO VIP & Ödemeler {siteConfig.vipEnabled === false ? "(KAPALI)" : `(${paymentRequests.filter(p => p.status === "pending").length} Yeni)`}
         </button>
 
         <button
@@ -3387,6 +3387,53 @@ export default function AdminView({ onBack }: AdminViewProps) {
       {activeSubTab === "vip" && (
         <div className="space-y-8" id="admin-vip-panel">
           
+          {/* PRO VIP System Enable/Disable Toggle Banner */}
+          <div className={`p-6 sm:p-8 rounded-3xl border shadow-xl transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-6 ${
+            siteConfig.vipEnabled !== false
+              ? "bg-slate-900 border-amber-500/40 text-white"
+              : "bg-slate-950 border-rose-500/30 text-slate-300"
+          }`}>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <Crown className={`w-7 h-7 ${siteConfig.vipEnabled !== false ? "text-amber-400 animate-pulse" : "text-slate-600"}`} />
+                <h3 className="text-lg font-black tracking-tight text-white">
+                  PRO VIP Üyelik Sistemi
+                </h3>
+                <span className={`px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                  siteConfig.vipEnabled !== false
+                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                    : "bg-rose-500/20 text-rose-400 border border-rose-500/40"
+                }`}>
+                  {siteConfig.vipEnabled !== false ? "● AKTİF (SİSTEM AÇIK)" : "○ DEVRE DIŞI (KAPALI)"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
+                {siteConfig.vipEnabled !== false
+                  ? "PRO VIP üyeliği aktif. Ziyaretçiler VIP paketlerini ve satın alma seçeneklerini görebilir."
+                  : "PRO VIP üyeliği kapalı. Sitedeki VIP rozetleri, yükseltme butonları ve ödeme ekranları ziyaretçilere gizlenir."}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-4 shrink-0 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800">
+              <div className="text-right">
+                <span className="block text-xs font-black text-white">VIP Sistem Durumu</span>
+                <span className="text-[10px] text-slate-400 font-bold">{siteConfig.vipEnabled !== false ? "Kapatmak için tıklayın" : "Açmak için tıklayın"}</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={siteConfig.vipEnabled !== false}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    setSiteConfig({ ...siteConfig, vipEnabled: isChecked });
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-14 h-7 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+          </div>
+
           {/* 1. VIP PRICING & AUTO-CALCULATOR PANEL */}
           <form onSubmit={handleSaveConfig} className="bg-slate-900 border border-amber-500/30 shadow-xl rounded-3xl p-6 sm:p-8 space-y-6 text-slate-100">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">

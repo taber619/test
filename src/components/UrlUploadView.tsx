@@ -6,10 +6,11 @@ interface UrlUploadViewProps {
   onUploadSuccess: (uploadedImg: any) => void;
   userId?: string;
   currentUser?: any | null;
+  siteConfig?: any | null;
   onOpenVipModal?: () => void;
 }
 
-export default function UrlUploadView({ onBack, onUploadSuccess, userId, currentUser, onOpenVipModal }: UrlUploadViewProps) {
+export default function UrlUploadView({ onBack, onUploadSuccess, userId, currentUser, siteConfig, onOpenVipModal }: UrlUploadViewProps) {
   const isVip = currentUser && (currentUser.isVip || currentUser.role === "admin");
   const [url, setUrl] = useState("");
   const [deleteAfter, setDeleteAfter] = useState(isVip ? "never" : "1m");
@@ -154,7 +155,7 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId, current
                 <option value="1d">1 Gün Sonra Sil</option>
                 <option value="1h">1 Saat Sonra Sil</option>
               </select>
-              {!isVip && (
+              {!isVip && siteConfig?.vipEnabled !== false && (
                 <button
                   type="button"
                   onClick={onOpenVipModal}

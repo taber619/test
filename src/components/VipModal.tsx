@@ -257,6 +257,19 @@ export default function VipModal({
         {/* Modal Content - Scrollable Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 custom-scrollbar flex-1">
 
+          {/* VIP System Disabled Warning Banner */}
+          {siteConfig?.vipEnabled === false && (
+            <div className="bg-rose-950/60 border border-rose-500/50 p-4 rounded-2xl flex items-start gap-3 text-rose-300 shadow-lg animate-fade-in">
+              <Lock className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-extrabold text-xs text-rose-100 uppercase tracking-wider">PRO VIP Üyelik Sistemi Geçici Olarak Kapalıdır</h4>
+                <p className="text-xs text-rose-300/90 font-medium leading-relaxed mt-1">
+                  Yöneticilerimiz tarafından VIP üyelik alımları geçici olarak durdurulmuştur. Şu an için yeni üyelik işlemi gerçekleştirilememektedir.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* User Active VIP Badge Banner */}
           {currentUser?.isVip && (
             <div className="bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/50 p-4 rounded-2xl flex items-center justify-between gap-4">
@@ -503,7 +516,7 @@ export default function VipModal({
 
                 <button
                   type="submit"
-                  disabled={cardProcessing}
+                  disabled={cardProcessing || siteConfig?.vipEnabled === false}
                   className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-extrabold text-sm rounded-xl transition-all shadow-lg shadow-blue-500/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
                 >
                   {cardProcessing ? (
@@ -634,7 +647,7 @@ export default function VipModal({
 
                   <button
                     type="submit"
-                    disabled={havaleProcessing}
+                    disabled={havaleProcessing || siteConfig?.vipEnabled === false}
                     className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl transition-all shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
                   >
                     {havaleProcessing ? "Bildirim İletiliyor..." : "📩 Havale / EFT Bildirimini Gönder"}

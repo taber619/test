@@ -522,6 +522,7 @@ export default function App() {
           onUploadSuccess={handleUrlUploadSuccess}
           userId={currentUser?.id}
           currentUser={currentUser}
+          siteConfig={siteConfig}
           onOpenVipModal={() => setIsVipModalOpen(true)}
         />
       );

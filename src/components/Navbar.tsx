@@ -142,15 +142,17 @@ export default function Navbar({
           Ana Sayfa
         </button>
 
-        {/* PRO VIP Button */}
-        <button
-          id="nav-btn-vip"
-          onClick={onOpenVipModal}
-          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md shadow-amber-500/20 hover:scale-105 transition-all cursor-pointer flex items-center gap-1.5 animate-pulse"
-        >
-          <Crown className="w-4 h-4 text-slate-950" />
-          <span>PRO VIP</span>
-        </button>
+        {/* PRO VIP Button (Only if VIP system is enabled) */}
+        {siteConfig?.vipEnabled !== false && (
+          <button
+            id="nav-btn-vip"
+            onClick={onOpenVipModal}
+            className="px-3 py-1.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md shadow-amber-500/20 hover:scale-105 transition-all cursor-pointer flex items-center gap-1.5 animate-pulse"
+          >
+            <Crown className="w-4 h-4 text-slate-950" />
+            <span>PRO VIP</span>
+          </button>
+        )}
 
         {/* User Auth Status Area */}
         {currentUser ? (
@@ -201,16 +203,18 @@ export default function Navbar({
 
                 {/* Dropdown Menu Items */}
                 <div className="space-y-1 mt-3">
-                  <button
-                    onClick={() => {
-                      setDropdownOpen(false);
-                      onOpenVipModal?.();
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-black text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <Crown className="w-4 h-4 text-amber-400" />
-                    {currentUser.isVip ? "PRO VIP Üyelik Detayları" : "👑 PRO VIP'e Yükselt"}
-                  </button>
+                  {(siteConfig?.vipEnabled !== false || currentUser.isVip) && (
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        onOpenVipModal?.();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-black text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all flex items-center gap-2.5 cursor-pointer"
+                    >
+                      <Crown className="w-4 h-4 text-amber-400" />
+                      {currentUser.isVip ? "PRO VIP Üyelik Detayları" : "👑 PRO VIP'e Yükselt"}
+                    </button>
+                  )}
 
                   <button
                     onClick={() => handleMenuClick("gallery")}

@@ -137,6 +137,7 @@ export interface SiteConfig {
   adsContactTelegram?: string;
   adsContactInfo?: string;
   adsList?: AdBanner[];
+  vipEnabled?: boolean;
   vipMonthlyPrice?: number;
   vipAnnualDiscountPercent?: number;
   vipAnnualPrice?: number;
