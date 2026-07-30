@@ -816,6 +816,7 @@ async function startServer() {
             adsContactTelegram: data.adsContactTelegram ?? defaultSiteConfig.adsContactTelegram,
             adsContactInfo: data.adsContactInfo ?? defaultSiteConfig.adsContactInfo,
             adsList: data.adsList ?? defaultSiteConfig.adsList,
+            vipEnabled: data.vipEnabled !== undefined ? !!data.vipEnabled : defaultSiteConfig.vipEnabled,
             vipMonthlyPrice: monthlyP,
             vipAnnualDiscountPercent: discPct,
             vipAnnualPrice: data.vipAnnualPrice !== undefined ? Number(data.vipAnnualPrice) : computedAnnualP,
@@ -853,14 +854,13 @@ async function startServer() {
       updated.vipAnnualPrice = Math.round(updated.vipMonthlyPrice * 12 * (1 - (discPct / 100)));
     }
     
+    siteConfigState = updated;
     if (useFirebase && db) {
       try {
         await setDoc(doc(db, "configs", "site"), updated);
       } catch (e) {
         console.error("Firebase save config error:", e);
       }
-    } else {
-      siteConfigState = updated;
     }
     return updated;
   }

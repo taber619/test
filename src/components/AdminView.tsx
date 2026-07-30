@@ -3423,9 +3423,19 @@ export default function AdminView({ onBack }: AdminViewProps) {
                 <input
                   type="checkbox"
                   checked={siteConfig.vipEnabled !== false}
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const isChecked = e.target.checked;
-                    setSiteConfig({ ...siteConfig, vipEnabled: isChecked });
+                    const updated = { ...siteConfig, vipEnabled: isChecked };
+                    setSiteConfig(updated);
+                    try {
+                      await fetch("/api/admin/config", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(updated)
+                      });
+                    } catch (err) {
+                      console.error("Failed to auto-save VIP toggle:", err);
+                    }
                   }}
                   className="sr-only peer"
                 />
