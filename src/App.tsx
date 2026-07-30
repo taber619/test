@@ -15,6 +15,7 @@ import AdContactModal from "./components/AdContactModal";
 import AdBannerSection from "./components/AdBannerSection";
 import VipModal from "./components/VipModal";
 import AnnouncementBanner from "./components/AnnouncementBanner";
+import FaqSection from "./components/FaqSection";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -721,6 +722,12 @@ export default function App() {
             </div>
           </div>
         </section>
+
+        {/* SSS Accordion Section */}
+        <FaqSection
+          onOpenAuth={() => setActiveTab("auth")}
+          onOpenVipModal={() => setIsVipModalOpen(true)}
+        />
 
         {/* Join Member CTA Banner */}
         {!currentUser && (
