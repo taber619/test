@@ -1606,9 +1606,15 @@ async function startServer() {
       base64Data = Buffer.isBuffer(fileData) ? fileData.toString("base64") : (fileData || "");
     } else if (filePath && fs.existsSync(filePath)) {
       try {
-        const fileBuf = fs.readFileSync(filePath);
-        base64Data = fileBuf.toString("base64");
-      } catch (e) {}
+        const stat = fs.statSync(filePath);
+        // Only convert to base64 if file is small (< 15MB) to prevent V8/Node heap limits on 1GB+ files
+        if (stat.size < 15 * 1024 * 1024) {
+          const fileBuf = fs.readFileSync(filePath);
+          base64Data = fileBuf.toString("base64");
+        }
+      } catch (e) {
+        console.error("dbSaveImage disk read error:", e);
+      }
     }
 
     imagesStore[image.id] = { ...image, data: base64Data, filePath };
@@ -1693,8 +1699,11 @@ async function startServer() {
 
           if (validFilePath && fs.existsSync(validFilePath)) {
             try {
-              const fileBuf = fs.readFileSync(validFilePath);
-              fullData = fileBuf.toString("base64");
+              const stat = fs.statSync(validFilePath);
+              if (stat.size < 15 * 1024 * 1024) {
+                const fileBuf = fs.readFileSync(validFilePath);
+                fullData = fileBuf.toString("base64");
+              }
             } catch (e) {
               console.error("Error reading filePath in dbGetImage:", e);
             }
@@ -1740,8 +1749,11 @@ async function startServer() {
     if (img) {
       if (img.filePath && fs.existsSync(img.filePath) && (!img.data || img.data.length === 0)) {
         try {
-          const fileBuf = fs.readFileSync(img.filePath);
-          img.data = fileBuf.toString("base64");
+          const stat = fs.statSync(img.filePath);
+          if (stat.size < 15 * 1024 * 1024) {
+            const fileBuf = fs.readFileSync(img.filePath);
+            img.data = fileBuf.toString("base64");
+          }
         } catch (e) {}
       }
       return img;
@@ -1755,13 +1767,16 @@ async function startServer() {
         const diskPath = path.join(UPLOADS_DIR, found);
         const stat = fs.statSync(diskPath);
         let base64Str = "";
-        try {
-          base64Str = fs.readFileSync(diskPath).toString("base64");
-        } catch (e) {}
+        if (stat.size < 15 * 1024 * 1024) {
+          try {
+            base64Str = fs.readFileSync(diskPath).toString("base64");
+          } catch (e) {}
+        }
+        const cleanName = found.replace(new RegExp(`^${id}_`), "");
         return {
           id,
-          name: found,
-          mimeType: "image/jpeg",
+          name: cleanName || found,
+          mimeType: "application/octet-stream",
           size: stat.size,
           data: base64Str,
           filePath: diskPath,
@@ -2698,6 +2713,17 @@ async function startServer() {
       const id = generateId(6);
       const deleteToken = "del_" + generateId(12);
 
+      if (filePath && fs.existsSync(filePath)) {
+        const safeName = (name || "dosya").replace(/[^a-zA-Z0-9._-]/g, "_");
+        const newFilePath = path.join(UPLOADS_DIR, `${id}_${safeName}`);
+        try {
+          fs.renameSync(filePath, newFilePath);
+          filePath = newFilePath;
+        } catch (e) {
+          console.error("Error renaming temp uploaded file:", e);
+        }
+      }
+
       // Permanent ("never") storage is strictly reserved for PRO VIP members
       let effectiveDeleteAfter = deleteAfter || (isVipUser ? "never" : "1m");
       if (effectiveDeleteAfter === "never" && !isVipUser) {
@@ -2910,34 +2936,59 @@ async function startServer() {
     }
   });
 
-  // Serve Raw Image Data
+  // Serve Raw Image / File Data
   app.get("/api/images/:id", async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     const { id } = req.params;
-    const { pw } = req.query;
+    const { pw, dl, download } = req.query;
     
     try {
       const image = await dbGetImage(id, images);
 
       if (!image) {
-        res.status(404).send("Resim bulunamadı.");
+        res.status(404).send("Resim veya dosya bulunamadı.");
         return;
       }
 
       // Password enforcement on raw image
       if (image.password && image.password !== pw) {
-        res.status(403).send("Bu resim şifre korumalıdır.");
+        res.status(403).send("Bu dosya şifre korumalıdır.");
         return;
       }
 
       const range = req.headers.range;
       const contentType = image.mimeType || "application/octet-stream";
-      const dispositionType = image.mimeType?.startsWith("image/") || image.mimeType?.startsWith("video/") ? "inline" : "attachment";
-      const fileNameEncoded = encodeURIComponent(image.name || "dosya");
+      const isMedia = contentType.startsWith("image/") || contentType.startsWith("video/");
+      const forceDownload = dl === "1" || download === "true" || !isMedia;
+      const dispositionType = forceDownload ? "attachment" : "inline";
+      const rawFileName = image.name || "dosya";
+      const fileNameEncoded = encodeURIComponent(rawFileName);
 
-      // Case 1: File is stored on disk at image.filePath
-      if (image.filePath && fs.existsSync(image.filePath)) {
-        const stat = fs.statSync(image.filePath);
+      // Locate valid file on disk if available
+      let validDiskPath = image.filePath;
+      if (validDiskPath && !fs.existsSync(validDiskPath)) {
+        try {
+          const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+          const found = filesInUploads.find(f => f.includes(id));
+          if (found) validDiskPath = path.join(UPLOADS_DIR, found);
+          else validDiskPath = null;
+        } catch (e) {
+          validDiskPath = null;
+        }
+      }
+
+      // Fallback disk search if filePath wasn't stored
+      if (!validDiskPath) {
+        try {
+          const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+          const found = filesInUploads.find(f => f.includes(id));
+          if (found) validDiskPath = path.join(UPLOADS_DIR, found);
+        } catch (e) {}
+      }
+
+      // Case 1: File is stored on disk at validDiskPath
+      if (validDiskPath && fs.existsSync(validDiskPath)) {
+        const stat = fs.statSync(validDiskPath);
         const fileSize = stat.size;
 
         if (range) {
@@ -2945,14 +2996,14 @@ async function startServer() {
           const start = parseInt(parts[0], 10);
           const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
           const chunkSize = (end - start) + 1;
-          const fileStream = fs.createReadStream(image.filePath, { start, end });
+          const fileStream = fs.createReadStream(validDiskPath, { start, end });
 
           res.writeHead(206, {
             "Content-Range": `bytes ${start}-${end}/${fileSize}`,
             "Accept-Ranges": "bytes",
             "Content-Length": chunkSize,
             "Content-Type": contentType,
-            "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
+            "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"; filename*=UTF-8''${fileNameEncoded}`,
           });
           fileStream.pipe(res);
           return;
@@ -2962,9 +3013,9 @@ async function startServer() {
             "Content-Type": contentType,
             "Accept-Ranges": "bytes",
             "Cache-Control": "public, max-age=86400",
-            "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
+            "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"; filename*=UTF-8''${fileNameEncoded}`,
           });
-          fs.createReadStream(image.filePath).pipe(res);
+          fs.createReadStream(validDiskPath).pipe(res);
           return;
         }
       }
@@ -2984,7 +3035,7 @@ async function startServer() {
           "Accept-Ranges": "bytes",
           "Content-Length": chunkSize,
           "Content-Type": contentType,
-          "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
+          "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"; filename*=UTF-8''${fileNameEncoded}`,
         });
         res.end(buffer.subarray(start, end + 1));
         return;
@@ -2995,12 +3046,12 @@ async function startServer() {
         "Content-Length": fileSize,
         "Accept-Ranges": "bytes",
         "Cache-Control": "public, max-age=86400",
-        "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
+        "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"; filename*=UTF-8''${fileNameEncoded}`,
       });
       res.end(buffer);
     } catch (err) {
       console.error("Serve image error:", err);
-      res.status(500).send("Görsel yüklenirken hata oluştu.");
+      res.status(500).send("Görsel veya dosya yüklenirken hata oluştu.");
     }
   });
 

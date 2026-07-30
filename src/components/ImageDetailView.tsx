@@ -131,12 +131,16 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   };
 
   const triggerDownload = () => {
-    if (!verifiedDataUrl) return;
     setIsDownloading(true);
     setDownloadSuccess(true);
 
+    const baseUrl = verifiedDataUrl || `/api/images/${imageId}`;
+    const downloadUrl = baseUrl.includes("?") 
+      ? `${baseUrl}&dl=1` 
+      : `${baseUrl}?dl=1`;
+
     const link = document.createElement("a");
-    link.href = verifiedDataUrl;
+    link.href = downloadUrl;
     link.download = meta?.name || "dosya";
     document.body.appendChild(link);
     link.click();
