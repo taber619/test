@@ -25,7 +25,9 @@ import {
   FileText,
   File,
   Lock,
-  ChevronDown
+  ChevronDown,
+  CheckCircle2,
+  Loader2
 } from "lucide-react";
 import { processImage } from "../utils/imageProcessor";
 import ImageEditorModal from "./ImageEditorModal";
@@ -1346,25 +1348,154 @@ export default function HeroSection({
         </div>
       )}
 
-      {/* Uploading progress overlay */}
-      {isUploading && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center border border-slate-100 dark:border-slate-800">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-            <h4 className="font-extrabold text-slate-800 dark:text-white text-base">Görselleriniz Yükleniyor</h4>
-            <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">Lütfen tarayıcıyı kapatmayınız.</p>
+      {/* Uploading progress overlay with progressive status notification area */}
+      {isUploading && (() => {
+        const getUploadStageInfo = (progress: number) => {
+          if (progress <= 15) {
+            return {
+              title: "Yükleme başlatılıyor...",
+              detail: "Dosyalar hazırlanıyor ve güvenli bulut sunucu bağlantısı kuruluyor.",
+              step1Status: "current",
+              step2Status: "upcoming",
+              step3Status: "upcoming",
+            };
+          } else if (progress <= 85) {
+            return {
+              title: "Dosyalar işleniyor...",
+              detail: "Veriler yüksek hızlı SSL şifreli bulut sunucularına aktarılıyor.",
+              step1Status: "completed",
+              step2Status: "current",
+              step3Status: "upcoming",
+            };
+          } else if (progress < 100) {
+            return {
+              title: "Sunucu yanıtı bekleniyor...",
+              detail: "Veriler doğrulanıyor ve paylaşım bağlantıları oluşturuluyor.",
+              step1Status: "completed",
+              step2Status: "completed",
+              step3Status: "current",
+            };
+          } else {
+            return {
+              title: "İşlem tamamlandı!",
+              detail: "Dosyalarınız hazır, sonuç sayfasına yönlendiriliyorsunuz.",
+              step1Status: "completed",
+              step2Status: "completed",
+              step3Status: "completed",
+            };
+          }
+        };
 
-            {/* Progress bar */}
-            <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-6">
-              <div
-                className="bg-blue-600 h-full rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
+        const stage = getUploadStageInfo(uploadProgress);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in" id="upload-status-notification-modal">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center border border-slate-200 dark:border-slate-800 relative overflow-hidden">
+              {/* Ambient Background Glow */}
+              <div className="absolute -top-16 -right-16 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+              {/* Spinner & Stage Icon */}
+              <div className="relative mb-4 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm mx-auto">
+                  {uploadProgress < 100 ? (
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500 animate-bounce" />
+                  )}
+                </div>
+              </div>
+
+              {/* Dynamic Stage Title */}
+              <h4 className="font-black text-slate-800 dark:text-white text-lg sm:text-xl tracking-tight">
+                {stage.title}
+              </h4>
+              <p className="text-slate-500 dark:text-slate-400 text-xs mt-1.5 leading-relaxed max-w-xs mx-auto">
+                {stage.detail}
+              </p>
+
+              {/* Progressive Stage Visualizer / Notification Area */}
+              <div className="my-5 p-3 bg-slate-50 dark:bg-slate-950/80 border border-slate-200/80 dark:border-slate-800 rounded-2xl">
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Step 1 */}
+                  <div className={`p-2 rounded-xl text-center border transition-all ${
+                    stage.step1Status === "completed"
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40 text-emerald-600 dark:text-emerald-400"
+                      : stage.step1Status === "current"
+                      ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 font-extrabold ring-2 ring-blue-500/20"
+                      : "bg-slate-100/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400"
+                  }`}>
+                    <div className="text-[10px] uppercase font-black tracking-wider flex items-center justify-center gap-1">
+                      {stage.step1Status === "completed" ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                      ) : (
+                        <span>1.</span>
+                      )}
+                      <span>Başlatma</span>
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className={`p-2 rounded-xl text-center border transition-all ${
+                    stage.step2Status === "completed"
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40 text-emerald-600 dark:text-emerald-400"
+                      : stage.step2Status === "current"
+                      ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 font-extrabold ring-2 ring-blue-500/20"
+                      : "bg-slate-100/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400"
+                  }`}>
+                    <div className="text-[10px] uppercase font-black tracking-wider flex items-center justify-center gap-1">
+                      {stage.step2Status === "completed" ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                      ) : (
+                        <span>2.</span>
+                      )}
+                      <span>İşleme</span>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className={`p-2 rounded-xl text-center border transition-all ${
+                    stage.step3Status === "completed"
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40 text-emerald-600 dark:text-emerald-400"
+                      : stage.step3Status === "current"
+                      ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 font-extrabold ring-2 ring-blue-500/20"
+                      : "bg-slate-100/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400"
+                  }`}>
+                    <div className="text-[10px] uppercase font-black tracking-wider flex items-center justify-center gap-1">
+                      {stage.step3Status === "completed" ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                      ) : (
+                        <span>3.</span>
+                      )}
+                      <span>Yanıt</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar & Percentage */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-black">
+                  <span className="text-slate-600 dark:text-slate-300">Yükleme İlerlemesi</span>
+                  <span className="text-blue-600 dark:text-blue-400 font-black">{uploadProgress}%</span>
+                </div>
+
+                <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-200/60 dark:border-slate-800">
+                  <div
+                    className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 h-full rounded-full transition-all duration-300 shadow-sm"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Security Note */}
+              <div className="mt-5 flex items-center justify-center gap-1.5 text-[10px] font-extrabold text-slate-400 dark:text-slate-500">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>SSL 256-bit Güvenli Aktarım • Lütfen pencereyi kapatmayın</span>
+              </div>
             </div>
-            <span className="text-[10px] font-bold text-slate-500 mt-2 block">{uploadProgress}% Tamamlandı</span>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Camera modal Overlay */}
       {cameraActive && (

@@ -261,7 +261,7 @@ export default function App() {
     }
   ) => {
     setIsUploading(true);
-    setUploadProgress(0);
+    setUploadProgress(5);
 
     const totalFilesSize = files.reduce((acc, file) => acc + file.size, 0) || 1;
     let uploadedBytesPriorFiles = 0;
@@ -307,12 +307,13 @@ export default function App() {
                   const currentFileRatio = event.loaded / event.total;
                   const currentFileUploadedBytes = currentFileRatio * file.size;
                   const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
-                  const percent = Math.min(99, Math.round((totalUploaded / totalFilesSize) * 100));
+                  const percent = Math.min(85, Math.max(16, Math.round((totalUploaded / totalFilesSize) * 85)));
                   setUploadProgress(percent);
                 }
               };
 
               xhr.onload = () => {
+                setUploadProgress(90);
                 if (xhr.status >= 200 && xhr.status < 300) {
                   try {
                     resolve(JSON.parse(xhr.responseText));

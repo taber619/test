@@ -1820,6 +1820,15 @@ async function startServer() {
           const meta = docSnap.data();
           if (meta.filePath && fs.existsSync(meta.filePath)) {
             try { fs.unlinkSync(meta.filePath); } catch (e) {}
+          } else {
+            // Check disk by ID in uploads folder
+            try {
+              const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+              const found = filesInUploads.find(f => f.startsWith(`${id}-`));
+              if (found) {
+                fs.unlinkSync(path.join(UPLOADS_DIR, found));
+              }
+            } catch (e) {}
           }
           
           // Delete metadata
@@ -1832,6 +1841,11 @@ async function startServer() {
             deletePromises.push(deleteDoc(doc(db, "image_chunks", `${id}_${i}`)));
           }
           await Promise.all(deletePromises);
+          
+          // Also remove from in-memory fallback store if present
+          if (imagesStore[id]) {
+            delete imagesStore[id];
+          }
           return meta;
         }
       } catch (e) {
@@ -1843,10 +1857,29 @@ async function startServer() {
     if (image) {
       if (image.filePath && fs.existsSync(image.filePath)) {
         try { fs.unlinkSync(image.filePath); } catch (e) {}
+      } else {
+        try {
+          const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+          const found = filesInUploads.find(f => f.startsWith(`${id}-`));
+          if (found) {
+            fs.unlinkSync(path.join(UPLOADS_DIR, found));
+          }
+        } catch (e) {}
       }
       delete imagesStore[id];
       return image;
     }
+
+    // Fallback disk cleanup if image not found in store or firebase meta
+    try {
+      const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+      const found = filesInUploads.find(f => f.startsWith(`${id}-`));
+      if (found) {
+        fs.unlinkSync(path.join(UPLOADS_DIR, found));
+        return { id, deletedFromDisk: true };
+      }
+    } catch (e) {}
+
     return null;
   }
 
