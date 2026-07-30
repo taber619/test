@@ -426,10 +426,10 @@ export default function App() {
           watermarkSize: watermarkOptions?.watermarkSize,
           watermarkPosition: watermarkOptions?.watermarkPosition,
           directUrl: `${origin}/api/images/${uploadResult.id}`,
-          previewUrl: `${origin}/?view=image-detail&id=${uploadResult.id}`,
-          bbCode: `[IMG]${origin}/api/images/${uploadResult.id}[/IMG]`,
-          htmlCode: `<a href="${origin}/?view=image-detail&id=${uploadResult.id}"><img src="${origin}/api/images/${uploadResult.id}" alt="${uploadResult.name}" /></a>`,
-          markdownCode: `![${uploadResult.name}](${origin}/api/images/${uploadResult.id})`,
+          previewUrl: `${origin}/i/${uploadResult.id}`,
+          bbCode: `[url=${origin}/i/${uploadResult.id}][img]${origin}/api/images/${uploadResult.id}[/img][/url]`,
+          htmlCode: `<a href="${origin}/i/${uploadResult.id}"><img src="${origin}/api/images/${uploadResult.id}" alt="${uploadResult.name}" /></a>`,
+          markdownCode: `[![${uploadResult.name}](${origin}/api/images/${uploadResult.id})](${origin}/i/${uploadResult.id})`,
         });
 
         // Keep the progress updated smoothly between sequential file uploads
@@ -462,10 +462,10 @@ export default function App() {
       views: 0,
       deleteToken: data.deleteToken,
       directUrl: `${origin}/api/images/${data.id}`,
-      previewUrl: `${origin}/?view=image-detail&id=${data.id}`,
-      bbCode: `[IMG]${origin}/api/images/${data.id}[/IMG]`,
-      htmlCode: `<a href="${origin}/?view=image-detail&id=${data.id}"><img src="${origin}/api/images/${data.id}" alt="${data.name}" /></a>`,
-      markdownCode: `![${data.name}](${origin}/api/images/${data.id})`,
+      previewUrl: `${origin}/i/${data.id}`,
+      bbCode: `[url=${origin}/i/${data.id}][img]${origin}/api/images/${data.id}[/img][/url]`,
+      htmlCode: `<a href="${origin}/i/${data.id}"><img src="${origin}/api/images/${data.id}" alt="${data.name}" /></a>`,
+      markdownCode: `[![${data.name}](${origin}/api/images/${data.id})](${origin}/i/${data.id})`,
     };
 
     setUploadedImages([clientImg]);

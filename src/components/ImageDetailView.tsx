@@ -185,8 +185,8 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
 
   const origin = window.location.origin;
   const directLink = `${origin}/api/images/${imageId}`;
-  const previewLink = `${origin}/?view=image-detail&id=${imageId}`;
-  const shortLink = `${origin}/d/${imageId}`;
+  const previewLink = `${origin}/i/${imageId}`;
+  const shortLink = `${origin}/i/${imageId}`;
   const bbCode = isVideo ? `[VIDEO]${directLink}[/VIDEO]` : `[IMG]${directLink}[/IMG]`;
   const htmlCode = isVideo 
     ? `<video src="${directLink}" controls width="100%"></video>` 

@@ -1600,20 +1600,24 @@ async function startServer() {
 
   async function dbSaveImage(image: StoredImage, fileData: string | Buffer | null, imagesStore: Record<string, StoredImage>, filePath?: string) {
     image.filePath = filePath;
+
+    let base64Data = "";
+    if (fileData) {
+      base64Data = Buffer.isBuffer(fileData) ? fileData.toString("base64") : (fileData || "");
+    } else if (filePath && fs.existsSync(filePath)) {
+      try {
+        const fileBuf = fs.readFileSync(filePath);
+        base64Data = fileBuf.toString("base64");
+      } catch (e) {}
+    }
+
+    imagesStore[image.id] = { ...image, data: base64Data, filePath };
+
     if (useFirebase && db) {
       try {
         let chunks: string[] = [];
-        if (!filePath && fileData) {
-          if (Buffer.isBuffer(fileData)) {
-            const chunkSize = 600 * 1024;
-            let offset = 0;
-            while (offset < fileData.length) {
-              chunks.push(fileData.subarray(offset, offset + chunkSize).toString("base64"));
-              offset += chunkSize;
-            }
-          } else {
-            chunks = chunkString(fileData || "", CHUNK_SIZE);
-          }
+        if (base64Data && base64Data.length < 35 * 1024 * 1024) {
+          chunks = chunkString(base64Data, CHUNK_SIZE);
         }
 
         const meta = {
@@ -1661,9 +1665,6 @@ async function startServer() {
         console.error("Firebase save image error:", e);
       }
     }
-
-    const base64Str = Buffer.isBuffer(fileData) ? fileData.toString("base64") : (fileData || "");
-    imagesStore[image.id] = { ...image, data: base64Str };
   }
 
   async function dbGetImage(id: string, imagesStore: Record<string, StoredImage>): Promise<StoredImage | null> {
@@ -1675,14 +1676,31 @@ async function startServer() {
           const meta = docSnap.data();
           let fullData = "";
 
-          if (meta.filePath && fs.existsSync(meta.filePath)) {
+          let validFilePath = meta.filePath;
+          if (validFilePath && !fs.existsSync(validFilePath)) {
             try {
-              const fileBuf = fs.readFileSync(meta.filePath);
+              const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+              const found = filesInUploads.find(f => f.includes(id));
+              if (found) {
+                validFilePath = path.join(UPLOADS_DIR, found);
+              } else {
+                validFilePath = null;
+              }
+            } catch (e) {
+              validFilePath = null;
+            }
+          }
+
+          if (validFilePath && fs.existsSync(validFilePath)) {
+            try {
+              const fileBuf = fs.readFileSync(validFilePath);
               fullData = fileBuf.toString("base64");
             } catch (e) {
               console.error("Error reading filePath in dbGetImage:", e);
             }
-          } else if (meta.chunkCount > 0) {
+          }
+
+          if (!fullData && meta.chunkCount > 0) {
             const chunkCount = meta.chunkCount || 0;
             const chunkPromises = [];
             for (let i = 0; i < chunkCount; i++) {
@@ -1699,7 +1717,7 @@ async function startServer() {
             mimeType: meta.mimeType,
             size: meta.size,
             data: fullData,
-            filePath: meta.filePath || undefined,
+            filePath: validFilePath || undefined,
             uploadedAt: meta.uploadedAt,
             deleteAfter: meta.deleteAfter,
             password: meta.password || undefined,
@@ -1728,6 +1746,33 @@ async function startServer() {
       }
       return img;
     }
+
+    // Disk fallback search
+    try {
+      const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+      const found = filesInUploads.find(f => f.includes(id));
+      if (found) {
+        const diskPath = path.join(UPLOADS_DIR, found);
+        const stat = fs.statSync(diskPath);
+        let base64Str = "";
+        try {
+          base64Str = fs.readFileSync(diskPath).toString("base64");
+        } catch (e) {}
+        return {
+          id,
+          name: found,
+          mimeType: "image/jpeg",
+          size: stat.size,
+          data: base64Str,
+          filePath: diskPath,
+          uploadedAt: stat.birthtimeMs || Date.now(),
+          deleteAfter: "never",
+          deleteToken: "del_disk",
+          views: 1
+        };
+      }
+    } catch (e) {}
+
     return null;
   }
 
@@ -1785,6 +1830,27 @@ async function startServer() {
         watermarkPosition: image.watermarkPosition,
       };
     }
+
+    // Disk fallback for info
+    try {
+      const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+      const found = filesInUploads.find(f => f.includes(id));
+      if (found) {
+        const diskPath = path.join(UPLOADS_DIR, found);
+        const stat = fs.statSync(diskPath);
+        return {
+          id,
+          name: found,
+          mimeType: "image/jpeg",
+          size: stat.size,
+          uploadedAt: stat.birthtimeMs || Date.now(),
+          deleteAfter: "never",
+          views: 1,
+          hasPassword: false,
+        };
+      }
+    } catch (e) {}
+
     return null;
   }
 
@@ -2846,6 +2912,7 @@ async function startServer() {
 
   // Serve Raw Image Data
   app.get("/api/images/:id", async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
     const { id } = req.params;
     const { pw } = req.query;
     
@@ -2945,6 +3012,7 @@ async function startServer() {
 
   // Get Image Information (Excluding raw base64 data and password)
   app.get("/api/images/:id/info", async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
     const { id } = req.params;
     try {
       const info = await dbGetImageInfo(id, images);
