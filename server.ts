@@ -1676,7 +1676,12 @@ async function startServer() {
           let fullData = "";
 
           if (meta.filePath && fs.existsSync(meta.filePath)) {
-            // File exists on disk, no need to reconstruct base64
+            try {
+              const fileBuf = fs.readFileSync(meta.filePath);
+              fullData = fileBuf.toString("base64");
+            } catch (e) {
+              console.error("Error reading filePath in dbGetImage:", e);
+            }
           } else if (meta.chunkCount > 0) {
             const chunkCount = meta.chunkCount || 0;
             const chunkPromises = [];
@@ -1713,7 +1718,17 @@ async function startServer() {
       }
     }
 
-    return imagesStore[id] || null;
+    const img = imagesStore[id];
+    if (img) {
+      if (img.filePath && fs.existsSync(img.filePath) && (!img.data || img.data.length === 0)) {
+        try {
+          const fileBuf = fs.readFileSync(img.filePath);
+          img.data = fileBuf.toString("base64");
+        } catch (e) {}
+      }
+      return img;
+    }
+    return null;
   }
 
   async function dbGetImageInfo(id: string, imagesStore: Record<string, StoredImage>): Promise<any | null> {
@@ -2815,13 +2830,72 @@ async function startServer() {
         return;
       }
 
-      const buffer = Buffer.from(image.data, "base64");
+      const range = req.headers.range;
+      const contentType = image.mimeType || "application/octet-stream";
       const dispositionType = image.mimeType?.startsWith("image/") || image.mimeType?.startsWith("video/") ? "inline" : "attachment";
+      const fileNameEncoded = encodeURIComponent(image.name || "dosya");
+
+      // Case 1: File is stored on disk at image.filePath
+      if (image.filePath && fs.existsSync(image.filePath)) {
+        const stat = fs.statSync(image.filePath);
+        const fileSize = stat.size;
+
+        if (range) {
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          const chunkSize = (end - start) + 1;
+          const fileStream = fs.createReadStream(image.filePath, { start, end });
+
+          res.writeHead(206, {
+            "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": chunkSize,
+            "Content-Type": contentType,
+            "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
+          });
+          fileStream.pipe(res);
+          return;
+        } else {
+          res.writeHead(200, {
+            "Content-Length": fileSize,
+            "Content-Type": contentType,
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=86400",
+            "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
+          });
+          fs.createReadStream(image.filePath).pipe(res);
+          return;
+        }
+      }
+
+      // Case 2: File is stored as base64 in image.data
+      const buffer = Buffer.from(image.data || "", "base64");
+      const fileSize = buffer.length;
+
+      if (range && fileSize > 0) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = (end - start) + 1;
+
+        res.writeHead(206, {
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": chunkSize,
+          "Content-Type": contentType,
+          "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
+        });
+        res.end(buffer.subarray(start, end + 1));
+        return;
+      }
+
       res.writeHead(200, {
-        "Content-Type": image.mimeType || "application/octet-stream",
-        "Content-Length": buffer.length,
+        "Content-Type": contentType,
+        "Content-Length": fileSize,
+        "Accept-Ranges": "bytes",
         "Cache-Control": "public, max-age=86400",
-        "Content-Disposition": `${dispositionType}; filename="${encodeURIComponent(image.name || 'dosya')}"`,
+        "Content-Disposition": `${dispositionType}; filename="${fileNameEncoded}"`,
       });
       res.end(buffer);
     } catch (err) {
