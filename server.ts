@@ -3057,6 +3057,89 @@ async function startServer() {
     }
   });
 
+  // SEO - robots.txt
+  app.get("/robots.txt", (req, res) => {
+    const host = req.get("host") || "inanhizlimedya.online";
+    const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const baseUrl = `${protocol}://${host}`;
+
+    const content = `User-agent: *
+Allow: /
+Allow: /api/images/
+Allow: /i/
+Allow: /favicon.svg
+Allow: /apple-touch-icon.png
+Allow: /site.webmanifest
+Disallow: /admin
+Disallow: /api/admin/
+
+User-agent: Googlebot-Image
+Allow: /
+Allow: /api/images/
+
+Sitemap: ${baseUrl}/sitemap.xml
+`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(content);
+  });
+
+  // SEO - sitemap.xml
+  app.get("/sitemap.xml", async (req, res) => {
+    const host = req.get("host") || "inanhizlimedya.online";
+    const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const baseUrl = `${protocol}://${host}`;
+
+    try {
+      const allImages = await dbGetAllImages(images);
+      // Filter images that are public (not password protected)
+      const publicImages = allImages.filter((img: any) => !img.hasPassword);
+
+      const nowIso = new Date().toISOString();
+
+      let urlsXml = `  <url>
+    <loc>${baseUrl}/</loc>
+    <lastmod>${nowIso}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>\n`;
+
+      publicImages.forEach((img: any) => {
+        let lastMod = nowIso;
+        if (img.uploadedAt) {
+          try {
+            lastMod = new Date(img.uploadedAt).toISOString();
+          } catch (e) {
+            lastMod = nowIso;
+          }
+        }
+        const imgTitle = (img.title || img.name || "Görsel").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const imgDirectUrl = `${baseUrl}/api/images/${img.id}`;
+        
+        urlsXml += `  <url>
+    <loc>${baseUrl}/i/${img.id}</loc>
+    <lastmod>${lastMod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>${imgDirectUrl}</image:loc>
+      <image:title>${imgTitle}</image:title>
+    </image:image>
+  </url>\n`;
+      });
+
+      const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${urlsXml}</urlset>`;
+
+      res.setHeader("Content-Type", "application/xml; charset=utf-8");
+      res.send(sitemapXml);
+    } catch (err) {
+      console.error("Sitemap generation error:", err);
+      res.status(500).send("Error generating sitemap");
+    }
+  });
+
   // Short URL redirects for share links: /i/:id, /d/:id, /download/:id, /v/:id
   app.get(["/i/:id", "/d/:id", "/download/:id", "/v/:id"], (req, res) => {
     const { id } = req.params;
