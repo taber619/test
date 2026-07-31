@@ -2787,6 +2787,239 @@ async function startServer() {
     }
   });
 
+  // Handle Chunked File Upload (For large files e.g. 20MB - 5GB without proxy timeouts)
+  app.post("/api/upload-chunk", (req: any, res: any, next: any) => {
+    uploadMiddleware.single("file")(req, res, (err: any) => {
+      if (err) {
+        console.error("Chunk upload error:", err);
+        return res.status(400).json({ error: err.message || "Parça yüklenirken hata oluştu." });
+      }
+      next();
+    });
+  }, async (req: any, res: any) => {
+    try {
+      const uploadId = req.body?.uploadId;
+      const chunkIndex = Number(req.body?.chunkIndex);
+      const totalChunks = Number(req.body?.totalChunks);
+      const fileName = req.body?.fileName || req.file?.originalname || "dosya";
+      const mimeType = req.body?.mimeType || req.file?.mimetype || "application/octet-stream";
+      const fileSize = Number(req.body?.fileSize) || 0;
+      const userId = req.body?.userId;
+
+      if (!uploadId || isNaN(chunkIndex) || !req.file) {
+        if (req.file?.path && fs.existsSync(req.file.path)) {
+          try { fs.unlinkSync(req.file.path); } catch (e) {}
+        }
+        res.status(400).json({ error: "Geçersiz parça verisi." });
+        return;
+      }
+
+      // Validate limits on chunk 0
+      if (chunkIndex === 0) {
+        const config = await dbGetConfig();
+        let uRecord: any = null;
+        if (userId) {
+          uRecord = users[userId] || Object.values(users).find(u => u.id === userId);
+          if (useFirebase && db && !uRecord) {
+            try {
+              const uSnap = await getDoc(doc(db, "users", userId));
+              if (uSnap.exists()) uRecord = uSnap.data();
+            } catch (e) {}
+          }
+        }
+
+        const isVipUser = uRecord ? (!!uRecord.isVip || uRecord.role === "admin") : false;
+
+        if (userId) {
+          if (uRecord && uRecord.isBanned) {
+            if (req.file?.path && fs.existsSync(req.file.path)) {
+              try { fs.unlinkSync(req.file.path); } catch (e) {}
+            }
+            res.status(403).json({ error: "Hesabınız engellendiği için dosya yükleyemezsiniz." });
+            return;
+          }
+
+          const userMaxMb = isVipUser ? (config.vipMaxMb ?? 5000) : (config.registeredMaxMb ?? 1000);
+          if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
+            if (req.file?.path && fs.existsSync(req.file.path)) {
+              try { fs.unlinkSync(req.file.path); } catch (e) {}
+            }
+            res.status(400).json({ error: `Yüklenecek dosya limitinizi (${userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(0)} GB` : `${userMaxMb} MB`}) aşıyor.` });
+            return;
+          }
+        } else {
+          const guestMaxMb = config.guestMaxMb ?? 20;
+          if (fileSize > guestMaxMb * 1024 * 1024) {
+            if (req.file?.path && fs.existsSync(req.file.path)) {
+              try { fs.unlinkSync(req.file.path); } catch (e) {}
+            }
+            res.status(400).json({ error: `Misafir kullanıcılar en fazla ${guestMaxMb} MB boyutunda dosya yükleyebilir.` });
+            return;
+          }
+
+          const clientIp = extractClientIp(req);
+          let token = extractGuestToken(req);
+          if (!token) token = "gst_" + generateId(12);
+          const guestMaxCount = config.guestMaxUploadCount ?? 5;
+          const currentCount = await getEffectiveGuestCount(token, clientIp);
+
+          if (currentCount >= guestMaxCount) {
+            if (req.file?.path && fs.existsSync(req.file.path)) {
+              try { fs.unlinkSync(req.file.path); } catch (e) {}
+            }
+            res.status(400).json({ error: `Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Limitiniz doldu!` });
+            return;
+          }
+        }
+      }
+
+      // Store chunk file inside a dedicated uploadId folder
+      const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, "");
+      const chunkDir = path.join(UPLOADS_DIR, `chunks_${safeUploadId}`);
+      if (!fs.existsSync(chunkDir)) {
+        fs.mkdirSync(chunkDir, { recursive: true });
+      }
+
+      const chunkFilePath = path.join(chunkDir, `chunk_${chunkIndex}`);
+      try {
+        fs.renameSync(req.file.path, chunkFilePath);
+      } catch (e) {
+        fs.copyFileSync(req.file.path, chunkFilePath);
+        try { fs.unlinkSync(req.file.path); } catch (err) {}
+      }
+
+      res.status(200).json({ success: true, uploadId, chunkIndex, totalChunks });
+    } catch (err: any) {
+      console.error("Chunk upload handler error:", err);
+      res.status(500).json({ error: "Parça işlenirken sunucu hatası oluştu." });
+    }
+  });
+
+  // Handle Complete Chunked Upload
+  app.post("/api/upload-complete", async (req: any, res: any) => {
+    try {
+      const {
+        uploadId,
+        fileName,
+        fileSize,
+        mimeType,
+        totalChunks,
+        userId,
+        guestToken,
+        deleteAfter,
+        password,
+        watermarkText,
+        watermarkOpacity,
+        watermarkColor,
+        watermarkSize,
+        watermarkPosition
+      } = req.body;
+
+      if (!uploadId || !totalChunks || Number(totalChunks) <= 0) {
+        res.status(400).json({ error: "Eksik parça tamamlama verisi." });
+        return;
+      }
+
+      const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, "");
+      const chunkDir = path.join(UPLOADS_DIR, `chunks_${safeUploadId}`);
+
+      if (!fs.existsSync(chunkDir)) {
+        res.status(400).json({ error: "Yükleme parçaları bulunamadı veya zaman aşımına uğradı." });
+        return;
+      }
+
+      // Check all chunks exist
+      const numChunks = Number(totalChunks);
+      for (let i = 0; i < numChunks; i++) {
+        const chunkPath = path.join(chunkDir, `chunk_${i}`);
+        if (!fs.existsSync(chunkPath)) {
+          res.status(400).json({ error: `Yükleme eksik: Parça ${i + 1}/${numChunks} sunucuda bulunamadı.` });
+          return;
+        }
+      }
+
+      const id = generateId(6);
+      const deleteToken = "del_" + generateId(12);
+      const safeName = (fileName || "dosya").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const finalFilePath = path.join(UPLOADS_DIR, `${id}_${safeName}`);
+
+      // Concatenate chunk files into the final combined file
+      const writeStream = fs.createWriteStream(finalFilePath);
+      for (let i = 0; i < numChunks; i++) {
+        const chunkPath = path.join(chunkDir, `chunk_${i}`);
+        const chunkBuffer = fs.readFileSync(chunkPath);
+        writeStream.write(chunkBuffer);
+        try { fs.unlinkSync(chunkPath); } catch (e) {}
+      }
+      writeStream.end();
+
+      // Clean up chunk directory
+      try { fs.rmdirSync(chunkDir); } catch (e) {}
+
+      const config = await dbGetConfig();
+      let uRecord: any = null;
+      if (userId) {
+        uRecord = users[userId] || Object.values(users).find(u => u.id === userId);
+        if (useFirebase && db && !uRecord) {
+          try {
+            const uSnap = await getDoc(doc(db, "users", userId));
+            if (uSnap.exists()) uRecord = uSnap.data();
+          } catch (e) {}
+        }
+      }
+      const isVipUser = uRecord ? (!!uRecord.isVip || uRecord.role === "admin") : false;
+
+      let effectiveDeleteAfter = deleteAfter || (isVipUser ? "never" : "1m");
+      if (effectiveDeleteAfter === "never" && !isVipUser) {
+        effectiveDeleteAfter = "1m";
+      }
+
+      const finalSize = Number(fileSize) || (fs.existsSync(finalFilePath) ? fs.statSync(finalFilePath).size : 0);
+
+      const img: StoredImage = {
+        id,
+        name: fileName || "dosya.bin",
+        mimeType: mimeType || "application/octet-stream",
+        size: finalSize,
+        data: "", // Stored on disk
+        filePath: finalFilePath,
+        uploadedAt: Date.now(),
+        deleteAfter: effectiveDeleteAfter as any,
+        password: password || undefined,
+        deleteToken,
+        views: 0,
+        userId: userId || undefined,
+        watermarkText: watermarkText || undefined,
+        watermarkOpacity: watermarkOpacity !== undefined ? Number(watermarkOpacity) : undefined,
+        watermarkColor: watermarkColor || undefined,
+        watermarkSize: watermarkSize !== undefined ? Number(watermarkSize) : undefined,
+        watermarkPosition: watermarkPosition || undefined,
+      };
+
+      await dbSaveImage(img, null, images, finalFilePath);
+
+      if (!userId) {
+        const clientIp = extractClientIp(req);
+        let token = extractGuestToken(req);
+        if (!token) token = "gst_" + generateId(12);
+        await incrementEffectiveGuestCount(token, clientIp);
+        res.setHeader("Set-Cookie", `guest_token=${token}; Path=/; Max-Age=31536000; SameSite=Lax`);
+      }
+
+      res.status(200).json({
+        success: true,
+        id,
+        name: fileName,
+        size: finalSize,
+        deleteToken,
+        uploadedAt: img.uploadedAt,
+      });
+    } catch (err: any) {
+      console.error("Complete chunked upload error:", err);
+      res.status(500).json({ error: "Parçalar birleştirilirken bir sunucu hatası oluştu." });
+    }
+  });
+
   // Handle Remote URL Upload
   app.post("/api/upload-url", async (req, res) => {
     try {
