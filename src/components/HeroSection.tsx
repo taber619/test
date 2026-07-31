@@ -142,6 +142,7 @@ export default function HeroSection({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const hasVideo = selectedFiles.some((x) => x.file.type.startsWith("video/"));
   const hasOnlyVideo = selectedFiles.length > 0 && selectedFiles.every((x) => x.file.type.startsWith("video/"));
@@ -417,6 +418,14 @@ export default function HeroSection({
   };
 
   // Camera capture controls
+  const handleCameraClick = () => {
+    if (typeof window !== "undefined" && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      cameraInputRef.current?.click();
+    } else {
+      startCamera();
+    }
+  };
+
   const startCamera = async () => {
     setCameraActive(true);
     setFacingMode("user"); // Start with front camera by default
@@ -607,9 +616,17 @@ export default function HeroSection({
           onChange={handleImageChange}
           multiple
           accept="image/*"
-          capture="environment"
           className="hidden"
           id="hidden-image-input"
+        />
+        <input
+          type="file"
+          ref={cameraInputRef}
+          onChange={handleImageChange}
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          id="hidden-camera-input"
         />
         <input
           type="file"
@@ -831,7 +848,7 @@ export default function HeroSection({
                 {/* Kamerayla Çek Button */}
                 <button
                   type="button"
-                  onClick={startCamera}
+                  onClick={handleCameraClick}
                   className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 px-4 py-3.5 rounded-xl font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-850 hover:border-slate-300 dark:hover:border-slate-700 flex flex-col items-center justify-center gap-1.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-xs group"
                   id="btn-take-cam"
                 >
