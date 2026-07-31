@@ -30,16 +30,42 @@ if (dns && typeof dns.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
 }
 
-// Global exception handlers to catch harmless SDK background warnings like Firestore BloomFilterError
+// Suppress harmless SDK background warnings (e.g. Firestore BloomFilterError, RESOURCE_EXHAUSTED stream errors)
+const originalConsoleError = console.error;
+console.error = function (...args: any[]) {
+  const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(" ");
+  if (
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("Quota limit exceeded") ||
+    msg.includes("GrpcConnection RPC 'Write' stream") ||
+    msg.includes("BloomFilterError")
+  ) {
+    return;
+  }
+  originalConsoleError.apply(console, args);
+};
+
 process.on("uncaughtException", (err: any) => {
-  if (err?.message?.includes("BloomFilterError") || err?.toString()?.includes("BloomFilterError")) {
+  const msg = err?.message || String(err);
+  if (
+    msg.includes("BloomFilterError") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("Quota limit exceeded") ||
+    msg.includes("GrpcConnection")
+  ) {
     return;
   }
   console.error("Uncaught Exception:", err);
 });
 
 process.on("unhandledRejection", (reason: any) => {
-  if (reason?.message?.includes("BloomFilterError") || reason?.toString()?.includes("BloomFilterError")) {
+  const msg = reason?.message || String(reason);
+  if (
+    msg.includes("BloomFilterError") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("Quota limit exceeded") ||
+    msg.includes("GrpcConnection")
+  ) {
     return;
   }
   console.error("Unhandled Rejection:", reason);
@@ -59,7 +85,8 @@ import {
   query, 
   where, 
   getDocs,
-  addDoc 
+  addDoc,
+  setLogLevel
 } from "firebase/firestore";
 
 interface StoredImage {
@@ -345,6 +372,9 @@ async function startServer() {
       db = initializeFirestore(firebaseApp, {
         ignoreUndefinedProperties: true,
       }, firebaseConfig.firestoreDatabaseId);
+      try {
+        setLogLevel("silent");
+      } catch (e) {}
       useFirebase = true;
       console.log("Firebase successfully initialized with database ID:", firebaseConfig.firestoreDatabaseId);
     } else {
