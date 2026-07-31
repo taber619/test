@@ -139,6 +139,14 @@ function logServerError(log: Omit<ServerErrorLog, "id" | "timestamp">) {
   console.error(`[SYSTEM_ERROR_LOG][${log.type.toUpperCase()}] ${log.message}`, log.details || "");
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs = 2000, fallbackValue: any = null): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallbackValue as T), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 interface StoredUser {
   id: string;
   username: string;
@@ -820,8 +828,8 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "configs", "site");
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        const docSnap = await withTimeout(getDoc(docRef), 1500, null);
+        if (docSnap && docSnap.exists()) {
           const data = docSnap.data();
           const monthlyP = data.vipMonthlyPrice !== undefined ? Number(data.vipMonthlyPrice) : defaultSiteConfig.vipMonthlyPrice;
           const discPct = data.vipAnnualDiscountPercent !== undefined ? Number(data.vipAnnualDiscountPercent) : defaultSiteConfig.vipAnnualDiscountPercent;
@@ -1528,24 +1536,26 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         const imagesRef = collection(db, "images");
-        const snap = await getDocs(imagesRef);
-        snap.docs.forEach(docSnap => {
-          const data = docSnap.data();
-          if (data && data.id) {
-            seenIds.add(data.id);
-            list.push({
-              id: data.id,
-              name: data.name || "dosya.bin",
-              mimeType: data.mimeType || "image/jpeg",
-              size: data.size || 0,
-              uploadedAt: data.uploadedAt || Date.now(),
-              deleteAfter: data.deleteAfter || "never",
-              views: data.views || 0,
-              hasPassword: !!data.password,
-              userId: data.userId || null,
-            });
-          }
-        });
+        const snap = await withTimeout(getDocs(imagesRef), 2000, null);
+        if (snap) {
+          snap.docs.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data && data.id) {
+              seenIds.add(data.id);
+              list.push({
+                id: data.id,
+                name: data.name || "dosya.bin",
+                mimeType: data.mimeType || "image/jpeg",
+                size: data.size || 0,
+                uploadedAt: data.uploadedAt || Date.now(),
+                deleteAfter: data.deleteAfter || "never",
+                views: data.views || 0,
+                hasPassword: !!data.password,
+                userId: data.userId || null,
+              });
+            }
+          });
+        }
       } catch (e) {
         console.error("Firebase get all images error:", e);
       }
@@ -1724,71 +1734,63 @@ async function startServer() {
 
     imagesStore[image.id] = { ...image, data: base64Data, filePath };
 
-    // Increment global cumulative upload counter
-    await dbIncrementCumulativeUploads();
+    // Increment global cumulative upload counter asynchronously
+    dbIncrementCumulativeUploads().catch(() => {});
 
     if (useFirebase && db) {
-      try {
-        // Only generate chunks if there is NO physical file on disk
-        let chunks: string[] = [];
-        if (!filePath && base64Data && base64Data.length < 35 * 1024 * 1024) {
-          chunks = chunkString(base64Data, CHUNK_SIZE);
-        }
-
-        const meta = {
-          id: image.id,
-          name: image.name,
-          mimeType: image.mimeType,
-          size: image.size,
-          uploadedAt: image.uploadedAt,
-          deleteAfter: image.deleteAfter,
-          password: image.password || null,
-          deleteToken: image.deleteToken,
-          views: image.views,
-          userId: image.userId || null,
-          filePath: filePath || null,
-          chunkCount: chunks.length,
-          watermarkText: image.watermarkText || null,
-          watermarkOpacity: image.watermarkOpacity !== undefined ? image.watermarkOpacity : null,
-          watermarkColor: image.watermarkColor || null,
-          watermarkSize: image.watermarkSize !== undefined ? image.watermarkSize : null,
-          watermarkPosition: image.watermarkPosition || null,
-        };
-
-        // Save metadata safely (catching Quota / Resource Exhausted errors)
+      (async () => {
         try {
-          await setDoc(doc(db, "images", image.id), meta);
-        } catch (setErr: any) {
-          if (setErr?.code === 'resource-exhausted' || setErr?.message?.includes('RESOURCE_EXHAUSTED') || setErr?.message?.includes('Quota')) {
-            console.warn("[Firebase] Firestore günlük ücretsiz kota doldu. Görsel sunucu diskine ve belleğe başarıyla kaydedildi.");
-          } else {
-            console.error("Firebase save image meta error:", setErr?.message || setErr);
+          // Only generate chunks if there is NO physical file on disk
+          let chunks: string[] = [];
+          if (!filePath && base64Data && base64Data.length < 35 * 1024 * 1024) {
+            chunks = chunkString(base64Data, CHUNK_SIZE);
           }
-        }
 
-        // Save chunks only if necessary (and non-empty)
-        if (chunks.length > 0) {
-          const batchSize = 10;
-          for (let i = 0; i < chunks.length; i += batchSize) {
-            const batch = chunks.slice(i, i + batchSize);
-            await Promise.all(
-              batch.map((chunk, idx) => {
-                const chunkIndex = i + idx;
-                return setDoc(doc(db, "image_chunks", `${image.id}_${chunkIndex}`), {
-                  imageId: image.id,
-                  chunkIndex,
-                  data: chunk,
-                }).catch((cErr) => {
-                  console.warn("[Firebase] Chunk write warning:", cErr?.message || cErr);
-                });
-              })
-            );
+          const meta = {
+            id: image.id,
+            name: image.name,
+            mimeType: image.mimeType,
+            size: image.size,
+            uploadedAt: image.uploadedAt,
+            deleteAfter: image.deleteAfter,
+            password: image.password || null,
+            deleteToken: image.deleteToken,
+            views: image.views,
+            userId: image.userId || null,
+            filePath: filePath || null,
+            chunkCount: chunks.length,
+            watermarkText: image.watermarkText || null,
+            watermarkOpacity: image.watermarkOpacity !== undefined ? image.watermarkOpacity : null,
+            watermarkColor: image.watermarkColor || null,
+            watermarkSize: image.watermarkSize !== undefined ? image.watermarkSize : null,
+            watermarkPosition: image.watermarkPosition || null,
+          };
+
+          await withTimeout(setDoc(doc(db, "images", image.id), meta), 2500);
+
+          if (chunks.length > 0) {
+            const batchSize = 10;
+            for (let i = 0; i < chunks.length; i += batchSize) {
+              const batch = chunks.slice(i, i + batchSize);
+              await Promise.all(
+                batch.map((chunk, idx) => {
+                  const chunkIndex = i + idx;
+                  return withTimeout(
+                    setDoc(doc(db, "image_chunks", `${image.id}_${chunkIndex}`), {
+                      imageId: image.id,
+                      chunkIndex,
+                      data: chunk,
+                    }),
+                    2000
+                  ).catch(() => {});
+                })
+              );
+            }
           }
+        } catch (e: any) {
+          console.warn("[Firebase] Background save image warning:", e?.message || e);
         }
-        return;
-      } catch (e: any) {
-        console.error("Firebase save image wrapper catch:", e?.message || e);
-      }
+      })();
     }
   }
 
@@ -1796,8 +1798,8 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "images", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        const docSnap = await withTimeout(getDoc(docRef), 2000, null);
+        if (docSnap && docSnap.exists()) {
           const meta = docSnap.data();
           let fullData = "";
 
@@ -1822,6 +1824,8 @@ async function startServer() {
               if (stat.size < 15 * 1024 * 1024) {
                 const fileBuf = fs.readFileSync(validFilePath);
                 fullData = fileBuf.toString("base64");
+              } else {
+                fullData = "FILE_ON_DISK";
               }
             } catch (e) {
               console.error("Error reading filePath in dbGetImage:", e);
@@ -1832,10 +1836,10 @@ async function startServer() {
             const chunkCount = meta.chunkCount || 0;
             const chunkPromises = [];
             for (let i = 0; i < chunkCount; i++) {
-              chunkPromises.push(getDoc(doc(db, "image_chunks", `${id}_${i}`)));
+              chunkPromises.push(withTimeout(getDoc(doc(db, "image_chunks", `${id}_${i}`)), 2000, null));
             }
             const chunkSnaps = await Promise.all(chunkPromises);
-            const chunks = chunkSnaps.map(snap => snap.exists() ? snap.data()?.data || "" : "");
+            const chunks = chunkSnaps.map(snap => (snap && snap.exists()) ? snap.data()?.data || "" : "");
             fullData = chunks.join("");
           }
 
@@ -2316,8 +2320,8 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "guest_uploads", guestToken);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        const docSnap = await withTimeout(getDoc(docRef), 1500, null);
+        if (docSnap && docSnap.exists()) {
           const data = docSnap.data();
           if (lastReset > 0 && data.updatedAt && data.updatedAt < lastReset) {
             return 0;
@@ -3159,15 +3163,16 @@ async function startServer() {
       const safeName = (fileName || "dosya").replace(/[^a-zA-Z0-9._-]/g, "_");
       const finalFilePath = path.join(UPLOADS_DIR, `${id}_${safeName}`);
 
-      // Concatenate chunk files into the final combined file
-      const writeStream = fs.createWriteStream(finalFilePath);
+      // Concatenate chunk files synchronously into the final combined file
+      fs.writeFileSync(finalFilePath, "");
       for (let i = 0; i < numChunks; i++) {
         const chunkPath = path.join(chunkDir, `chunk_${i}`);
-        const chunkBuffer = fs.readFileSync(chunkPath);
-        writeStream.write(chunkBuffer);
-        try { fs.unlinkSync(chunkPath); } catch (e) {}
+        if (fs.existsSync(chunkPath)) {
+          const chunkBuffer = fs.readFileSync(chunkPath);
+          fs.appendFileSync(finalFilePath, chunkBuffer);
+          try { fs.unlinkSync(chunkPath); } catch (e) {}
+        }
       }
-      writeStream.end();
 
       // Clean up chunk directory
       try { fs.rmdirSync(chunkDir); } catch (e) {}
