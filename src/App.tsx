@@ -261,6 +261,23 @@ export default function App() {
       watermarkPosition: string;
     }
   ) => {
+    // Client-side pre-validation of file sizes against guest/member limits
+    for (const f of files) {
+      if (!currentUser) {
+        if (f.size > 20 * 1024 * 1024) {
+          alert(`"${f.name}" dosyası misafir yükleme limitini (20 MB) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
+          return;
+        }
+      } else {
+        const isVip = !!currentUser.isVip || currentUser.role === "admin";
+        const maxMb = isVip ? 5000 : 1000;
+        if (f.size > maxMb * 1024 * 1024) {
+          alert(`"${f.name}" dosyası üyelik limitinizi (${maxMb >= 1000 ? `${(maxMb / 1000).toFixed(0)} GB` : `${maxMb} MB`}) aşıyor.`);
+          return;
+        }
+      }
+    }
+
     setIsUploading(true);
     setUploadProgress(5);
 
@@ -277,141 +294,73 @@ export default function App() {
       const results: ClientImage[] = [];
 
       for (const file of files) {
-        // Robust single file uploader with retries and base64 JSON fallback
-        const uploadSingleFileWithRetry = async (): Promise<any> => {
-          const maxRetries = 2;
+        // Direct stream single file uploader
+        const uploadSingleFile = async (): Promise<any> => {
+          return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("name", file.name);
+            formData.append("mimeType", file.type || "application/octet-stream");
+            formData.append("size", String(file.size));
+            formData.append("deleteAfter", deleteAfter);
+            if (password) formData.append("password", password);
+            if (currentUser?.id) formData.append("userId", currentUser.id);
+            if (guestToken) formData.append("guestToken", guestToken);
+            if (watermarkOptions?.watermarkText) formData.append("watermarkText", watermarkOptions.watermarkText);
+            if (watermarkOptions?.watermarkOpacity !== undefined) formData.append("watermarkOpacity", String(watermarkOptions.watermarkOpacity));
+            if (watermarkOptions?.watermarkColor) formData.append("watermarkColor", watermarkOptions.watermarkColor);
+            if (watermarkOptions?.watermarkSize !== undefined) formData.append("watermarkSize", String(watermarkOptions.watermarkSize));
+            if (watermarkOptions?.watermarkPosition) formData.append("watermarkPosition", watermarkOptions.watermarkPosition);
 
-          // Primary method: XHR Multipart Form-Data
-          const attemptXhr = (): Promise<any> => {
-            return new Promise((resolve, reject) => {
-              const formData = new FormData();
-              formData.append("file", file);
-              formData.append("name", file.name);
-              formData.append("mimeType", file.type || "application/octet-stream");
-              formData.append("size", String(file.size));
-              formData.append("deleteAfter", deleteAfter);
-              if (password) formData.append("password", password);
-              if (currentUser?.id) formData.append("userId", currentUser.id);
-              if (guestToken) formData.append("guestToken", guestToken);
-              if (watermarkOptions?.watermarkText) formData.append("watermarkText", watermarkOptions.watermarkText);
-              if (watermarkOptions?.watermarkOpacity !== undefined) formData.append("watermarkOpacity", String(watermarkOptions.watermarkOpacity));
-              if (watermarkOptions?.watermarkColor) formData.append("watermarkColor", watermarkOptions.watermarkColor);
-              if (watermarkOptions?.watermarkSize !== undefined) formData.append("watermarkSize", String(watermarkOptions.watermarkSize));
-              if (watermarkOptions?.watermarkPosition) formData.append("watermarkPosition", watermarkOptions.watermarkPosition);
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/upload");
+            xhr.timeout = 120 * 60 * 1000; // 2 hours timeout for large files
 
-              const xhr = new XMLHttpRequest();
-              xhr.open("POST", "/api/upload");
-              xhr.timeout = 60 * 60 * 1000; // 60 minute timeout for large 1GB+ files
-
-              xhr.upload.onprogress = (event) => {
-                if (event.lengthComputable && event.total > 0) {
-                  const currentFileRatio = event.loaded / event.total;
-                  const currentFileUploadedBytes = currentFileRatio * file.size;
-                  const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
-                  const percent = Math.min(98, Math.max(1, Math.round((totalUploaded / totalFilesSize) * 98)));
-                  setUploadProgress(percent);
-                }
-              };
-
-              xhr.onload = () => {
-                setUploadProgress(90);
-                if (xhr.status >= 200 && xhr.status < 300) {
-                  try {
-                    resolve(JSON.parse(xhr.responseText));
-                  } catch (e) {
-                    reject({ isNetworkError: false, message: "Sunucudan geçersiz yanıt alındı." });
-                  }
-                } else {
-                  try {
-                    const errData = JSON.parse(xhr.responseText);
-                    reject({ isNetworkError: false, message: errData.error || "Görsel veya dosya yüklenemedi." });
-                  } catch (e) {
-                    reject({ isNetworkError: true, message: `Yükleme başarısız (Sunucu Yanıt Kodu: ${xhr.status})` });
-                  }
-                }
-              };
-
-              xhr.onerror = () => {
-                reject({ isNetworkError: true, message: "Sunucuya bağlanırken bir ağ hatası oluştu." });
-              };
-
-              xhr.ontimeout = () => {
-                reject({ isNetworkError: true, message: "Yükleme zaman aşımına uğradı." });
-              };
-
-              xhr.onabort = () => {
-                reject({ isNetworkError: false, message: "Yükleme işlemi iptal edildi." });
-              };
-
-              xhr.send(formData);
-            });
-          };
-
-          // Try XHR Multipart with retries
-          for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-              if (attempt > 0) {
-                await new Promise((res) => setTimeout(res, attempt * 1000));
+            xhr.upload.onprogress = (event) => {
+              if (event.lengthComputable && event.total > 0) {
+                const currentFileRatio = event.loaded / event.total;
+                const currentFileUploadedBytes = currentFileRatio * file.size;
+                const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
+                const percent = Math.min(98, Math.max(1, Math.round((totalUploaded / totalFilesSize) * 98)));
+                setUploadProgress(percent);
               }
-              return await attemptXhr();
-            } catch (err: any) {
-              if (!err.isNetworkError || attempt === maxRetries) {
-                if (!err.isNetworkError) {
-                  throw new Error(err.message || "Yükleme hatası.");
+            };
+
+            xhr.onload = () => {
+              setUploadProgress(95);
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  resolve(JSON.parse(xhr.responseText));
+                } catch (e) {
+                  reject(new Error("Sunucudan geçersiz yanıt alındı."));
+                }
+              } else {
+                try {
+                  const errData = JSON.parse(xhr.responseText);
+                  reject(new Error(errData.error || `Dosya yüklenemedi (Hata Kodu: ${xhr.status})`));
+                } catch (e) {
+                  reject(new Error(`Yükleme başarısız oldu (Sunucu Yanıt Kodu: ${xhr.status})`));
                 }
               }
-            }
-          }
+            };
 
-          // Fallback: Convert file to base64 payload if multipart XHR experienced network/proxy glitches
-          // Skip base64 conversion for files > 30MB to prevent browser memory freeze on large files
-          if (file.size > 30 * 1024 * 1024) {
-            throw new Error("Yükleme işlemi tamamlanamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyiniz.");
-          }
+            xhr.onerror = () => {
+              reject(new Error("Sunucuya bağlanırken ağ hatası oluştu. Lütfen bağlantınızı kontrol edip tekrar deneyin."));
+            };
 
-          try {
-            const base64Data = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const res = reader.result as string;
-                resolve(res.includes("base64,") ? res.split("base64,")[1] : res);
-              };
-              reader.onerror = () => reject(new Error("Dosya okuma hatası"));
-              reader.readAsDataURL(file);
-            });
+            xhr.ontimeout = () => {
+              reject(new Error("Dosya yükleme zaman aşımına uğradı. Lütfen internet hızınızı kontrol edip tekrar deneyin."));
+            };
 
-            const res = await fetch("/api/upload", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: file.name,
-                mimeType: file.type || "application/octet-stream",
-                size: file.size,
-                data: base64Data,
-                deleteAfter,
-                password: password || undefined,
-                userId: currentUser?.id,
-                guestToken,
-                watermarkText: watermarkOptions?.watermarkText,
-                watermarkOpacity: watermarkOptions?.watermarkOpacity,
-                watermarkColor: watermarkOptions?.watermarkColor,
-                watermarkSize: watermarkOptions?.watermarkSize,
-                watermarkPosition: watermarkOptions?.watermarkPosition,
-              }),
-            });
+            xhr.onabort = () => {
+              reject(new Error("Yükleme işlemi iptal edildi."));
+            };
 
-            const data = await res.json();
-            if (res.ok) {
-              return data;
-            } else {
-              throw new Error(data.error || "Yükleme başarısız oldu.");
-            }
-          } catch (fallbackErr: any) {
-            throw new Error(fallbackErr.message || "Sunucuya bağlanırken ağ hatası oluştu. Lütfen bağlantınızı kontrol edip tekrar deneyin.");
-          }
+            xhr.send(formData);
+          });
         };
 
-        const uploadResult = await uploadSingleFileWithRetry();
+        const uploadResult = await uploadSingleFile();
 
         // Add this file's full size to the accumulated total of prior uploaded files
         uploadedBytesPriorFiles += file.size;
