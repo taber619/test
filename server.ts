@@ -1608,8 +1608,12 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         await setDoc(doc(db, "counters", "stats"), { totalUploads: globalCumulativeUploads }, { merge: true });
-      } catch (e) {
-        console.error("Error incrementing cumulative uploads:", e);
+      } catch (e: any) {
+        if (e?.code === 'resource-exhausted' || e?.message?.includes('RESOURCE_EXHAUSTED')) {
+          // Quietly ignore quota error, internal memory counter is already updated
+        } else {
+          console.warn("Error incrementing cumulative uploads:", e?.message || e);
+        }
       }
     }
   }
@@ -1620,8 +1624,12 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         await setDoc(doc(db, "counters", "stats"), { totalUploads: 0 }, { merge: true });
-      } catch (e) {
-        console.error("Error resetting cumulative uploads:", e);
+      } catch (e: any) {
+        if (e?.code === 'resource-exhausted' || e?.message?.includes('RESOURCE_EXHAUSTED')) {
+          // Quietly ignore
+        } else {
+          console.warn("Error resetting cumulative uploads:", e?.message || e);
+        }
       }
     }
   }
@@ -2366,8 +2374,12 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         await setDoc(doc(db, "guest_uploads", guestToken), { count: newCount, updatedAt: Date.now() });
-      } catch (e) {
-        console.error("Firebase increment guest count error:", e);
+      } catch (e: any) {
+        if (e?.code === 'resource-exhausted' || e?.message?.includes('RESOURCE_EXHAUSTED')) {
+          // Quietly ignore quota error, memory tracking works
+        } else {
+          console.warn("Firebase increment guest count error:", e?.message || e);
+        }
       }
     }
     guestUploadCounts[guestToken] = newCount;
