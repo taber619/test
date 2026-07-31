@@ -700,16 +700,16 @@ async function startServer() {
     todayOffset: 0,
     maintenanceModeEnabled: false,
     miniChatEnabled: true,
-    guestMaxMb: 20,
-    guestMaxUploadCount: 5,
+    guestMaxMb: 100,
+    guestMaxUploadCount: 50,
     guestAutoResetMode: "off",
     guestAutoResetHour: 0,
     guestResetIntervalHours: 24,
     lastGuestResetTime: 0,
     registeredMaxMb: 1000,
     vipMaxMb: 5000,
-    registeredMaxUploadCount: 15,
-    vipMaxUploadCount: 50,
+    registeredMaxUploadCount: 0,
+    vipMaxUploadCount: 0,
     requireEmailVerification: true,
     adsEnabled: true,
     adsContactEmail: "reklam@inanresim.com",
@@ -2790,7 +2790,7 @@ async function startServer() {
         const userUploadCount = userUploads.length;
 
         if (isVipUser) {
-          const vipMaxCount = config.vipMaxUploadCount ?? 50;
+          const vipMaxCount = config.vipMaxUploadCount ?? 0;
           if (vipMaxCount > 0 && userUploadCount >= vipMaxCount) {
             cleanupTempFile();
             const errMsg = `PRO VIP üyeler en fazla ${vipMaxCount} adet dosya yükleyebilir. Limitiniz (${vipMaxCount} adet) doldu!`;
@@ -2809,7 +2809,7 @@ async function startServer() {
             return;
           }
         } else {
-          const regMaxCount = config.registeredMaxUploadCount ?? 15;
+          const regMaxCount = config.registeredMaxUploadCount ?? 0;
           if (regMaxCount > 0 && userUploadCount >= regMaxCount) {
             cleanupTempFile();
             const errMsg = `Standart üyeler en fazla ${regMaxCount} adet dosya yükleyebilir. Limitiniz (${regMaxCount} adet) doldu! Daha fazla yükleme yapmak için PRO VIP üyeliğe geçebilirsiniz.`;
@@ -2878,10 +2878,10 @@ async function startServer() {
         if (!token) {
           token = "gst_" + generateId(12);
         }
-        const guestMaxCount = config.guestMaxUploadCount ?? 5;
+        const guestMaxCount = config.guestMaxUploadCount ?? 50;
         const currentCount = await getEffectiveGuestCount(token, clientIp);
 
-        if (currentCount >= guestMaxCount) {
+        if (guestMaxCount > 0 && currentCount >= guestMaxCount) {
           cleanupTempFile();
           const errMsg = `Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Limitiniz doldu!`;
           logServerError({
@@ -3036,7 +3036,7 @@ async function startServer() {
           const userUploadCount = userUploads.length;
 
           if (isVipUser) {
-            const vipMaxCount = config.vipMaxUploadCount ?? 50;
+            const vipMaxCount = config.vipMaxUploadCount ?? 0;
             if (vipMaxCount > 0 && userUploadCount >= vipMaxCount) {
               if (req.file?.path && fs.existsSync(req.file.path)) {
                 try { fs.unlinkSync(req.file.path); } catch (e) {}
@@ -3045,7 +3045,7 @@ async function startServer() {
               return;
             }
           } else {
-            const regMaxCount = config.registeredMaxUploadCount ?? 15;
+            const regMaxCount = config.registeredMaxUploadCount ?? 0;
             if (regMaxCount > 0 && userUploadCount >= regMaxCount) {
               if (req.file?.path && fs.existsSync(req.file.path)) {
                 try { fs.unlinkSync(req.file.path); } catch (e) {}
@@ -3281,13 +3281,13 @@ async function startServer() {
         const userUploadCount = userUploads.length;
 
         if (isVipUserUrl) {
-          const vipMaxCount = config.vipMaxUploadCount ?? 50;
+          const vipMaxCount = config.vipMaxUploadCount ?? 0;
           if (vipMaxCount > 0 && userUploadCount >= vipMaxCount) {
             res.status(400).json({ error: `PRO VIP üyeler en fazla ${vipMaxCount} adet dosya yükleyebilir. Limitiniz (${vipMaxCount} adet) doldu!` });
             return;
           }
         } else {
-          const regMaxCount = config.registeredMaxUploadCount ?? 15;
+          const regMaxCount = config.registeredMaxUploadCount ?? 0;
           if (regMaxCount > 0 && userUploadCount >= regMaxCount) {
             res.status(400).json({ error: `Standart üyeler en fazla ${regMaxCount} adet dosya yükleyebilir. Limitiniz (${regMaxCount} adet) doldu! Daha fazla yükleme yapmak için PRO VIP üyeliğe geçebilirsiniz.` });
             return;
@@ -3299,10 +3299,10 @@ async function startServer() {
         if (!token) {
           token = "gst_" + generateId(12);
         }
-        const guestMaxCount = config.guestMaxUploadCount ?? 5;
+        const guestMaxCount = config.guestMaxUploadCount ?? 50;
         const currentCount = await getEffectiveGuestCount(token, clientIp);
 
-        if (currentCount >= guestMaxCount) {
+        if (guestMaxCount > 0 && currentCount >= guestMaxCount) {
           res.status(400).json({ 
             error: `Üye olmadan en fazla ${guestMaxCount} adet yükleme yapabilirsiniz. Limitiniz doldu! Sınırsız yükleme yapmak için lütfen ücretsiz üye olun.`,
             guestLimitReached: true,

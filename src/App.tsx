@@ -264,8 +264,8 @@ export default function App() {
     // Client-side pre-validation of file sizes against guest/member limits
     for (const f of files) {
       if (!currentUser) {
-        if (f.size > 20 * 1024 * 1024) {
-          alert(`"${f.name}" dosyası misafir yükleme limitini (20 MB) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
+        if (f.size > 100 * 1024 * 1024) {
+          alert(`"${f.name}" dosyası misafir yükleme limitini (100 MB) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
           return;
         }
       } else {
