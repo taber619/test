@@ -177,11 +177,11 @@ export default function App() {
       const id = params.get("id");
       const adminParam = params.get("admin");
 
-      // Support path-based short routes (/i/XYZ, /d/XYZ, /download/XYZ, /v/XYZ)
+      // Support path-based short routes (/i/XYZ, /d/XYZ, /download/XYZ, /v/XYZ, /f/XYZ, /file/XYZ)
       const pathname = window.location.pathname;
       let pathId: string | null = null;
       const pathParts = pathname.split("/").filter(Boolean);
-      if (pathParts.length >= 2 && ["i", "d", "download", "v"].includes(pathParts[0])) {
+      if (pathParts.length >= 2 && ["i", "d", "download", "v", "f", "file"].includes(pathParts[0])) {
         pathId = pathParts[1];
       }
 
@@ -301,14 +301,14 @@ export default function App() {
 
               const xhr = new XMLHttpRequest();
               xhr.open("POST", "/api/upload");
-              xhr.timeout = 10 * 60 * 1000; // 10 minute timeout
+              xhr.timeout = 60 * 60 * 1000; // 60 minute timeout for large 1GB+ files
 
               xhr.upload.onprogress = (event) => {
                 if (event.lengthComputable && event.total > 0) {
                   const currentFileRatio = event.loaded / event.total;
                   const currentFileUploadedBytes = currentFileRatio * file.size;
                   const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
-                  const percent = Math.min(85, Math.max(16, Math.round((totalUploaded / totalFilesSize) * 85)));
+                  const percent = Math.min(98, Math.max(1, Math.round((totalUploaded / totalFilesSize) * 98)));
                   setUploadProgress(percent);
                 }
               };
@@ -364,6 +364,11 @@ export default function App() {
           }
 
           // Fallback: Convert file to base64 payload if multipart XHR experienced network/proxy glitches
+          // Skip base64 conversion for files > 30MB to prevent browser memory freeze on large files
+          if (file.size > 30 * 1024 * 1024) {
+            throw new Error("Yükleme işlemi tamamlanamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyiniz.");
+          }
+
           try {
             const base64Data = await new Promise<string>((resolve, reject) => {
               const reader = new FileReader();

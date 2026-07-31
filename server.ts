@@ -2952,6 +2952,14 @@ async function startServer() {
         return;
       }
 
+      // If visited directly in browser address bar without dl=1, redirect to the download UI page
+      const acceptHeader = req.headers.accept || "";
+      const secFetchDest = req.headers["sec-fetch-dest"];
+      if ((acceptHeader.includes("text/html") || secFetchDest === "document") && dl !== "1" && download !== "true") {
+        res.redirect(`/?view=image-detail&id=${id}`);
+        return;
+      }
+
       // Password enforcement on raw image
       if (image.password && image.password !== pw) {
         res.status(403).send("Bu dosya şifre korumalıdır.");
@@ -3140,8 +3148,8 @@ ${urlsXml}</urlset>`;
     }
   });
 
-  // Short URL redirects for share links: /i/:id, /d/:id, /download/:id, /v/:id
-  app.get(["/i/:id", "/d/:id", "/download/:id", "/v/:id"], (req, res) => {
+  // Short URL redirects for share links: /i/:id, /d/:id, /download/:id, /v/:id, /f/:id, /file/:id
+  app.get(["/i/:id", "/d/:id", "/download/:id", "/v/:id", "/f/:id", "/file/:id"], (req, res) => {
     const { id } = req.params;
     res.redirect(`/?view=image-detail&id=${id}`);
   });
@@ -4901,9 +4909,9 @@ ${urlsXml}</urlset>`;
   });
 
   // Ensure high timeouts for large file uploads and slow clients
-  server.timeout = 10 * 60 * 1000; // 10 minutes
-  server.keepAliveTimeout = 120 * 1000; // 2 minutes
-  server.headersTimeout = 125 * 1000; // 125 seconds
+  server.timeout = 60 * 60 * 1000; // 60 minutes for 1GB+ uploads
+  server.keepAliveTimeout = 300 * 1000; // 5 minutes
+  server.headersTimeout = 305 * 1000; // 305 seconds
 }
 
 startServer().catch(err => {

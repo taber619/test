@@ -69,15 +69,15 @@ export default function UploadSuccess({
 
       <div className="space-y-8" id="uploaded-images-list">
         {uploadedImages.map((img) => {
-          const currentTab = activeTab[img.id] || "direct";
+          const currentTab = activeTab[img.id] || "preview";
           const isCopied = (type: string) => copiedIndex === `${img.id}-${type}`;
 
           const getLinkValue = () => {
             switch (currentTab) {
-              case "direct":
-                return img.directUrl;
               case "preview":
                 return img.previewUrl;
+              case "direct":
+                return img.directUrl;
               case "bbcode":
                 return img.bbCode;
               case "html":
@@ -252,8 +252,8 @@ export default function UploadSuccess({
                   {/* Tabs */}
                   <div className="flex flex-wrap gap-1.5 mt-3 border-b border-slate-100 dark:border-slate-800 pb-2">
                     {[
-                      { id: "direct", label: "Doğrudan Link" },
-                      { id: "preview", label: "Önizleme Sayfası" },
+                      { id: "preview", label: "İndirme Sayfası Linki ⭐ (Önerilen)" },
+                      { id: "direct", label: "Doğrudan İndirme Bağlantısı" },
                       { id: "bbcode", label: "BBCode (Forum)" },
                       { id: "html", label: "HTML Embed" },
                       { id: "markdown", label: "Markdown" },
@@ -295,7 +295,7 @@ export default function UploadSuccess({
                 <div className="mt-6 p-4 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl border border-blue-50 dark:border-blue-900/30 flex items-start gap-2.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-1.5 shrink-0" />
                   <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    <strong className="text-slate-800 dark:text-white">İpucu:</strong> Doğrudan linki web sitelerinizde, e-posta imzalarında veya forumlarda doğrudan görsel kaynağı olarak kullanabilirsiniz.
+                    <strong className="text-slate-800 dark:text-white">İpucu:</strong> Karşı tarafa veya arkadaşlarınıza link gönderirken <strong>İndirme Sayfası Linkini</strong> kullanırsanız, linki açtıklarında şık bir arayüz ile karşılaşırlar ve <strong>"Dosyayı İndir"</strong> butonuna basarak indirebilirler.
                   </p>
                 </div>
               </div>
