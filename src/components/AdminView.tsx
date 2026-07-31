@@ -1735,11 +1735,11 @@ export default function AdminView({ onBack }: AdminViewProps) {
                     <input
                       type="number"
                       min="0"
-                      value={siteConfig.registeredMaxUploadCount === 0 ? "" : (siteConfig.registeredMaxUploadCount ?? 0)}
+                      value={siteConfig.registeredMaxUploadCount === 0 ? "" : (siteConfig.registeredMaxUploadCount ?? 15)}
                       onChange={(e) => setSiteConfig({ ...siteConfig, registeredMaxUploadCount: e.target.value === "" ? 0 : Number(e.target.value) })}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 0 (Kayıtlı üyeler için yükleme adedi. 0 = Sınırsız yükleme)</span>
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 15 (Standart kayıtlı üyeler için maksimum yükleme adedi)</span>
                   </div>
                 </div>
               </div>
@@ -1761,6 +1761,17 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 5000 (VIP üyeler için dosya/video boyutu sınırı. 5000 MB = 5 GB)</span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">VIP Maksimum Yükleme Adedi (0 = Sınırsız)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={siteConfig.vipMaxUploadCount === 0 ? "" : (siteConfig.vipMaxUploadCount ?? 50)}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, vipMaxUploadCount: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Örn: 50 (PRO VIP üyeler için maksimum yükleme adedi)</span>
                   </div>
                   <div className="p-2.5 bg-amber-100/60 border border-amber-200 rounded-xl">
                     <p className="text-[11px] font-extrabold text-amber-900 flex items-center gap-1">

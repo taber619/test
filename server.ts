@@ -455,6 +455,7 @@ async function startServer() {
     registeredMaxMb?: number;
     vipMaxMb?: number;
     registeredMaxUploadCount?: number;
+    vipMaxUploadCount?: number;
     requireEmailVerification?: boolean;
     adsEnabled?: boolean;
     adsContactEmail?: string;
@@ -670,14 +671,15 @@ async function startServer() {
     maintenanceModeEnabled: false,
     miniChatEnabled: true,
     guestMaxMb: 20,
-    guestMaxUploadCount: 50,
+    guestMaxUploadCount: 5,
     guestAutoResetMode: "off",
     guestAutoResetHour: 0,
     guestResetIntervalHours: 24,
     lastGuestResetTime: 0,
     registeredMaxMb: 1000,
     vipMaxMb: 5000,
-    registeredMaxUploadCount: 0,
+    registeredMaxUploadCount: 15,
+    vipMaxUploadCount: 50,
     requireEmailVerification: true,
     adsEnabled: true,
     adsContactEmail: "reklam@inanresim.com",
@@ -817,6 +819,7 @@ async function startServer() {
             registeredMaxMb: data.registeredMaxMb !== undefined ? Number(data.registeredMaxMb) : defaultSiteConfig.registeredMaxMb,
             vipMaxMb: data.vipMaxMb !== undefined ? Number(data.vipMaxMb) : defaultSiteConfig.vipMaxMb,
             registeredMaxUploadCount: data.registeredMaxUploadCount !== undefined ? Number(data.registeredMaxUploadCount) : defaultSiteConfig.registeredMaxUploadCount,
+            vipMaxUploadCount: data.vipMaxUploadCount !== undefined ? Number(data.vipMaxUploadCount) : defaultSiteConfig.vipMaxUploadCount,
             requireEmailVerification: data.requireEmailVerification !== undefined ? !!data.requireEmailVerification : defaultSiteConfig.requireEmailVerification,
             adsEnabled: data.adsEnabled !== undefined ? !!data.adsEnabled : defaultSiteConfig.adsEnabled,
             adsContactEmail: data.adsContactEmail ?? defaultSiteConfig.adsContactEmail,
@@ -1688,8 +1691,9 @@ async function startServer() {
 
     if (useFirebase && db) {
       try {
+        // Only generate chunks if there is NO physical file on disk
         let chunks: string[] = [];
-        if (base64Data && base64Data.length < 35 * 1024 * 1024) {
+        if (!filePath && base64Data && base64Data.length < 35 * 1024 * 1024) {
           chunks = chunkString(base64Data, CHUNK_SIZE);
         }
 
@@ -1713,12 +1717,20 @@ async function startServer() {
           watermarkPosition: image.watermarkPosition || null,
         };
 
-        // Save metadata
-        await setDoc(doc(db, "images", image.id), meta);
+        // Save metadata safely (catching Quota / Resource Exhausted errors)
+        try {
+          await setDoc(doc(db, "images", image.id), meta);
+        } catch (setErr: any) {
+          if (setErr?.code === 'resource-exhausted' || setErr?.message?.includes('RESOURCE_EXHAUSTED') || setErr?.message?.includes('Quota')) {
+            console.warn("[Firebase] Firestore günlük ücretsiz kota doldu. Görsel sunucu diskine ve belleğe başarıyla kaydedildi.");
+          } else {
+            console.error("Firebase save image meta error:", setErr?.message || setErr);
+          }
+        }
 
-        // Save chunks in parallel batches of 20
+        // Save chunks only if necessary (and non-empty)
         if (chunks.length > 0) {
-          const batchSize = 20;
+          const batchSize = 10;
           for (let i = 0; i < chunks.length; i += batchSize) {
             const batch = chunks.slice(i, i + batchSize);
             await Promise.all(
@@ -1728,14 +1740,16 @@ async function startServer() {
                   imageId: image.id,
                   chunkIndex,
                   data: chunk,
+                }).catch((cErr) => {
+                  console.warn("[Firebase] Chunk write warning:", cErr?.message || cErr);
                 });
               })
             );
           }
         }
         return;
-      } catch (e) {
-        console.error("Firebase save image error:", e);
+      } catch (e: any) {
+        console.error("Firebase save image wrapper catch:", e?.message || e);
       }
     }
   }
@@ -2614,7 +2628,7 @@ async function startServer() {
       res.json({
         guestToken: token,
         guestUploadCount: count,
-        guestMaxUploadCount: config.guestMaxUploadCount ?? 50,
+        guestMaxUploadCount: config.guestMaxUploadCount ?? 5,
         guestMaxMb: config.guestMaxMb ?? 20
       });
     } catch (err) {
@@ -2729,6 +2743,50 @@ async function startServer() {
           return;
         }
 
+        // Registered / VIP upload count limit check
+        const userUploads = await dbGetUserUploads(userId, images);
+        const userUploadCount = userUploads.length;
+
+        if (isVipUser) {
+          const vipMaxCount = config.vipMaxUploadCount ?? 50;
+          if (vipMaxCount > 0 && userUploadCount >= vipMaxCount) {
+            cleanupTempFile();
+            const errMsg = `PRO VIP üyeler en fazla ${vipMaxCount} adet dosya yükleyebilir. Limitiniz (${vipMaxCount} adet) doldu!`;
+            logServerError({
+              type: "upload",
+              message: "PRO VIP üye yükleme adedi limiti doldu",
+              details: `Mevcut yükleme: ${userUploadCount}, İzin verilen limit: ${vipMaxCount}`,
+              ip: extractClientIp(req),
+              fileName: name,
+              fileSize,
+              fileType: mimeType,
+              userId,
+              statusCode: 400
+            });
+            res.status(400).json({ error: errMsg });
+            return;
+          }
+        } else {
+          const regMaxCount = config.registeredMaxUploadCount ?? 15;
+          if (regMaxCount > 0 && userUploadCount >= regMaxCount) {
+            cleanupTempFile();
+            const errMsg = `Standart üyeler en fazla ${regMaxCount} adet dosya yükleyebilir. Limitiniz (${regMaxCount} adet) doldu! Daha fazla yükleme yapmak için PRO VIP üyeliğe geçebilirsiniz.`;
+            logServerError({
+              type: "upload",
+              message: "Standart üye yükleme adedi limiti doldu",
+              details: `Mevcut yükleme: ${userUploadCount}, İzin verilen limit: ${regMaxCount}`,
+              ip: extractClientIp(req),
+              fileName: name,
+              fileSize,
+              fileType: mimeType,
+              userId,
+              statusCode: 400
+            });
+            res.status(400).json({ error: errMsg });
+            return;
+          }
+        }
+
         const userMaxMb = isVipUser ? (config.vipMaxMb ?? 5000) : (config.registeredMaxMb ?? 1000);
         if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
           cleanupTempFile();
@@ -2778,7 +2836,7 @@ async function startServer() {
         if (!token) {
           token = "gst_" + generateId(12);
         }
-        const guestMaxCount = config.guestMaxUploadCount ?? 50;
+        const guestMaxCount = config.guestMaxUploadCount ?? 5;
         const currentCount = await getEffectiveGuestCount(token, clientIp);
 
         if (currentCount >= guestMaxCount) {
@@ -2932,6 +2990,29 @@ async function startServer() {
             return;
           }
 
+          const userUploads = await dbGetUserUploads(userId, images);
+          const userUploadCount = userUploads.length;
+
+          if (isVipUser) {
+            const vipMaxCount = config.vipMaxUploadCount ?? 50;
+            if (vipMaxCount > 0 && userUploadCount >= vipMaxCount) {
+              if (req.file?.path && fs.existsSync(req.file.path)) {
+                try { fs.unlinkSync(req.file.path); } catch (e) {}
+              }
+              res.status(400).json({ error: `PRO VIP üyeler en fazla ${vipMaxCount} adet dosya yükleyebilir. Limitiniz (${vipMaxCount} adet) doldu!` });
+              return;
+            }
+          } else {
+            const regMaxCount = config.registeredMaxUploadCount ?? 15;
+            if (regMaxCount > 0 && userUploadCount >= regMaxCount) {
+              if (req.file?.path && fs.existsSync(req.file.path)) {
+                try { fs.unlinkSync(req.file.path); } catch (e) {}
+              }
+              res.status(400).json({ error: `Standart üyeler en fazla ${regMaxCount} adet dosya yükleyebilir. Limitiniz (${regMaxCount} adet) doldu! Daha fazla yükleme yapmak için PRO VIP üyeliğe geçebilirsiniz.` });
+              return;
+            }
+          }
+
           const userMaxMb = isVipUser ? (config.vipMaxMb ?? 5000) : (config.registeredMaxMb ?? 1000);
           if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
             if (req.file?.path && fs.existsSync(req.file.path)) {
@@ -2953,7 +3034,7 @@ async function startServer() {
           const clientIp = extractClientIp(req);
           let token = extractGuestToken(req);
           if (!token) token = "gst_" + generateId(12);
-          const guestMaxCount = config.guestMaxUploadCount ?? 50;
+          const guestMaxCount = config.guestMaxUploadCount ?? 5;
           const currentCount = await getEffectiveGuestCount(token, clientIp);
 
           if (currentCount >= guestMaxCount) {
@@ -3153,13 +3234,30 @@ async function startServer() {
           res.status(403).json({ error: `Hesabınız engellendiği için yeni görsel/video yükleyemezsiniz.${uRecordUrl.banReason ? ` Neden: ${uRecordUrl.banReason}` : ''}` });
           return;
         }
+
+        const userUploads = await dbGetUserUploads(userId, images);
+        const userUploadCount = userUploads.length;
+
+        if (isVipUserUrl) {
+          const vipMaxCount = config.vipMaxUploadCount ?? 50;
+          if (vipMaxCount > 0 && userUploadCount >= vipMaxCount) {
+            res.status(400).json({ error: `PRO VIP üyeler en fazla ${vipMaxCount} adet dosya yükleyebilir. Limitiniz (${vipMaxCount} adet) doldu!` });
+            return;
+          }
+        } else {
+          const regMaxCount = config.registeredMaxUploadCount ?? 15;
+          if (regMaxCount > 0 && userUploadCount >= regMaxCount) {
+            res.status(400).json({ error: `Standart üyeler en fazla ${regMaxCount} adet dosya yükleyebilir. Limitiniz (${regMaxCount} adet) doldu! Daha fazla yükleme yapmak için PRO VIP üyeliğe geçebilirsiniz.` });
+            return;
+          }
+        }
       } else {
         const clientIp = extractClientIp(req);
         let token = extractGuestToken(req);
         if (!token) {
           token = "gst_" + generateId(12);
         }
-        const guestMaxCount = config.guestMaxUploadCount ?? 50;
+        const guestMaxCount = config.guestMaxUploadCount ?? 5;
         const currentCount = await getEffectiveGuestCount(token, clientIp);
 
         if (currentCount >= guestMaxCount) {

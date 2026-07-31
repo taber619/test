@@ -131,6 +131,7 @@ export interface SiteConfig {
   registeredMaxMb?: number;
   vipMaxMb?: number;
   registeredMaxUploadCount?: number;
+  vipMaxUploadCount?: number;
   requireEmailVerification?: boolean;
   adsEnabled?: boolean;
   adsContactEmail?: string;
