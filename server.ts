@@ -670,7 +670,7 @@ async function startServer() {
     maintenanceModeEnabled: false,
     miniChatEnabled: true,
     guestMaxMb: 20,
-    guestMaxUploadCount: 5,
+    guestMaxUploadCount: 50,
     guestAutoResetMode: "off",
     guestAutoResetHour: 0,
     guestResetIntervalHours: 24,
@@ -776,8 +776,15 @@ async function startServer() {
   };
 
   let siteConfigState = { ...defaultSiteConfig };
+  let cachedSiteConfig: SiteConfig | null = null;
+  let lastConfigFetchTime = 0;
 
   async function dbGetConfig(): Promise<SiteConfig> {
+    const now = Date.now();
+    if (cachedSiteConfig && (now - lastConfigFetchTime < 15000)) {
+      return cachedSiteConfig;
+    }
+
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "configs", "site");
@@ -788,7 +795,7 @@ async function startServer() {
           const discPct = data.vipAnnualDiscountPercent !== undefined ? Number(data.vipAnnualDiscountPercent) : defaultSiteConfig.vipAnnualDiscountPercent;
           const computedAnnualP = Math.round(monthlyP * 12 * (1 - (discPct / 100)));
 
-          return {
+          cachedSiteConfig = {
             siteName: data.siteName ?? defaultSiteConfig.siteName,
             siteDomain: data.siteDomain ?? defaultSiteConfig.siteDomain,
             homepageTitle: data.homepageTitle ?? defaultSiteConfig.homepageTitle,
@@ -833,11 +840,15 @@ async function startServer() {
             privacyPolicyText: data.privacyPolicyText ?? defaultSiteConfig.privacyPolicyText,
             termsOfServiceText: data.termsOfServiceText ?? defaultSiteConfig.termsOfServiceText,
           };
+          lastConfigFetchTime = now;
+          return cachedSiteConfig;
         }
-      } catch (e) {
-        console.error("Firebase get config error:", e);
+      } catch (e: any) {
+        // Quota or network error - quiet fallback to in-memory config
       }
     }
+    cachedSiteConfig = siteConfigState;
+    lastConfigFetchTime = now;
     return siteConfigState;
   }
 
@@ -855,11 +866,14 @@ async function startServer() {
     }
     
     siteConfigState = updated;
+    cachedSiteConfig = updated;
+    lastConfigFetchTime = Date.now();
+
     if (useFirebase && db) {
       try {
         await setDoc(doc(db, "configs", "site"), updated);
-      } catch (e) {
-        console.error("Firebase save config error:", e);
+      } catch (e: any) {
+        // Quota or network error
       }
     }
     return updated;
@@ -1475,126 +1489,174 @@ async function startServer() {
   }
 
   async function dbGetAllImages(imagesStore: Record<string, StoredImage>): Promise<any[]> {
+    const list: any[] = [];
+    const seenIds = new Set<string>();
+
     if (useFirebase && db) {
       try {
         const imagesRef = collection(db, "images");
         const snap = await getDocs(imagesRef);
-        return snap.docs.map(docSnap => {
+        snap.docs.forEach(docSnap => {
           const data = docSnap.data();
-          return {
-            id: data.id,
-            name: data.name,
-            mimeType: data.mimeType,
-            size: data.size,
-            uploadedAt: data.uploadedAt,
-            deleteAfter: data.deleteAfter,
-            views: data.views || 0,
-            hasPassword: !!data.password,
-            userId: data.userId || null,
-          };
+          if (data && data.id) {
+            seenIds.add(data.id);
+            list.push({
+              id: data.id,
+              name: data.name || "dosya.bin",
+              mimeType: data.mimeType || "image/jpeg",
+              size: data.size || 0,
+              uploadedAt: data.uploadedAt || Date.now(),
+              deleteAfter: data.deleteAfter || "never",
+              views: data.views || 0,
+              hasPassword: !!data.password,
+              userId: data.userId || null,
+            });
+          }
         });
       } catch (e) {
         console.error("Firebase get all images error:", e);
       }
     }
-    return Object.values(imagesStore).map(img => ({
-      id: img.id,
-      name: img.name,
-      mimeType: img.mimeType,
-      size: img.size,
-      uploadedAt: img.uploadedAt,
-      deleteAfter: img.deleteAfter,
-      views: img.views,
-      hasPassword: !!img.password,
-      userId: img.userId || null,
-    }));
+
+    Object.values(imagesStore).forEach(img => {
+      if (!seenIds.has(img.id)) {
+        seenIds.add(img.id);
+        list.push({
+          id: img.id,
+          name: img.name,
+          mimeType: img.mimeType,
+          size: img.size,
+          uploadedAt: img.uploadedAt,
+          deleteAfter: img.deleteAfter,
+          views: img.views || 0,
+          hasPassword: !!img.password,
+          userId: img.userId || null,
+        });
+      }
+    });
+
+    if (fs.existsSync(UPLOADS_DIR)) {
+      try {
+        const files = fs.readdirSync(UPLOADS_DIR);
+        files.forEach(fileName => {
+          if (fileName.startsWith("chunks_")) return;
+          const dashIdx = fileName.indexOf("-");
+          const imgId = dashIdx > 0 ? fileName.substring(0, dashIdx) : fileName;
+          if (imgId && !seenIds.has(imgId)) {
+            seenIds.add(imgId);
+            const fullPath = path.join(UPLOADS_DIR, fileName);
+            try {
+              const stat = fs.statSync(fullPath);
+              if (stat.isFile()) {
+                list.push({
+                  id: imgId,
+                  name: fileName,
+                  mimeType: "image/jpeg",
+                  size: stat.size,
+                  uploadedAt: stat.birthtimeMs || stat.mtimeMs || Date.now(),
+                  deleteAfter: "never",
+                  views: 1,
+                  hasPassword: false,
+                  userId: null
+                });
+              }
+            } catch (err) {}
+          }
+        });
+      } catch (err) {}
+    }
+
+    return list;
   }
 
   // Database helper functions (abstracting Firestore / In-Memory logic)
+  let globalCumulativeUploads = 0;
+  let isCumulativeLoaded = false;
+
+  async function dbGetCumulativeUploads(): Promise<number> {
+    if (!isCumulativeLoaded) {
+      if (useFirebase && db) {
+        try {
+          const statsSnap = await getDoc(doc(db, "counters", "stats"));
+          if (statsSnap.exists() && statsSnap.data()?.totalUploads !== undefined) {
+            globalCumulativeUploads = Number(statsSnap.data().totalUploads) || 0;
+          } else {
+            const imagesRef = collection(db, "images");
+            const imagesSnap = await getDocs(imagesRef);
+            globalCumulativeUploads = imagesSnap.size;
+            await setDoc(doc(db, "counters", "stats"), { totalUploads: globalCumulativeUploads }, { merge: true });
+          }
+        } catch (e) {
+          console.error("Error loading cumulative uploads:", e);
+        }
+      } else {
+        if (globalCumulativeUploads === 0) {
+          globalCumulativeUploads = Object.keys(images).length;
+        }
+      }
+      isCumulativeLoaded = true;
+    }
+    return globalCumulativeUploads;
+  }
+
+  async function dbIncrementCumulativeUploads() {
+    await dbGetCumulativeUploads();
+    globalCumulativeUploads++;
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "counters", "stats"), { totalUploads: globalCumulativeUploads }, { merge: true });
+      } catch (e) {
+        console.error("Error incrementing cumulative uploads:", e);
+      }
+    }
+  }
+
+  async function dbResetCumulativeUploads() {
+    globalCumulativeUploads = 0;
+    isCumulativeLoaded = true;
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "counters", "stats"), { totalUploads: 0 }, { merge: true });
+      } catch (e) {
+        console.error("Error resetting cumulative uploads:", e);
+      }
+    }
+  }
+
   async function getStatsCount(imagesStore: Record<string, StoredImage>, usersStore: Record<string, StoredUser>, sessionId?: string) {
     const config = await dbGetConfig();
     const now = Date.now();
     
-    // Register active user session
+    // Register active user session in-memory (0 Firestore writes)
     if (sessionId) {
-      if (useFirebase && db) {
-        try {
-          await setDoc(doc(db, "active_sessions", sessionId), {
-            id: sessionId,
-            lastActive: now
-          });
-        } catch (e) {
-          console.error("Failed to register firebase active session:", e);
-        }
-      } else {
-        activeSessions[sessionId] = now;
-      }
+      activeSessions[sessionId] = now;
     }
 
     // Clean up old active sessions and count
-    let activeUsersCount = 1; // default to 1 minimum
-    const activeThreshold = now - 15000; // active in last 15 seconds
-
-    if (useFirebase && db) {
-      try {
-        const activeSessionsRef = collection(db, "active_sessions");
-        const sessionsSnap = await getDocs(activeSessionsRef);
-        
-        let count = 0;
-        for (const docSnap of sessionsSnap.docs) {
-          const s = docSnap.data();
-          if (s.lastActive < activeThreshold) {
-            deleteDoc(docSnap.ref).catch(() => {});
-          } else {
-            count++;
-          }
-        }
-        activeUsersCount = Math.max(1, count);
-      } catch (e) {
-        console.error("Firebase active sessions count error:", e);
+    const activeThreshold = now - 20000; // active in last 20 seconds
+    Object.keys(activeSessions).forEach(sid => {
+      if (activeSessions[sid] < activeThreshold) {
+        delete activeSessions[sid];
       }
-    } else {
-      Object.keys(activeSessions).forEach(sid => {
-        if (activeSessions[sid] < activeThreshold) {
-          delete activeSessions[sid];
-        }
-      });
-      activeUsersCount = Math.max(1, Object.keys(activeSessions).length);
-    }
+    });
+    const activeUsersCount = Math.max(1, Object.keys(activeSessions).length);
 
     // Get images uploaded today (local midnight today)
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const startOfTodayMs = startOfToday.getTime();
 
-    let totalImagesCount = 0;
     let uploadedTodayCount = 0;
-
-    if (useFirebase && db) {
-      try {
-        const imagesRef = collection(db, "images");
-        const imagesSnap = await getDocs(imagesRef);
-        totalImagesCount = imagesSnap.size;
-        imagesSnap.docs.forEach(docSnap => {
-          const img = docSnap.data();
-          if (img.uploadedAt >= startOfTodayMs) {
-            uploadedTodayCount++;
-          }
-        });
-      } catch (e) {
-        console.error("Firebase counting error:", e);
+    Object.values(imagesStore).forEach(img => {
+      if (img.uploadedAt >= startOfTodayMs) {
+        uploadedTodayCount++;
       }
-    } else {
-      totalImagesCount = Object.keys(imagesStore).length;
-      Object.values(imagesStore).forEach(img => {
-        if (img.uploadedAt >= startOfTodayMs) {
-          uploadedTodayCount++;
-        }
-      });
-    }
+    });
+
+    const totalCumulative = await dbGetCumulativeUploads();
 
     return {
-      totalImages: totalImagesCount + (config.statsOffset || 0),
+      totalImages: totalCumulative + (config.statsOffset || 0),
       activeUsers: activeUsersCount + (config.usersOffset || 0),
       uploadedToday: uploadedTodayCount + (config.todayOffset || 0),
     };
@@ -1620,6 +1682,9 @@ async function startServer() {
     }
 
     imagesStore[image.id] = { ...image, data: base64Data, filePath };
+
+    // Increment global cumulative upload counter
+    await dbIncrementCumulativeUploads();
 
     if (useFirebase && db) {
       try {
@@ -1895,92 +1960,120 @@ async function startServer() {
   }
 
   async function dbDeleteImage(id: string, imagesStore: Record<string, StoredImage>): Promise<any | null> {
+    let deletedMeta: any = null;
+
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "images", id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          const meta = docSnap.data();
-          if (meta.filePath && fs.existsSync(meta.filePath)) {
-            try { fs.unlinkSync(meta.filePath); } catch (e) {}
-          } else {
-            // Check disk by ID in uploads folder
-            try {
-              const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-              const found = filesInUploads.find(f => f.startsWith(`${id}-`));
-              if (found) {
-                fs.unlinkSync(path.join(UPLOADS_DIR, found));
-              }
-            } catch (e) {}
+          deletedMeta = docSnap.data();
+          if (deletedMeta.filePath && fs.existsSync(deletedMeta.filePath)) {
+            try { fs.unlinkSync(deletedMeta.filePath); } catch (e) {}
           }
-          
-          // Delete metadata
-          await deleteDoc(docRef);
 
-          // Delete chunks
-          const chunkCount = meta.chunkCount || 0;
+          // Delete metadata from Firebase
+          try { await deleteDoc(docRef); } catch (e) {}
+
+          // Delete chunks from Firebase
+          const chunkCount = deletedMeta.chunkCount || 0;
           const deletePromises = [];
           for (let i = 0; i < chunkCount; i++) {
-            deletePromises.push(deleteDoc(doc(db, "image_chunks", `${id}_${i}`)));
+            deletePromises.push(deleteDoc(doc(db, "image_chunks", `${id}_${i}`)).catch(() => {}));
           }
           await Promise.all(deletePromises);
-          
-          // Also remove from in-memory fallback store if present
+
           if (imagesStore[id]) {
             delete imagesStore[id];
           }
-          return meta;
         }
       } catch (e) {
-        console.error("Firebase delete image error:", e);
+        // Firebase quota error or network failure
       }
     }
 
     const image = imagesStore[id];
     if (image) {
+      deletedMeta = deletedMeta || image;
       if (image.filePath && fs.existsSync(image.filePath)) {
         try { fs.unlinkSync(image.filePath); } catch (e) {}
-      } else {
-        try {
-          const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-          const found = filesInUploads.find(f => f.startsWith(`${id}-`));
-          if (found) {
-            fs.unlinkSync(path.join(UPLOADS_DIR, found));
-          }
-        } catch (e) {}
       }
       delete imagesStore[id];
-      return image;
     }
 
-    // Fallback disk cleanup if image not found in store or firebase meta
-    try {
-      const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-      const found = filesInUploads.find(f => f.startsWith(`${id}-`));
-      if (found) {
-        fs.unlinkSync(path.join(UPLOADS_DIR, found));
-        return { id, deletedFromDisk: true };
-      }
-    } catch (e) {}
+    // Always clean up matching disk files and chunk folders in UPLOADS_DIR
+    if (fs.existsSync(UPLOADS_DIR)) {
+      try {
+        const filesInUploads = fs.readdirSync(UPLOADS_DIR);
+        for (const f of filesInUploads) {
+          if (f.startsWith(`${id}-`) || f === `chunks_${id}`) {
+            const targetPath = path.join(UPLOADS_DIR, f);
+            try {
+              if (fs.statSync(targetPath).isDirectory()) {
+                fs.rmSync(targetPath, { recursive: true, force: true });
+              } else {
+                fs.unlinkSync(targetPath);
+              }
+              if (!deletedMeta) deletedMeta = { id, deletedFromDisk: true };
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
+    }
 
-    return null;
+    return deletedMeta || { id, deleted: true };
   }
 
   async function dbDeleteAllImages(imagesStore: Record<string, StoredImage>): Promise<number> {
-    const allImages = await dbGetAllImages(imagesStore);
     let count = 0;
-    for (const img of allImages) {
-      const deleted = await dbDeleteImage(img.id, imagesStore);
-      if (deleted) count++;
+    try {
+      const allImages = await dbGetAllImages(imagesStore);
+      for (const img of allImages) {
+        if (img && img.id) {
+          try {
+            const deleted = await dbDeleteImage(img.id, imagesStore);
+            if (deleted) count++;
+          } catch (err) {}
+        }
+      }
+    } catch (err) {}
+
+    // Wipe all remaining files/folders in UPLOADS_DIR
+    if (fs.existsSync(UPLOADS_DIR)) {
+      try {
+        const files = fs.readdirSync(UPLOADS_DIR);
+        for (const file of files) {
+          const p = path.join(UPLOADS_DIR, file);
+          try {
+            if (fs.statSync(p).isDirectory()) {
+              fs.rmSync(p, { recursive: true, force: true });
+            } else {
+              fs.unlinkSync(p);
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
     }
+
+    // Clear in-memory images store
+    for (const key of Object.keys(imagesStore)) {
+      delete imagesStore[key];
+    }
+
+    // Reset cumulative uploads counter
+    await dbResetCumulativeUploads();
+
     return count;
   }
 
   async function dbDeleteBatchImages(ids: string[], imagesStore: Record<string, StoredImage>): Promise<number> {
     let count = 0;
     for (const id of ids) {
-      const deleted = await dbDeleteImage(id, imagesStore);
-      if (deleted) count++;
+      if (!id) continue;
+      try {
+        const deleted = await dbDeleteImage(id, imagesStore);
+        if (deleted) count++;
+      } catch (err) {}
     }
     return count;
   }
@@ -2521,7 +2614,7 @@ async function startServer() {
       res.json({
         guestToken: token,
         guestUploadCount: count,
-        guestMaxUploadCount: config.guestMaxUploadCount ?? 5,
+        guestMaxUploadCount: config.guestMaxUploadCount ?? 50,
         guestMaxMb: config.guestMaxMb ?? 20
       });
     } catch (err) {
@@ -2685,7 +2778,7 @@ async function startServer() {
         if (!token) {
           token = "gst_" + generateId(12);
         }
-        const guestMaxCount = config.guestMaxUploadCount ?? 5;
+        const guestMaxCount = config.guestMaxUploadCount ?? 50;
         const currentCount = await getEffectiveGuestCount(token, clientIp);
 
         if (currentCount >= guestMaxCount) {
@@ -2860,7 +2953,7 @@ async function startServer() {
           const clientIp = extractClientIp(req);
           let token = extractGuestToken(req);
           if (!token) token = "gst_" + generateId(12);
-          const guestMaxCount = config.guestMaxUploadCount ?? 5;
+          const guestMaxCount = config.guestMaxUploadCount ?? 50;
           const currentCount = await getEffectiveGuestCount(token, clientIp);
 
           if (currentCount >= guestMaxCount) {
@@ -3066,7 +3159,7 @@ async function startServer() {
         if (!token) {
           token = "gst_" + generateId(12);
         }
-        const guestMaxCount = config.guestMaxUploadCount ?? 5;
+        const guestMaxCount = config.guestMaxUploadCount ?? 50;
         const currentCount = await getEffectiveGuestCount(token, clientIp);
 
         if (currentCount >= guestMaxCount) {
@@ -5145,6 +5238,21 @@ ${urlsXml}</urlset>`;
   server.timeout = 60 * 60 * 1000; // 60 minutes for 1GB+ uploads
   server.keepAliveTimeout = 300 * 1000; // 5 minutes
   server.headersTimeout = 305 * 1000; // 305 seconds
+
+  // Handle graceful shutdown on Railway/Cloud container SIGTERM and SIGINT
+  const handleGracefulShutdown = (signal: string) => {
+    console.log(`[Server] ${signal} alındı. Sunucu kapaniyor...`);
+    server.close(() => {
+      console.log(`[Server] Sunucu basariyla kapatildi.`);
+      process.exit(0);
+    });
+    setTimeout(() => {
+      process.exit(0);
+    }, 5000);
+  };
+
+  process.on("SIGTERM", () => handleGracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => handleGracefulShutdown("SIGINT"));
 }
 
 startServer().catch(err => {

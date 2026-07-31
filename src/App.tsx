@@ -292,13 +292,15 @@ export default function App() {
       }
 
       const results: ClientImage[] = [];
+      const failedFiles: { name: string; error: string }[] = [];
 
       for (const file of files) {
         // Chunked & direct stream file uploader
         const uploadSingleFile = async (): Promise<any> => {
-          const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+          const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB per chunk for optimal speed
+          const CONCURRENCY = 3; // 3 parallel streams for fast uploads
 
-          // Small files (<= 5MB): Direct single POST request
+          // Small files (<= 8MB): Direct single POST request
           if (file.size <= CHUNK_SIZE) {
             return new Promise((resolve, reject) => {
               const formData = new FormData();
@@ -359,17 +361,26 @@ export default function App() {
             });
           }
 
-          // Large files (> 5MB): Chunked upload (Parçalı yükleme - Proxy 502 hatalarını engeller)
+          // Large files (> 8MB): Parallel Chunked upload (Çoklu paralel parçalı yükleme - Maksimum Hız)
           const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
           const uploadId = "up_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
 
-          for (let i = 0; i < totalChunks; i++) {
+          const chunkProgresses = new Array(totalChunks).fill(0);
+
+          const updateOverallProgress = () => {
+            const uploadedInCurrentFile = chunkProgresses.reduce((acc, bytes) => acc + bytes, 0);
+            const totalUploadedOverall = uploadedBytesPriorFiles + uploadedInCurrentFile;
+            const percent = Math.min(95, Math.max(1, Math.round((totalUploadedOverall / totalFilesSize) * 95)));
+            setUploadProgress(percent);
+          };
+
+          const uploadSingleChunk = async (i: number) => {
             const start = i * CHUNK_SIZE;
             const end = Math.min(file.size, start + CHUNK_SIZE);
             const chunkBlob = file.slice(start, end);
+            const chunkSize = end - start;
 
-            let chunkSuccess = false;
-            let lastChunkError = "";
+            let lastError = "";
 
             for (let attempt = 0; attempt < 3; attempt++) {
               try {
@@ -389,8 +400,17 @@ export default function App() {
                   xhr.open("POST", "/api/upload-chunk");
                   xhr.timeout = 2 * 60 * 1000;
 
+                  xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable && event.total > 0) {
+                      chunkProgresses[i] = event.loaded;
+                      updateOverallProgress();
+                    }
+                  };
+
                   xhr.onload = () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
+                      chunkProgresses[i] = chunkSize;
+                      updateOverallProgress();
                       resolve(true);
                     } else {
                       try {
@@ -407,10 +427,9 @@ export default function App() {
                   xhr.send(formData);
                 });
 
-                chunkSuccess = true;
-                break;
+                return; // Chunk uploaded successfully!
               } catch (err: any) {
-                lastChunkError = err.message || "Parça yüklenemedi";
+                lastError = err.message || "Parça yüklenemedi";
                 if (err.message && (err.message.includes("limit") || err.message.includes("engellendi"))) {
                   throw err;
                 }
@@ -418,16 +437,19 @@ export default function App() {
               }
             }
 
-            if (!chunkSuccess) {
-              throw new Error(lastChunkError || `Parça ${i + 1}/${totalChunks} yüklenirken ağ hatası oluştu.`);
-            }
+            throw new Error(lastError || `Parça ${i + 1}/${totalChunks} yüklenirken ağ hatası oluştu.`);
+          };
 
-            const uploadedChunkBytes = Math.min((i + 1) * CHUNK_SIZE, file.size);
-            const currentFileRatio = Math.min(1, uploadedChunkBytes / file.size);
-            const totalUploaded = uploadedBytesPriorFiles + (currentFileRatio * file.size);
-            const percent = Math.min(95, Math.max(1, Math.round((totalUploaded / totalFilesSize) * 95)));
-            setUploadProgress(percent);
-          }
+          // Queue worker for parallel chunk uploading (up to 3 chunks in parallel)
+          let chunkQueueIndex = 0;
+          const workers = Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, async () => {
+            while (chunkQueueIndex < totalChunks) {
+              const i = chunkQueueIndex++;
+              await uploadSingleChunk(i);
+            }
+          });
+
+          await Promise.all(workers);
 
           // Combine chunks on server
           setUploadProgress(96);
@@ -460,32 +482,35 @@ export default function App() {
           return completeData;
         };
 
-        const uploadResult = await uploadSingleFile();
+        try {
+          const uploadResult = await uploadSingleFile();
+          uploadedBytesPriorFiles += file.size;
 
-        // Add this file's full size to the accumulated total of prior uploaded files
-        uploadedBytesPriorFiles += file.size;
-        
-        const origin = window.location.origin;
-        results.push({
-          id: uploadResult.id,
-          name: uploadResult.name,
-          size: uploadResult.size,
-          mimeType: file.type,
-          uploadedAt: uploadResult.uploadedAt,
-          deleteAfter: deleteAfter as any,
-          views: 0,
-          deleteToken: uploadResult.deleteToken,
-          watermarkText: watermarkOptions?.watermarkText,
-          watermarkOpacity: watermarkOptions?.watermarkOpacity,
-          watermarkColor: watermarkOptions?.watermarkColor,
-          watermarkSize: watermarkOptions?.watermarkSize,
-          watermarkPosition: watermarkOptions?.watermarkPosition,
-          directUrl: `${origin}/api/images/${uploadResult.id}`,
-          previewUrl: `${origin}/i/${uploadResult.id}`,
-          bbCode: `[url=${origin}/i/${uploadResult.id}][img]${origin}/api/images/${uploadResult.id}[/img][/url]`,
-          htmlCode: `<a href="${origin}/i/${uploadResult.id}"><img src="${origin}/api/images/${uploadResult.id}" alt="${uploadResult.name}" /></a>`,
-          markdownCode: `[![${uploadResult.name}](${origin}/api/images/${uploadResult.id})](${origin}/i/${uploadResult.id})`,
-        });
+          const origin = window.location.origin;
+          results.push({
+            id: uploadResult.id,
+            name: uploadResult.name,
+            size: uploadResult.size,
+            mimeType: file.type,
+            uploadedAt: uploadResult.uploadedAt,
+            deleteAfter: deleteAfter as any,
+            views: 0,
+            deleteToken: uploadResult.deleteToken,
+            watermarkText: watermarkOptions?.watermarkText,
+            watermarkOpacity: watermarkOptions?.watermarkOpacity,
+            watermarkColor: watermarkOptions?.watermarkColor,
+            watermarkSize: watermarkOptions?.watermarkSize,
+            watermarkPosition: watermarkOptions?.watermarkPosition,
+            directUrl: `${origin}/api/images/${uploadResult.id}`,
+            previewUrl: `${origin}/i/${uploadResult.id}`,
+            bbCode: `[url=${origin}/i/${uploadResult.id}][img]${origin}/api/images/${uploadResult.id}[/img][/url]`,
+            htmlCode: `<a href="${origin}/i/${uploadResult.id}"><img src="${origin}/api/images/${uploadResult.id}" alt="${uploadResult.name}" /></a>`,
+            markdownCode: `[![${uploadResult.name}](${origin}/api/images/${uploadResult.id})](${origin}/i/${uploadResult.id})`,
+          });
+        } catch (fileErr: any) {
+          uploadedBytesPriorFiles += file.size;
+          failedFiles.push({ name: file.name, error: fileErr.message || "Yükleme hatası" });
+        }
 
         // Keep the progress updated smoothly between sequential file uploads
         const immediatePercent = Math.min(99, Math.round((uploadedBytesPriorFiles / totalFilesSize) * 100));
@@ -494,8 +519,18 @@ export default function App() {
 
       setUploadProgress(100);
       setTimeout(() => {
-        setUploadedImages(results);
+        if (results.length > 0) {
+          setUploadedImages(results);
+        }
         setIsUploading(false);
+
+        if (failedFiles.length > 0) {
+          if (results.length > 0) {
+            alert(`${results.length}/${files.length} dosya başarıyla yüklendi.\n${failedFiles.length} dosya yüklenemedi: ${failedFiles[0].error}`);
+          } else {
+            alert(`Dosyalar yüklenemedi: ${failedFiles[0].error}`);
+          }
+        }
       }, 300);
 
     } catch (err: any) {
