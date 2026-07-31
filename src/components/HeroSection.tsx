@@ -138,6 +138,9 @@ export default function HeroSection({
   // Camera integration state
   const [cameraActive, setCameraActive] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraFlash, setCameraFlash] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -146,6 +149,28 @@ export default function HeroSection({
   const hasVideo = selectedFiles.some((x) => x.file.type.startsWith("video/"));
   const hasOnlyVideo = selectedFiles.length > 0 && selectedFiles.every((x) => x.file.type.startsWith("video/"));
   const hasNonMedia = selectedFiles.some((x) => !x.file.type.startsWith("image/") && !x.file.type.startsWith("video/"));
+
+  // Mobile & Memory Optimized Preview URL generator
+  const createOptimizedPreviewUrl = (file: File): string => {
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    if (!isImage && !isVideo) return "";
+
+    // Optimization: Files larger than threshold (15MB for images, 25MB for videos)
+    // skip ObjectURL creation on mobile to save memory and prevent lag/crashes
+    const MAX_IMAGE_PREVIEW_SIZE = 15 * 1024 * 1024; // 15 MB
+    const MAX_VIDEO_PREVIEW_SIZE = 25 * 1024 * 1024; // 25 MB
+
+    if (isImage && file.size > MAX_IMAGE_PREVIEW_SIZE) return "";
+    if (isVideo && file.size > MAX_VIDEO_PREVIEW_SIZE) return "";
+
+    try {
+      return URL.createObjectURL(file);
+    } catch (err) {
+      console.error("Preview URL generation error:", err);
+      return "";
+    }
+  };
 
   // Clipboard paste listener
   useEffect(() => {
@@ -173,7 +198,7 @@ export default function HeroSection({
             newFiles.push({
               id: "paste-" + Date.now() + "-" + Math.random(),
               file,
-              previewUrl: URL.createObjectURL(file),
+              previewUrl: createOptimizedPreviewUrl(file),
             });
           }
         }
@@ -309,7 +334,7 @@ export default function HeroSection({
       incoming.push({
         id: "file-" + Date.now() + "-" + Math.random(),
         file: f,
-        previewUrl: f.type.startsWith("image/") || f.type.startsWith("video/") ? URL.createObjectURL(f) : "",
+        previewUrl: createOptimizedPreviewUrl(f),
       });
     }
 
@@ -319,15 +344,23 @@ export default function HeroSection({
   const removeFile = (id: string) => {
     setSelectedFiles((prev) => {
       const target = prev.find((x) => x.id === id);
-      if (target) {
-        URL.revokeObjectURL(target.previewUrl);
+      if (target && target.previewUrl) {
+        try {
+          URL.revokeObjectURL(target.previewUrl);
+        } catch (e) {}
       }
       return prev.filter((x) => x.id !== id);
     });
   };
 
   const clearAll = () => {
-    selectedFiles.forEach((x) => URL.revokeObjectURL(x.previewUrl));
+    selectedFiles.forEach((x) => {
+      if (x.previewUrl) {
+        try {
+          URL.revokeObjectURL(x.previewUrl);
+        } catch (e) {}
+      }
+    });
     setSelectedFiles([]);
     setPassword("");
     setDescription("");
@@ -389,7 +422,8 @@ export default function HeroSection({
   // Camera capture controls
   const startCamera = async () => {
     setCameraActive(true);
-    setFacingMode("user"); // Start with front camera by default
+    setFacingMode("user");
+    setCameraError(null);
     setErrorMsg(null);
   };
 
@@ -398,32 +432,59 @@ export default function HeroSection({
     
     const runCamera = async () => {
       if (!cameraActive) return;
+      setCameraLoading(true);
+      setCameraError(null);
+
       try {
-        // Stop current active stream if any
         if (videoRef.current && videoRef.current.srcObject) {
           const oldStream = videoRef.current.srcObject as MediaStream;
           oldStream.getTracks().forEach((track) => track.stop());
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: facingMode } 
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: facingMode,
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            },
+            audio: false 
+          });
+        } catch (highResErr) {
+          // Fallback to simple constraint
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: facingMode },
+            audio: false
+          });
+        }
+
         activeStream = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play().catch((pErr) => console.error("Camera play error:", pErr));
+            setCameraLoading(false);
+          };
+        } else {
+          setCameraLoading(false);
         }
-      } catch (err) {
-        setErrorMsg("Kameraya erişim sağlanamadı veya seçtiğiniz kamera modu desteklenmiyor.");
-        // Try falling back to any available video source if environment/user mode fails
+      } catch (err: any) {
+        console.error("Camera getUserMedia error:", err);
+        setCameraLoading(false);
         try {
-          const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          // General fallback to any video source
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
           activeStream = fallbackStream;
           if (videoRef.current) {
             videoRef.current.srcObject = fallbackStream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play().catch((pErr) => console.error("Camera play error:", pErr));
+              setCameraLoading(false);
+            };
           }
         } catch (fbErr) {
-          setErrorMsg("Kameraya erişim sağlanamadı. Lütfen kamera izinlerini kontrol edin.");
-          setCameraActive(false);
+          setCameraError("Kameraya erişim sağlanamadı. Lütfen tarayıcınızın kamera izinlerini kontrol edin.");
         }
       }
     };
@@ -440,34 +501,64 @@ export default function HeroSection({
   }, [cameraActive, facingMode]);
 
   const capturePhoto = () => {
-    if (videoRef.current) {
-      const canvas = document.createElement("canvas");
-      canvas.width = videoRef.current.videoWidth || 640;
-      canvas.height = videoRef.current.videoHeight || 480;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => {
+    if (!videoRef.current) return;
+    const videoEl = videoRef.current;
+
+    const width = videoEl.videoWidth || 1280;
+    const height = videoEl.videoHeight || 720;
+
+    if (width === 0 || height === 0) {
+      setCameraError("Kamera henüz hazır değil, lütfen bir saniye bekleyip tekrar deneyin.");
+      return;
+    }
+
+    // Trigger flash animation
+    setCameraFlash(true);
+    setTimeout(() => setCameraFlash(false), 200);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    if (ctx) {
+      if (facingMode === "user") {
+        // Mirror horizontally for selfie camera
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(videoEl, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
           if (blob) {
-            const capturedFile = new File([blob], `kamere_cekim_${Date.now()}.jpg`, {
+            const capturedFile = new File([blob], `kamera_${Date.now()}.jpg`, {
               type: "image/jpeg",
+              lastModified: Date.now(),
             });
+
             if (selectedFiles.length >= 10) {
-              setErrorMsg("Görsel yükleme limitine ulaştınız (Maks 10).");
+              setErrorMsg("Görsel yükleme limitine ulaştınız (Maksimum 10 dosya).");
+              stopCamera();
               return;
             }
+
             setSelectedFiles((prev) => [
               ...prev,
               {
                 id: "cam-" + Date.now(),
                 file: capturedFile,
-                previewUrl: URL.createObjectURL(capturedFile),
+                previewUrl: createOptimizedPreviewUrl(capturedFile),
               },
             ]);
             stopCamera();
+          } else {
+            setCameraError("Fotoğraf çekilirken bir hata oluştu.");
           }
-        }, "image/jpeg", 0.9);
-      }
+        },
+        "image/jpeg",
+        0.92
+      );
     }
   };
 
@@ -478,6 +569,8 @@ export default function HeroSection({
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
+    setCameraError(null);
+    setCameraLoading(false);
   };
 
   const formatSize = (bytes: number) => {
@@ -491,11 +584,11 @@ export default function HeroSection({
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12 animate-fade-in text-slate-800 dark:text-slate-100" id="hero-upload-area">
       {/* Title */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight leading-tight">
           {homepageTitle}
         </h1>
-        <p className="text-base sm:text-lg text-slate-500 dark:text-slate-400 font-medium">
+        <p className="text-xs sm:text-base md:text-lg text-slate-500 dark:text-slate-400 font-medium">
           {homepageSubtitle}
         </p>
       </div>
@@ -577,6 +670,7 @@ export default function HeroSection({
           onChange={handleImageChange}
           multiple
           accept="image/*"
+          capture="environment"
           className="hidden"
           id="hidden-image-input"
         />
@@ -706,7 +800,7 @@ export default function HeroSection({
                 </div>
               </div>
 
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-2.5 tracking-tight relative z-10">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-2 tracking-tight relative z-10 leading-snug">
                 Resimlerinizi Sürükleyip Bırakın 👋
               </h2>
               <p className="text-slate-500 dark:text-slate-400 mb-8 max-w-lg leading-relaxed text-sm relative z-10">
@@ -1011,29 +1105,47 @@ export default function HeroSection({
                     >
                       <div className="aspect-square rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-950 relative flex items-center justify-center border border-slate-100 dark:border-slate-850">
                         {item.file.type.startsWith("video/") ? (
-                          <div className="w-full h-full relative">
-                            <video
-                              src={item.previewUrl}
-                              className="w-full h-full object-cover"
-                              muted
-                              playsInline
-                            />
-                            {/* Video Play Icon Overlay */}
-                            <div className="absolute inset-0 bg-black/25 flex items-center justify-center pointer-events-none">
-                              <div className="p-2 bg-white/90 dark:bg-slate-900/90 rounded-full shadow-lg text-blue-600">
-                                <Play className="w-4 h-4 fill-current" />
+                          item.previewUrl ? (
+                            <div className="w-full h-full relative">
+                              <video
+                                src={item.previewUrl}
+                                className="w-full h-full object-cover"
+                                muted
+                                playsInline
+                              />
+                              {/* Video Play Icon Overlay */}
+                              <div className="absolute inset-0 bg-black/25 flex items-center justify-center pointer-events-none">
+                                <div className="p-2 bg-white/90 dark:bg-slate-900/90 rounded-full shadow-lg text-blue-600">
+                                  <Play className="w-4 h-4 fill-current" />
+                                </div>
                               </div>
+                              <span className="absolute bottom-1.5 left-1.5 text-[8px] font-extrabold bg-blue-600 text-white px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                                VIDEO
+                              </span>
                             </div>
-                            <span className="absolute bottom-1.5 left-1.5 text-[8px] font-extrabold bg-blue-600 text-white px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                              VIDEO
-                            </span>
-                          </div>
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white p-2 text-center relative">
+                              <Video className="w-8 h-8 text-blue-400 mb-1" />
+                              <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                VİDEO ({(item.file.size / (1024 * 1024)).toFixed(0)}MB)
+                              </span>
+                            </div>
+                          )
                         ) : item.file.type.startsWith("image/") ? (
-                          <img
-                            src={item.previewUrl}
-                            alt={item.file.name}
-                            className="w-full h-full object-cover"
-                          />
+                          item.previewUrl ? (
+                            <img
+                              src={item.previewUrl}
+                              alt={item.file.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white p-2 text-center relative">
+                              <ImageIcon className="w-8 h-8 text-indigo-400 mb-1" />
+                              <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                GÖRSEL ({(item.file.size / (1024 * 1024)).toFixed(0)}MB)
+                              </span>
+                            </div>
+                          )
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white p-2 relative">
                             <Archive className="w-8 h-8 text-amber-400 mb-1" />
@@ -1505,44 +1617,108 @@ export default function HeroSection({
 
       {/* Camera modal Overlay */}
       {cameraActive && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800">
-            <div className="bg-slate-900 aspect-video relative">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
-              
-              {/* Floating Camera Flip Button */}
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-0 sm:p-6 animate-fade-in">
+          <div className="bg-slate-900 w-full h-full sm:h-auto sm:max-w-lg sm:rounded-3xl overflow-hidden shadow-2xl border-0 sm:border sm:border-slate-800 flex flex-col relative">
+            
+            {/* Header */}
+            <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div>
+                <span className="text-sm font-extrabold text-white">Canlı Kamera</span>
+              </div>
               <button
                 type="button"
-                onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")}
-                className="absolute top-4 right-4 p-3 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-sm transition-all cursor-pointer flex items-center justify-center border border-white/10"
-                title="Kamerayı Değiştir (Ön / Arka)"
-                id="btn-flip-camera"
+                onClick={stopCamera}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
               >
-                <RefreshCw className="w-5 h-5" />
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Camera Viewport Container */}
+            <div className="relative w-full flex-1 min-h-0 sm:aspect-video bg-black flex items-center justify-center overflow-hidden">
+              {/* Flash effect overlay */}
+              {cameraFlash && (
+                <div className="absolute inset-0 bg-white z-30 animate-pulse"></div>
+              )}
+
+              {/* Loading State */}
+              {cameraLoading && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900/80 text-white gap-3">
+                  <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs font-bold text-slate-300">Kamera Başlatılıyor...</span>
+                </div>
+              )}
+
+              {/* Error State */}
+              {cameraError ? (
+                <div className="p-6 text-center text-red-400 flex flex-col items-center gap-3">
+                  <AlertCircle className="w-10 h-10 text-red-500" />
+                  <p className="text-xs font-bold max-w-xs">{cameraError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCameraError(null);
+                      setCameraActive(true);
+                    }}
+                    className="mt-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Yeniden Deneyin
+                  </button>
+                </div>
+              ) : (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover ${
+                    facingMode === "user" ? "scale-x-[-1]" : ""
+                  }`}
+                />
+              )}
+
+              {/* Floating Flip Camera Button */}
+              {!cameraError && (
+                <button
+                  type="button"
+                  onClick={() => setFacingMode((prev) => (prev === "user" ? "environment" : "user"))}
+                  className="absolute top-3 right-3 p-3 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-md transition-all cursor-pointer flex items-center justify-center border border-white/20 z-10 shadow-lg active:scale-95"
+                  title="Kamerayı Değiştir (Ön / Arka)"
+                  id="btn-flip-camera"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
+              )}
+
+              {/* Active Mode Badge */}
+              {!cameraError && (
+                <span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1.5 rounded-full text-[10px] font-extrabold text-white uppercase tracking-wider backdrop-blur-md border border-white/20 z-10">
+                  {facingMode === "user" ? "🤳 Ön Kamera (Selfie)" : "📷 Arka Kamera"}
+                </span>
+              )}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="p-4 sm:p-5 flex items-center justify-between bg-slate-950 border-t border-slate-800 gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+              >
+                Kapat
               </button>
 
-              {/* Active Mode Indicator */}
-              <span className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded-full text-[10px] font-bold text-white uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                {facingMode === "user" ? "Ön Kamera (Selfie)" : "Arka Kamera (Çevre)"}
-              </span>
-            </div>
-            <div className="p-5 flex items-center justify-between bg-slate-50 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-850">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Hazır olduğunuzda çekime basın!</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={stopCamera}
-                  className="px-4 py-2 bg-slate-200 dark:bg-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
-                >
-                  İptal
-                </button>
-                <button
-                  onClick={capturePhoto}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1.5"
-                >
-                  <Camera className="w-4 h-4" />
-                  Fotoğraf Çek
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                disabled={cameraLoading || !!cameraError}
+                className="flex-1 max-w-xs py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-sm rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+                id="btn-capture-photo"
+              >
+                <Camera className="w-5 h-5" />
+                <span>Fotoğraf Çek</span>
+              </button>
             </div>
           </div>
         </div>

@@ -232,7 +232,7 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ onOpenAuth, onOpenVipMod
             <HelpCircle className="w-3.5 h-3.5" />
             Sıkça Sorulan Sorular
           </span>
-          <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white mt-3.5 tracking-tight">
+          <h2 className="text-xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-3.5 tracking-tight leading-snug">
             Aklınıza Takılan Her Şeyi Yanıtladık (SSS)
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-2 max-w-xl mx-auto leading-relaxed">
