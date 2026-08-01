@@ -4621,6 +4621,64 @@ ${urlsXml}</urlset>`;
     await dbSaveModerationLog(log);
   }
 
+  // Chat online presence memory store
+  const chatPresenceStore: Record<string, {
+    userId: string;
+    username: string;
+    isAdmin: boolean;
+    isMod: boolean;
+    lastSeen: number;
+  }> = {};
+
+  // Chat presence heartbeat & active admin/mod stats
+  app.get("/api/chat/presence", async (req, res) => {
+    try {
+      const { userId, username, isAdmin, isMod } = req.query;
+      const now = Date.now();
+
+      if (username && typeof username === "string" && username.trim() !== "") {
+        const key = (userId as string) || username.trim();
+        chatPresenceStore[key] = {
+          userId: key,
+          username: username.trim(),
+          isAdmin: isAdmin === "true",
+          isMod: isMod === "true" || isAdmin === "true",
+          lastSeen: now,
+        };
+      }
+
+      // Filter active in last 25 seconds
+      const threshold = now - 25000;
+      const activeList = Object.values(chatPresenceStore).filter((p) => p.lastSeen > threshold);
+
+      // Clean up stale sessions
+      Object.keys(chatPresenceStore).forEach((k) => {
+        if (chatPresenceStore[k].lastSeen <= threshold) {
+          delete chatPresenceStore[k];
+        }
+      });
+
+      const totalOnline = Math.max(1, activeList.length);
+      const adminList = activeList.filter((p) => p.isAdmin);
+      const modList = activeList.filter((p) => p.isMod && !p.isAdmin);
+
+      res.json({
+        totalOnline,
+        adminCount: adminList.length,
+        modCount: modList.length,
+        admins: adminList.map((a) => a.username),
+        mods: modList.map((m) => m.username),
+        activeUsers: activeList.map((u) => ({
+          username: u.username,
+          isAdmin: u.isAdmin,
+          isMod: u.isMod,
+        })),
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Presence error" });
+    }
+  });
+
   // Get messages
   app.get("/api/chat/messages", async (req, res) => {
     try {

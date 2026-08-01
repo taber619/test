@@ -23,6 +23,7 @@ import {
   Activity,
   Flame,
   Coins,
+  Crown,
   HelpCircle,
   Sparkle,
   Volume1,
@@ -193,6 +194,24 @@ export default function MiniChat() {
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
 
+  // Active Presence (Admins & Mods & Members online)
+  const [presenceStats, setPresenceStats] = useState<{
+    totalOnline: number;
+    adminCount: number;
+    modCount: number;
+    admins: string[];
+    mods: string[];
+    activeUsers: { username: string; isAdmin?: boolean; isMod?: boolean }[];
+  }>({
+    totalOnline: 1,
+    adminCount: 0,
+    modCount: 0,
+    admins: [],
+    mods: [],
+    activeUsers: []
+  });
+  const [showPresenceModal, setShowPresenceModal] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -303,6 +322,31 @@ export default function MiniChat() {
       .then((data) => {
         if (data && data.poll !== undefined) {
           setActivePoll(data.poll);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const fetchPresence = () => {
+    let myId = localStorage.getItem("inanresim_guest_id") || "";
+    const storedUser = localStorage.getItem("hizli_resim_user");
+    if (storedUser) {
+      try { myId = JSON.parse(storedUser).id || myId; } catch (e) {}
+    }
+    const checkIsAdmin = typeof window !== "undefined" && (localStorage.getItem("inanresim_admin_token") === "true" || localStorage.getItem("inanresim_admin_visible") === "true");
+
+    const params = new URLSearchParams({
+      userId: myId,
+      username: username || "Misafir",
+      isAdmin: String(checkIsAdmin || isAdmin),
+      isMod: String(isModerator || checkIsAdmin || isAdmin)
+    });
+
+    fetch(`/api/chat/presence?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.totalOnline !== undefined) {
+          setPresenceStats(data);
         }
       })
       .catch(() => {});
@@ -489,6 +533,7 @@ export default function MiniChat() {
       fetchMyProfile();
       fetchPinnedMessage();
       fetchActivePoll();
+      fetchPresence();
       if (activeChatTab === "dm") {
         fetchDMConversations();
         if (activeDMTarget) {
@@ -499,6 +544,7 @@ export default function MiniChat() {
         fetchMessages();
         fetchPinnedMessage();
         fetchActivePoll();
+        fetchPresence();
         if (activeChatTab === "dm") {
           fetchDMConversations();
           if (activeDMTarget) {
@@ -508,7 +554,7 @@ export default function MiniChat() {
       }, 3000);
       return () => clearInterval(interval);
     }
-  }, [isOpen, activeChatTab, activeDMTarget?.id, messages.length]);
+  }, [isOpen, activeChatTab, activeDMTarget?.id, messages.length, username]);
 
   // Fetch DM Conversations
   const fetchDMConversations = () => {
@@ -1181,9 +1227,9 @@ export default function MiniChat() {
         <div
           className={`relative bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 rounded-3xl shadow-[0_20px_50px_rgba(79,70,229,0.22)] flex overflow-hidden transition-all duration-300 animate-fade-in pointer-events-auto ${
             isMaximized 
-              ? "w-full h-full max-w-5xl max-h-[750px]" 
-              : "w-80 sm:w-96 h-[560px]"
-          }`}
+              ? "w-full h-full max-w-5xl max-h-[780px]" 
+              : "w-[calc(100vw-2rem)] sm:w-[440px] md:w-[480px] h-[610px]"
+          } `}
           id="chat-box-container"
         >
           {/* Main Chat Column */}
@@ -1199,10 +1245,18 @@ export default function MiniChat() {
                 </div>
                 <div>
                   <span className="font-extrabold text-xs sm:text-sm tracking-tight block">Canlı Sohbet Odası</span>
-                  <span className="flex items-center gap-1.5 text-[10px] text-indigo-200/90 font-bold">
+                  <button
+                    onClick={() => setShowPresenceModal(true)}
+                    className="flex items-center gap-1.5 text-[10px] text-indigo-100 font-bold hover:text-white transition-all cursor-pointer bg-white/10 hover:bg-white/20 px-2.5 py-0.5 rounded-full mt-0.5 border border-white/10 shadow-xs"
+                    title="Aktif Yönetici, Moderatör ve Çevrimiçi Üye Listesini Gör"
+                  >
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Çevrimiçi Paylaşım & İletişim
-                  </span>
+                    <span className="text-amber-300 font-extrabold">👑 {presenceStats.adminCount} Admin</span>
+                    <span className="opacity-40">|</span>
+                    <span className="text-cyan-300 font-extrabold">🛡️ {presenceStats.modCount} Mod</span>
+                    <span className="opacity-40">|</span>
+                    <span className="text-white font-extrabold">👥 {presenceStats.totalOnline} Çevrimiçi</span>
+                  </button>
                 </div>
               </div>
 
@@ -2698,6 +2752,160 @@ export default function MiniChat() {
                       )}
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active Presence Modal (Admins, Moderators, Members List) */}
+          {showPresenceModal && (
+            <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs z-50 flex flex-col justify-center items-center p-4 animate-fade-in pointer-events-auto overflow-y-auto">
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl max-w-[340px] w-full shadow-2xl border border-slate-100 dark:border-slate-800 relative my-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowPresenceModal(false)}
+                  className="absolute top-3.5 right-3.5 p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 rounded-full cursor-pointer transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                      <span>Aktif Yetkili & Üye Listesi</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold">Anlık odadaki canlı kullanıcılar</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                  {/* Admins Section */}
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-amber-500 dark:text-amber-400 mb-1.5">
+                      <span className="flex items-center gap-1">
+                        <Crown className="w-3.5 h-3.5" />
+                        <span>Aktif Yöneticiler ({presenceStats.adminCount})</span>
+                      </span>
+                      <span className="text-[9px] bg-amber-500/10 px-1.5 py-0.5 rounded-md font-bold">Yönetici</span>
+                    </div>
+
+                    {presenceStats.admins.length > 0 ? (
+                      <div className="space-y-1">
+                        {presenceStats.admins.map((adm, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-extrabold text-amber-900 dark:text-amber-200"
+                          >
+                            <span className="flex items-center gap-2 truncate">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                              <span className="truncate">@{adm}</span>
+                            </span>
+                            <button
+                              onClick={() => {
+                                handleReplyUser(adm);
+                                setShowPresenceModal(false);
+                              }}
+                              className="text-[9px] font-bold text-amber-600 dark:text-amber-300 hover:underline cursor-pointer shrink-0"
+                            >
+                              Etiketle
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 italic px-2">Şu an aktif yönetici yok</p>
+                    )}
+                  </div>
+
+                  {/* Moderators Section */}
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-cyan-500 dark:text-cyan-400 mb-1.5">
+                      <span className="flex items-center gap-1">
+                        <Shield className="w-3.5 h-3.5" />
+                        <span>Aktif Moderatörler ({presenceStats.modCount})</span>
+                      </span>
+                      <span className="text-[9px] bg-cyan-500/10 px-1.5 py-0.5 rounded-md font-bold">Mod</span>
+                    </div>
+
+                    {presenceStats.mods.length > 0 ? (
+                      <div className="space-y-1">
+                        {presenceStats.mods.map((mod, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs font-extrabold text-cyan-900 dark:text-cyan-200"
+                          >
+                            <span className="flex items-center gap-2 truncate">
+                              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0"></span>
+                              <span className="truncate">@{mod}</span>
+                            </span>
+                            <button
+                              onClick={() => {
+                                handleReplyUser(mod);
+                                setShowPresenceModal(false);
+                              }}
+                              className="text-[9px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline cursor-pointer shrink-0"
+                            >
+                              Etiketle
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 italic px-2">Şu an aktif moderatör yok</p>
+                    )}
+                  </div>
+
+                  {/* All Active Online Users Section */}
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Tüm Çevrimiçi Üyeler ({presenceStats.totalOnline})</span>
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 max-h-[120px] overflow-y-auto">
+                      {presenceStats.activeUsers.map((u, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200"
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                            <span className="truncate">@{u.username}</span>
+                            {u.isAdmin && (
+                              <span className="text-[8px] px-1 py-0.2 bg-amber-500/20 text-amber-500 rounded font-black">Admin</span>
+                            )}
+                            {!u.isAdmin && u.isMod && (
+                              <span className="text-[8px] px-1 py-0.2 bg-cyan-500/20 text-cyan-500 rounded font-black">Mod</span>
+                            )}
+                          </span>
+                          <button
+                            onClick={() => {
+                              handleReplyUser(u.username);
+                              setShowPresenceModal(false);
+                            }}
+                            className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer shrink-0"
+                          >
+                            Etiketle
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                  <button
+                    onClick={() => setShowPresenceModal(false)}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer shadow-md"
+                  >
+                    Kapat
+                  </button>
                 </div>
               </div>
             </div>
