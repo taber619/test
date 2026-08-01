@@ -108,7 +108,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
       if (!res.ok) {
         throw new Error(data.error || "Şifre doğrulanamadı.");
       }
-      setVerifiedDataUrl(data.dataUrl);
+      setVerifiedDataUrl(data.dataUrl || data.directUrl || `/api/images/${imageId}?pw=${encodeURIComponent(password)}`);
     } catch (err: any) {
       setError(err.message || "Hatalı şifre!");
     }

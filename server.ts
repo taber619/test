@@ -1794,6 +1794,34 @@ async function startServer() {
     }
   }
 
+  function findDiskFileById(id: string): { filename: string; filePath: string } | null {
+    if (!fs.existsSync(UPLOADS_DIR)) return null;
+    try {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      for (const f of files) {
+        if (f.startsWith("chunks_")) continue;
+        const fullPath = path.join(UPLOADS_DIR, f);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.isFile() && (f.startsWith(`${id}_`) || f.startsWith(`${id}.`) || f === id)) {
+            return { filename: f, filePath: fullPath };
+          }
+        } catch (e) {}
+      }
+      for (const f of files) {
+        if (f.startsWith("chunks_")) continue;
+        const fullPath = path.join(UPLOADS_DIR, f);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.isFile() && f.includes(id)) {
+            return { filename: f, filePath: fullPath };
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+    return null;
+  }
+
   async function dbGetImage(id: string, imagesStore: Record<string, StoredImage>): Promise<StoredImage | null> {
     if (useFirebase && db) {
       try {
@@ -1804,18 +1832,9 @@ async function startServer() {
           let fullData = "";
 
           let validFilePath = meta.filePath;
-          if (validFilePath && !fs.existsSync(validFilePath)) {
-            try {
-              const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-              const found = filesInUploads.find(f => f.includes(id));
-              if (found) {
-                validFilePath = path.join(UPLOADS_DIR, found);
-              } else {
-                validFilePath = null;
-              }
-            } catch (e) {
-              validFilePath = null;
-            }
+          if (validFilePath && (!fs.existsSync(validFilePath) || fs.statSync(validFilePath).isDirectory())) {
+            const diskObj = findDiskFileById(id);
+            validFilePath = diskObj ? diskObj.filePath : null;
           }
 
           if (validFilePath && fs.existsSync(validFilePath)) {
@@ -1883,11 +1902,11 @@ async function startServer() {
     }
 
     // Disk fallback search
-    try {
-      const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-      const found = filesInUploads.find(f => f.includes(id));
-      if (found) {
-        const diskPath = path.join(UPLOADS_DIR, found);
+    const diskObj = findDiskFileById(id);
+    if (diskObj) {
+      const diskPath = diskObj.filePath;
+      const found = diskObj.filename;
+      try {
         const stat = fs.statSync(diskPath);
         let base64Str = "";
         if (stat.size < 15 * 1024 * 1024) {
@@ -1908,8 +1927,8 @@ async function startServer() {
           deleteToken: "del_disk",
           views: 1
         };
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
 
     return null;
   }
@@ -1970,11 +1989,11 @@ async function startServer() {
     }
 
     // Disk fallback for info
-    try {
-      const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-      const found = filesInUploads.find(f => f.includes(id));
-      if (found) {
-        const diskPath = path.join(UPLOADS_DIR, found);
+    const diskObj = findDiskFileById(id);
+    if (diskObj) {
+      const diskPath = diskObj.filePath;
+      const found = diskObj.filename;
+      try {
         const stat = fs.statSync(diskPath);
         const cleanName = found.replace(new RegExp(`^${id}_`), "");
 
@@ -1998,8 +2017,8 @@ async function startServer() {
           views: 1,
           hasPassword: false,
         };
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
 
     return null;
   }
@@ -2846,7 +2865,8 @@ async function startServer() {
         const userMaxMb = isVipUser ? (config.vipMaxMb ?? 5000) : (config.registeredMaxMb ?? 1000);
         if (userMaxMb > 0 && fileSize > userMaxMb * 1024 * 1024) {
           cleanupTempFile();
-          const errMsg = `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB), ${isVipUser ? 'VIP' : 'standart'} üye boyut limitini (${userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(0)} GB` : `${userMaxMb} MB`}) aşıyor.`;
+          const limitFormatted = userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(1)} GB (${userMaxMb} MB)` : `${userMaxMb} MB`;
+          const errMsg = `Yüklenecek dosya (${(fileSize / (1024 * 1024)).toFixed(1)} MB), ${isVipUser ? 'VIP' : 'standart'} üye boyut limitini (${limitFormatted}) aşıyor.`;
           logServerError({
             type: "upload",
             message: "Üye boyutu limiti aşıldı",
@@ -3074,7 +3094,8 @@ async function startServer() {
             if (req.file?.path && fs.existsSync(req.file.path)) {
               try { fs.unlinkSync(req.file.path); } catch (e) {}
             }
-            res.status(400).json({ error: `Yüklenecek dosya limitinizi (${userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(0)} GB` : `${userMaxMb} MB`}) aşıyor.` });
+            const limitFormatted = userMaxMb >= 1000 ? `${(userMaxMb / 1000).toFixed(1)} GB (${userMaxMb} MB)` : `${userMaxMb} MB`;
+            res.status(400).json({ error: `Yüklenecek dosya limitinizi (${limitFormatted}) aşıyor.` });
             return;
           }
         } else {
@@ -3457,24 +3478,15 @@ async function startServer() {
 
       // Locate valid file on disk if available
       let validDiskPath = image.filePath;
-      if (validDiskPath && !fs.existsSync(validDiskPath)) {
-        try {
-          const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-          const found = filesInUploads.find(f => f.includes(id));
-          if (found) validDiskPath = path.join(UPLOADS_DIR, found);
-          else validDiskPath = null;
-        } catch (e) {
-          validDiskPath = null;
-        }
+      if (validDiskPath && (!fs.existsSync(validDiskPath) || fs.statSync(validDiskPath).isDirectory())) {
+        const diskObj = findDiskFileById(id);
+        validDiskPath = diskObj ? diskObj.filePath : null;
       }
 
       // Fallback disk search if filePath wasn't stored
       if (!validDiskPath) {
-        try {
-          const filesInUploads = fs.readdirSync(UPLOADS_DIR);
-          const found = filesInUploads.find(f => f.includes(id));
-          if (found) validDiskPath = path.join(UPLOADS_DIR, found);
-        } catch (e) {}
+        const diskObj = findDiskFileById(id);
+        validDiskPath = diskObj ? diskObj.filePath : null;
       }
 
       // Case 1: File is stored on disk at validDiskPath
@@ -3673,7 +3685,11 @@ ${urlsXml}</urlset>`;
       }
 
       if (image.password === password) {
-        res.json({ success: true, dataUrl: `data:${image.mimeType};base64,${image.data}` });
+        const directUrl = `/api/images/${id}?pw=${encodeURIComponent(password)}`;
+        const dataUrl = (image.data && image.data !== "FILE_ON_DISK")
+          ? `data:${image.mimeType};base64,${image.data}`
+          : directUrl;
+        res.json({ success: true, directUrl, dataUrl });
       } else {
         res.status(401).json({ success: false, error: "Hatalı şifre!" });
       }

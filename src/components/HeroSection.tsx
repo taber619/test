@@ -320,12 +320,14 @@ export default function HeroSection({
       
       if (maxSizeBytes > 0 && f.size > maxSizeBytes) {
         if (!currentUser) {
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. 1 GB'a kadar yüklemek için ücretsiz üye olun veya 5 GB'a kadar yüklemek için PRO VIP olun!`);
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. Lütfen ücretsiz üye olun veya PRO VIP üyeliğe geçin!`);
         } else if (!isVip) {
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), standart üye limitini (1 GB / 1000 MB) aşıyor. Tek seferde 5 GB'a (5000 MB) kadar dosya ve video yüklemek için lütfen PRO VIP üyeliğe geçin!`);
+          const limitStr = limitMb >= 1000 ? `${(limitMb / 1000).toFixed(1)} GB (${limitMb} MB)` : `${limitMb} MB`;
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), standart üye limitini (${limitStr}) aşıyor. Lütfen daha büyük dosyalar yüklemek için PRO VIP üyeliğe geçin!`);
           if (onOpenVipModal) onOpenVipModal();
         } else {
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), VIP dosya boyut limitini (${limitMb >= 1000 ? `${(limitMb/1000).toFixed(0)} GB` : `${limitMb} MB`}) aşıyor.`);
+          const limitStr = limitMb >= 1000 ? `${(limitMb / 1000).toFixed(1)} GB (${limitMb} MB)` : `${limitMb} MB`;
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), VIP dosya boyut limitini (${limitStr}) aşıyor.`);
         }
         continue;
       }
@@ -565,9 +567,9 @@ export default function HeroSection({
             <span className={`w-2 h-2 rounded-full ${isVip ? "bg-amber-400" : "bg-emerald-500"} animate-pulse shrink-0`}></span>
             <span className={`text-xs font-extrabold ${isVip ? "text-amber-800 dark:text-amber-300" : "text-emerald-900 dark:text-emerald-300"}`}>
               {isVip ? (
-                <>👑 PRO VIP Üye ({currentUser.username}): Yükleme Limiti 5 GB (5000 MB) • Süresiz Saklama Aktif</>
+                <>👑 PRO VIP Üye ({currentUser.username}): Yükleme Limiti {(siteConfig?.vipMaxMb ?? 5000) >= 1000 ? `${((siteConfig?.vipMaxMb ?? 5000) / 1000).toFixed(1)} GB (${siteConfig?.vipMaxMb ?? 5000} MB)` : `${siteConfig?.vipMaxMb ?? 5000} MB`} • Süresiz Saklama Aktif</>
               ) : (
-                <>Kayıtlı Üye ({currentUser.username}): Yükleme Limiti 1 GB (1000 MB)</>
+                <>Kayıtlı Üye ({currentUser.username}): Yükleme Limiti {(siteConfig?.registeredMaxMb ?? 1000) >= 1000 ? `${((siteConfig?.registeredMaxMb ?? 1000) / 1000).toFixed(1)} GB (${siteConfig?.registeredMaxMb ?? 1000} MB)` : `${siteConfig?.registeredMaxMb ?? 1000} MB`}</>
               )}
             </span>
           </div>
@@ -867,9 +869,9 @@ export default function HeroSection({
                   {!currentUser ? (
                     `MİSAFİR: MAX ${guestMaxMb} MB`
                   ) : isVip ? (
-                    `👑 PRO VIP LİMİTİ: 5 GB (5000 MB)`
+                    `👑 PRO VIP LİMİTİ: ${(siteConfig?.vipMaxMb ?? 5000) >= 1000 ? `${((siteConfig?.vipMaxMb ?? 5000) / 1000).toFixed(1)} GB (${siteConfig?.vipMaxMb ?? 5000} MB)` : `${siteConfig?.vipMaxMb ?? 5000} MB`}`
                   ) : (
-                    `ÜYE LİMİTİ: 1 GB (1000 MB)`
+                    `ÜYE LİMİTİ: ${(siteConfig?.registeredMaxMb ?? 1000) >= 1000 ? `${((siteConfig?.registeredMaxMb ?? 1000) / 1000).toFixed(1)} GB (${siteConfig?.registeredMaxMb ?? 1000} MB)` : `${siteConfig?.registeredMaxMb ?? 1000} MB`}`
                   )}
                 </span>
                 <div className="h-1.5 w-1.5 bg-slate-300 dark:bg-slate-700 rounded-full hidden sm:block"></div>

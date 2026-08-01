@@ -264,15 +264,19 @@ export default function App() {
     // Client-side pre-validation of file sizes against guest/member limits
     for (const f of files) {
       if (!currentUser) {
-        if (f.size > 100 * 1024 * 1024) {
-          alert(`"${f.name}" dosyası misafir yükleme limitini (100 MB) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
+        const guestMaxMb = siteConfig?.guestMaxMb ?? 100;
+        if (guestMaxMb > 0 && f.size > guestMaxMb * 1024 * 1024) {
+          alert(`"${f.name}" dosyası misafir yükleme limitini (${guestMaxMb} MB) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
           return;
         }
       } else {
         const isVip = !!currentUser.isVip || currentUser.role === "admin";
-        const maxMb = isVip ? 5000 : 1000;
-        if (f.size > maxMb * 1024 * 1024) {
-          alert(`"${f.name}" dosyası üyelik limitinizi (${maxMb >= 1000 ? `${(maxMb / 1000).toFixed(0)} GB` : `${maxMb} MB`}) aşıyor.`);
+        const maxMb = isVip 
+          ? (siteConfig?.vipMaxMb ?? 5000) 
+          : ((siteConfig?.registeredMaxMb ?? 1000) || 1000);
+        if (maxMb > 0 && f.size > maxMb * 1024 * 1024) {
+          const limitStr = maxMb >= 1000 ? `${(maxMb / 1000).toFixed(1)} GB (${maxMb} MB)` : `${maxMb} MB`;
+          alert(`"${f.name}" dosyası üyelik limitinizi (${limitStr}) aşıyor.`);
           return;
         }
       }
