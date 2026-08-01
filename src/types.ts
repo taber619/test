@@ -152,6 +152,8 @@ export interface SiteConfig {
   securityForceHttpsHeaders?: boolean;
   securityKvkkNoticeEnabled?: boolean;
   securityMaxLoginAttempts?: number;
+  securityNsfwFilterEnabled?: boolean;
+  securityNsfwStrictness?: "high" | "medium" | "low";
   privacyPolicyText?: string;
   termsOfServiceText?: string;
 }

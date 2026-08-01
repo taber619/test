@@ -42,7 +42,11 @@ import {
   Terminal,
   Activity,
   Clock,
-  HardDrive
+  HardDrive,
+  Wrench,
+  Power,
+  ShieldX,
+  Filter
 } from "lucide-react";
 import { SiteConfig, AdBanner, AdRequest, BankAccount, PaymentRequest, PaymentGatewayConfig, AnnouncementItem } from "../types";
 
@@ -85,6 +89,19 @@ interface ErrorLogItem {
   statusCode?: number;
 }
 
+interface FirewallLogItem {
+  id: string;
+  timestamp: number;
+  ip: string;
+  attackType: "bot_scanner" | "sql_injection" | "rate_limit" | "xss_attempt" | "unauthorized_access" | "suspicious_user_agent";
+  method: string;
+  url: string;
+  userAgent: string;
+  actionTaken: "blocked_403" | "rate_limited_429" | "banned_ip";
+  country?: string;
+  severity: "high" | "medium" | "low";
+}
+
 interface AdminViewProps {
   onBack: () => void;
 }
@@ -97,11 +114,28 @@ export default function AdminView({ onBack }: AdminViewProps) {
   // Tab states
   const [activeSubTab, setActiveSubTab] = useState<"settings" | "users" | "images" | "chat" | "smtp" | "ads" | "vip" | "security" | "errors">("settings");
   
+  // Firewall Attack Logs States
+  const [firewallLogs, setFirewallLogs] = useState<FirewallLogItem[]>([]);
+  const [firewallStats, setFirewallStats] = useState({
+    totalBlocked24h: 0,
+    botScans: 0,
+    sqlInjections: 0,
+    rateLimits: 0,
+    xssAttempts: 0,
+    topBlockedIp: "-",
+    hourlyTrend: [] as { hour: string; count: number; bots: number; sqli: number; rateLimit: number }[],
+    firewallStatus: "active_protected"
+  });
+  const [firewallFilterType, setFirewallFilterType] = useState<string>("all");
+  const [firewallSearch, setFirewallSearch] = useState<string>("");
+  const [isLoadingFirewallLogs, setIsLoadingFirewallLogs] = useState<boolean>(false);
+  
   // Error Tracking States
   const [errorLogs, setErrorLogs] = useState<ErrorLogItem[]>([]);
   const [errorLogStats, setErrorLogStats] = useState({
     totalErrors: 0,
     uploadErrors: 0,
+    smtpErrors: 0,
     last24hErrors: 0,
     systemStatus: "healthy"
   });
@@ -679,11 +713,16 @@ export default function AdminView({ onBack }: AdminViewProps) {
     }
   };
 
-  const handleCreateTestErrorLog = async () => {
+  const handleCreateTestErrorLog = async (type: "upload" | "email" | "server" = "upload") => {
     try {
-      const res = await fetch("/api/admin/error-logs/test", { method: "POST" });
+      const res = await fetch("/api/admin/error-logs/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type })
+      });
       if (res.ok) {
-        setLogClearSuccess("Örnek test yükleme hatası oluşturuldu.");
+        const typeLabel = type === "email" ? "SMTP Teslimat" : type === "server" ? "API Sunucu" : "Dosya Yükleme";
+        setLogClearSuccess(`Örnek ${typeLabel} hatası başarıyla simüle edildi.`);
         setTimeout(() => setLogClearSuccess(""), 3000);
         fetchErrorLogs();
       }
@@ -691,6 +730,94 @@ export default function AdminView({ onBack }: AdminViewProps) {
       console.error("Test error log creation failed:", e);
     }
   };
+
+  const fetchFirewallLogs = async () => {
+    setIsLoadingFirewallLogs(true);
+    try {
+      const queryParams = new URLSearchParams();
+      if (firewallFilterType !== "all") queryParams.append("attackType", firewallFilterType);
+      if (firewallSearch.trim()) queryParams.append("search", firewallSearch.trim());
+
+      const res = await fetch(`/api/admin/firewall-logs?${queryParams.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setFirewallLogs(data.logs || []);
+          if (data.stats) {
+            setFirewallStats(data.stats);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Fetch firewall logs error:", err);
+    } finally {
+      setIsLoadingFirewallLogs(false);
+    }
+  };
+
+  const handleClearFirewallLogs = async () => {
+    if (!window.confirm("Tüm güvenlik duvarı engelleme kayıtlarını temizlemek istediğinizden emin misiniz?")) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/firewall-logs/clear", { method: "POST" });
+      if (res.ok) {
+        setLogClearSuccess("Güvenlik duvarı logları temizlendi.");
+        setTimeout(() => setLogClearSuccess(""), 3000);
+        fetchFirewallLogs();
+      }
+    } catch (e) {
+      console.error("Clear firewall logs failed:", e);
+    }
+  };
+
+  const handleSimulateAttack = async (attackType: "bot_scanner" | "sql_injection" | "rate_limit" = "sql_injection") => {
+    try {
+      const res = await fetch("/api/admin/firewall-logs/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attackType })
+      });
+      if (res.ok) {
+        const label = attackType === "bot_scanner" ? "Bot Taraması" : attackType === "rate_limit" ? "Rate Limit Aşımı" : "SQL Injection";
+        setLogClearSuccess(`Örnek ${label} saldırısı simüle edildi ve engellendi.`);
+        setTimeout(() => setLogClearSuccess(""), 3000);
+        fetchFirewallLogs();
+      }
+    } catch (e) {
+      console.error("Simulate attack failed:", e);
+    }
+  };
+
+  const handleToggleMaintenance = async (enabled: boolean) => {
+    const updatedConfig = { ...siteConfig, maintenanceModeEnabled: enabled };
+    setSiteConfig(updatedConfig);
+    try {
+      setIsLoading(true);
+      const res = await fetch("/api/admin/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...updatedConfig, announcements, structuredAnnouncements }),
+      });
+      if (res.ok) {
+        localStorage.setItem("inanresim_maintenance_mode", String(enabled));
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
+        alert("Bakım modu güncellenemedi.");
+      }
+    } catch (err) {
+      alert("Sunucu bağlantı hatası.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && activeSubTab === "security") {
+      fetchFirewallLogs();
+    }
+  }, [isAuthenticated, activeSubTab, firewallFilterType, firewallSearch]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -705,7 +832,8 @@ export default function AdminView({ onBack }: AdminViewProps) {
         fetchSmtpConfig(),
         fetchAdRequests(),
         fetchPaymentRequests(),
-        fetchErrorLogs()
+        fetchErrorLogs(),
+        fetchFirewallLogs()
       ]).finally(() => {
         setIsLoading(false);
       });
@@ -1076,6 +1204,70 @@ export default function AdminView({ onBack }: AdminViewProps) {
           >
             Ana Sayfaya Dön
           </button>
+        </div>
+      </div>
+
+      {/* Maintenance Mode Real-Time Status Bar & One-Click Shortcut */}
+      <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 shadow-sm my-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+        siteConfig.maintenanceModeEnabled
+          ? "bg-amber-500/10 border-amber-300 dark:border-amber-700/80 text-amber-900 dark:text-amber-100 shadow-amber-500/5"
+          : "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/80 text-emerald-900 dark:text-emerald-100"
+      }`}>
+        <div className="flex items-center gap-3.5">
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+            siteConfig.maintenanceModeEnabled
+              ? "bg-amber-500 text-white animate-pulse shadow-md shadow-amber-500/30"
+              : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+          }`}>
+            {siteConfig.maintenanceModeEnabled ? (
+              <Wrench className="w-5 h-5 animate-spin" style={{ animationDuration: '6s' }} />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            )}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                siteConfig.maintenanceModeEnabled
+                  ? "bg-amber-500 text-white"
+                  : "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+              }`}>
+                {siteConfig.maintenanceModeEnabled ? "🛠️ BAKIM MODU AKTİF" : "🟢 SİSTEM NORMAL YAYINDA"}
+              </span>
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                Anlık Durum Çubuğu
+              </span>
+            </div>
+            <p className="text-xs font-semibold mt-1 opacity-90">
+              {siteConfig.maintenanceModeEnabled
+                ? "Siteniz şu anda tüm ziyaretçilere kapalıdır ve bakım ekranı gösterilmektedir. Yalnızca yöneticiler erişebilir."
+                : "Siteniz sorunsuz çalışmaktadır ve tüm ziyaretçilerin kullanımına açıktır."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          {siteConfig.maintenanceModeEnabled ? (
+            <button
+              type="button"
+              onClick={() => handleToggleMaintenance(false)}
+              disabled={isLoading}
+              className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/30 active:scale-95"
+            >
+              <Power className="w-4 h-4" />
+              Bakım Modunu Kapat (Siteyi Yayına Al)
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleToggleMaintenance(true)}
+              disabled={isLoading}
+              className="w-full sm:w-auto px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Wrench className="w-3.5 h-3.5 text-amber-600" />
+              Bakım Modunu Başlat
+            </button>
+          )}
         </div>
       </div>
 
@@ -3947,6 +4139,272 @@ export default function AdminView({ onBack }: AdminViewProps) {
       {/* SUBTAB: SECURITY & PRIVACY */}
       {activeSubTab === "security" && (
         <div className="space-y-6">
+          {/* FIREWALL ATTACK LOGS & STATS PANEL */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-red-500" />
+                  Güvenlik Duvarı & Engellenen Saldırı Girişimleri (Son 24 Saat)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Otomatik bot taramaları, SQL Injection, XSS ve brute-force giriş denemeleri anlık engellenir ve kayıt altına alınır.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={fetchFirewallLogs}
+                  disabled={isLoadingFirewallLogs}
+                  className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingFirewallLogs ? "animate-spin" : ""}`} />
+                  Yenile
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSimulateAttack("sql_injection")}
+                  className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-red-500" />
+                  Saldırı Simüle Et
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearFirewallLogs}
+                  className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Logları Temizle
+                </button>
+              </div>
+            </div>
+
+            {/* Firewall Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Engellenen Saldırı (24s)</span>
+                  <h4 className="text-2xl font-black text-red-600 dark:text-red-400 mt-0.5">{firewallStats.totalBlocked24h}</h4>
+                </div>
+                <div className="w-10 h-10 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bot & Tarayıcı Tespiti</span>
+                  <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-0.5">{firewallStats.botScans}</h4>
+                </div>
+                <div className="w-10 h-10 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center">
+                  <Bug className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">SQL Injection / XSS</span>
+                  <h4 className="text-2xl font-black text-violet-600 dark:text-violet-400 mt-0.5">{firewallStats.sqlInjections + firewallStats.xssAttempts}</h4>
+                </div>
+                <div className="w-10 h-10 bg-violet-500/10 text-violet-500 rounded-xl flex items-center justify-center">
+                  <Terminal className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">En Çok Saldıran IP</span>
+                  <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 mt-1 truncate max-w-[140px]">{firewallStats.topBlockedIp}</h4>
+                </div>
+                <div className="w-10 h-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center">
+                  <Globe className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* 24-HOUR HOURLY ATTACK TREND GRAPH */}
+            <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Activity className="w-4 h-4 text-red-500" />
+                  Son 24 Saatlik Saldırı Yoğunluğu Grafiği
+                </h4>
+                <div className="flex items-center gap-3 text-[11px] font-bold">
+                  <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> Engellenen İstek Adedi
+                  </span>
+                </div>
+              </div>
+
+              {/* Visual Bar Chart */}
+              <div className="pt-4 pb-2">
+                <div className="h-32 flex items-end gap-2 sm:gap-3 px-2 border-b border-slate-200 dark:border-slate-700/80">
+                  {firewallStats.hourlyTrend && firewallStats.hourlyTrend.length > 0 ? (
+                    firewallStats.hourlyTrend.map((item, idx) => {
+                      const maxVal = Math.max(...firewallStats.hourlyTrend.map(t => t.count), 5);
+                      const heightPercent = Math.max((item.count / maxVal) * 100, item.count > 0 ? 18 : 4);
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center group relative">
+                          {/* Tooltip on hover */}
+                          <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all bg-slate-900 text-white text-[10px] font-bold py-1 px-2 rounded-lg pointer-events-none whitespace-nowrap z-20 shadow-xl">
+                            {item.hour}: {item.count} Engellenen İstek
+                          </div>
+                          
+                          <div 
+                            style={{ height: `${heightPercent}%` }} 
+                            className={`w-full rounded-t-lg transition-all duration-300 ${
+                              item.count > 2
+                                ? "bg-red-500 group-hover:bg-red-400"
+                                : item.count > 0
+                                ? "bg-amber-500/80 group-hover:bg-amber-400"
+                                : "bg-slate-200 dark:bg-slate-700/50"
+                            }`}
+                          />
+                          <span className="text-[9px] font-semibold text-slate-400 mt-2 rotate-[-45deg] sm:rotate-0 origin-top-left sm:origin-center">
+                            {item.hour}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="w-full text-center text-xs text-slate-400 py-8">Grafik verisi yükleniyor...</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {[
+                  { id: "all", label: "Tümü" },
+                  { id: "nsfw_content", label: "🔞 +18 / Çıplaklık Engelleri" },
+                  { id: "bot_scanner", label: "🤖 Bot Taramaları" },
+                  { id: "sql_injection", label: "💉 SQL Injection" },
+                  { id: "rate_limit", label: "⚡ Rate Limit" },
+                  { id: "xss_attempt", label: "🛡️ XSS / Zararlı Kod" },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => {
+                      setFirewallFilterType(f.id);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
+                      firewallFilterType === f.id
+                        ? "bg-red-600 text-white shadow-sm"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative shrink-0 sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="IP adresi veya URL ara..."
+                  value={firewallSearch}
+                  onChange={(e) => setFirewallSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+            </div>
+
+            {/* BLOCKED ATTACKS LOG TABLE */}
+            <div className="border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
+                    <tr>
+                      <th className="px-4 py-3">Zaman</th>
+                      <th className="px-4 py-3">IP Adresi & Ülke</th>
+                      <th className="px-4 py-3">Saldırı Türü</th>
+                      <th className="px-4 py-3">Hedef URL / İstek</th>
+                      <th className="px-4 py-3">Alınan Aksiyon</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono text-[11px]">
+                    {isLoadingFirewallLogs ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-sans">
+                          Saldırı logları yükleniyor...
+                        </td>
+                      </tr>
+                    ) : firewallLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-sans">
+                          Kayıtlı engellenmiş saldırı bulunamadı.
+                        </td>
+                      </tr>
+                    ) : (
+                      firewallLogs.map((log) => {
+                        const dateStr = new Date(log.timestamp).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                            <td className="px-4 py-3 text-slate-500 whitespace-nowrap font-sans font-semibold">
+                              {dateStr}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                              <span className="flex items-center gap-1.5">
+                                <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded text-[9px]">
+                                  {log.country || "GLOBAL"}
+                                </span>
+                                {log.ip}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap font-sans">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                log.attackType === "nsfw_content"
+                                  ? "bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800"
+                                  : log.attackType === "bot_scanner"
+                                  ? "bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
+                                  : log.attackType === "sql_injection"
+                                  ? "bg-red-100 text-red-800 border border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
+                                  : log.attackType === "rate_limit"
+                                  ? "bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800"
+                                  : "bg-violet-100 text-violet-800 border border-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800"
+                              }`}>
+                                {log.attackType === "nsfw_content" && "🔞 +18 / Çıplaklık Engeli"}
+                                {log.attackType === "bot_scanner" && "🤖 Bot Taraması"}
+                                {log.attackType === "sql_injection" && "💉 SQL Injection"}
+                                {log.attackType === "rate_limit" && "⚡ Rate Limit"}
+                                {log.attackType === "xss_attempt" && "🛡️ XSS Girişimi"}
+                                {log.attackType === "unauthorized_access" && "🔒 İzinsiz Erişim"}
+                                {log.attackType === "suspicious_user_agent" && "👾 Şüpheli User-Agent"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-slate-300 truncate max-w-[220px]" title={log.url}>
+                              <span className="text-slate-400 font-bold mr-1">{log.method}</span>
+                              {log.url}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap font-sans font-bold">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                log.actionTaken === "blocked_403"
+                                  ? "bg-red-50 text-red-600 border border-red-200 dark:bg-red-950/60 dark:text-red-400 dark:border-red-800"
+                                  : log.actionTaken === "rate_limited_429"
+                                  ? "bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800"
+                                  : "bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-950/60 dark:text-purple-400 dark:border-purple-800"
+                              }`}>
+                                {log.actionTaken === "blocked_403" ? "403 Engellendi" : log.actionTaken === "rate_limited_429" ? "429 Hız Sınırı" : "IP Yasaklandı"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <form onSubmit={handleSaveConfig} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-6">
               <div>
@@ -4012,6 +4470,33 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </h4>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Toggle 0: AI NSFW +18 Image Moderation */}
+                <div className="p-4 bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60 rounded-2xl flex items-center justify-between gap-4 md:col-span-2 shadow-xs">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h5 className="text-xs font-black text-rose-900 dark:text-rose-200 flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-rose-600" />
+                        AI Otomatik +18 / NSFW Görsel Filtresi (Gemini Vision)
+                      </h5>
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-rose-500 text-white uppercase tracking-wider">
+                        Tavsiye Edilen
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-rose-700/80 dark:text-rose-300/80 mt-1 font-medium leading-relaxed">
+                      Yapay zeka (Gemini Vision) ile yüklenen tüm resim ve kapak görselleri milisaniyeler içinde taranır. +18 cinsel içerik, erotizm ve açık çıplaklık barındıran görseller sunucuya kaydedilmeden anında engellenir ve güvenlik duvarında kayıt altına alınır.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={siteConfig.securityNsfwFilterEnabled !== false}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, securityNsfwFilterEnabled: e.target.checked })}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                  </label>
+                </div>
+
                 {/* Toggle 1: KVKK Notice */}
                 <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl flex items-center justify-between gap-4">
                   <div>
@@ -4146,10 +4631,10 @@ export default function AdminView({ onBack }: AdminViewProps) {
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                   <Bug className="w-5 h-5 text-red-500" />
-                  Hata Takip Paneli (Sunucu & Dosya Yükleme Logları)
+                  Merkezi Hata & Log Takip Paneli (API, SMTP & Yükleme)
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Son dosya yükleme başarısızlıkları, Multer limit aşımları, engelli kullanıcı erişimleri ve sunucu tarafı hata kayıtlarını gerçek zamanlı takip edin.
+                  Son API isteği hataları, SMTP e-posta teslimat zaman aşımları, dosya yükleme limit aşımları ve sunucu kayıtlarını gerçek zamanlı takip edin ve temizleyin.
                 </p>
               </div>
 
@@ -4164,14 +4649,27 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   Yenile
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleCreateTestErrorLog}
-                  className="px-4 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-amber-600" />
-                  Test Hatası Simüle Et
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCreateTestErrorLog("upload")}
+                    title="Dosya Yükleme Hatası Simüle Et"
+                    className="px-3 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-600" />
+                    Test Yükleme Hatası
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCreateTestErrorLog("email")}
+                    title="SMTP E-Posta Hatası Simüle Et"
+                    className="px-3 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                    Test SMTP Hatası
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -4194,10 +4692,10 @@ export default function AdminView({ onBack }: AdminViewProps) {
           </div>
 
           {/* Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Toplam Kayıtlı Hata</p>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Toplam Log</p>
                 <h4 className="text-2xl font-black text-slate-900 mt-1">{errorLogStats.totalErrors}</h4>
               </div>
               <div className="w-11 h-11 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center border border-red-100">
@@ -4217,7 +4715,17 @@ export default function AdminView({ onBack }: AdminViewProps) {
 
             <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Son 24 Saat Hataları</p>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">SMTP / E-Posta</p>
+                <h4 className="text-2xl font-black text-indigo-900 mt-1">{errorLogStats.smtpErrors}</h4>
+              </div>
+              <div className="w-11 h-11 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center border border-indigo-100">
+                <Mail className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Son 24 Saat</p>
                 <h4 className="text-2xl font-black text-slate-900 mt-1">{errorLogStats.last24hErrors}</h4>
               </div>
               <div className="w-11 h-11 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center border border-rose-100">
@@ -4227,7 +4735,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
 
             <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-5 flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sistem Sağlık Durumu</p>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sistem Sağlığı</p>
                 <h4 className="text-sm font-black mt-1 flex items-center gap-1.5 text-emerald-600">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   {errorLogStats.systemStatus === "healthy" ? "Normal & Kararlı" : "Dikkat İnceleme"}
@@ -4259,9 +4767,10 @@ export default function AdminView({ onBack }: AdminViewProps) {
               {[
                 { id: "all", label: "Tüm Hatalar" },
                 { id: "upload", label: "Dosya Yükleme" },
+                { id: "email", label: "SMTP / E-Posta" },
                 { id: "auth", label: "Kullanıcı / Yetki" },
                 { id: "db", label: "Veritabanı" },
-                { id: "server", label: "Sunucu" },
+                { id: "server", label: "Sunucu / API" },
               ].map((f) => (
                 <button
                   key={f.id}
@@ -4309,13 +4818,15 @@ export default function AdminView({ onBack }: AdminViewProps) {
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${
                             log.type === "upload" 
                               ? "bg-red-100 text-red-700 border border-red-200"
+                              : log.type === "email"
+                              ? "bg-indigo-100 text-indigo-700 border border-indigo-200"
                               : log.type === "auth"
                               ? "bg-amber-100 text-amber-700 border border-amber-200"
                               : log.type === "db"
                               ? "bg-purple-100 text-purple-700 border border-purple-200"
                               : "bg-slate-100 text-slate-700 border border-slate-200"
                           }`}>
-                            {log.type === "upload" ? "Dosya Yükleme" : log.type === "auth" ? "Yetkilendirme" : log.type === "db" ? "Veritabanı" : "Sunucu"}
+                            {log.type === "upload" ? "Dosya Yükleme" : log.type === "email" ? "SMTP / E-Posta" : log.type === "auth" ? "Yetkilendirme" : log.type === "db" ? "Veritabanı" : "Sunucu / API"}
                           </span>
 
                           {log.statusCode && (

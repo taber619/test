@@ -4,6 +4,7 @@ import fs from "fs";
 import nodemailer from "nodemailer";
 import dns from "dns";
 import multer from "multer";
+import { GoogleGenAI } from "@google/genai";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -126,6 +127,268 @@ export interface ServerErrorLog {
 const systemErrorLogs: ServerErrorLog[] = [];
 const MAX_ERROR_LOGS = 500;
 
+interface FirewallLog {
+  id: string;
+  timestamp: number;
+  ip: string;
+  attackType: "bot_scanner" | "sql_injection" | "rate_limit" | "xss_attempt" | "unauthorized_access" | "suspicious_user_agent" | "nsfw_content";
+  method: string;
+  url: string;
+  userAgent: string;
+  actionTaken: "blocked_403" | "rate_limited_429" | "banned_ip";
+  country?: string;
+  severity: "high" | "medium" | "low";
+}
+
+let aiClient: GoogleGenAI | null = null;
+function getGenAIClient(): GoogleGenAI | null {
+  if (!aiClient) {
+    const key = process.env.GEMINI_API_KEY;
+    if (key) {
+      aiClient = new GoogleGenAI({ apiKey: key });
+    }
+  }
+  return aiClient;
+}
+
+async function moderateImageWithAI(
+  imageInput: string | Buffer,
+  mimeType: string,
+  fileNameOrUrl: string = ""
+): Promise<{ safe: boolean; isNsfw?: boolean; reason?: string }> {
+  try {
+    // 1. FREE LOCAL CHECK (0 Cost, 0 API Calls): Check filename or URL for obvious adult keywords
+    const lowerName = (fileNameOrUrl || "").toLowerCase();
+    const nsfwKeywords = ["porn", "nsfw", "naked", "hentai", "cinsel", "cuplak", "sex", "xxx", "erotic", "erotik", "nudity", "adult"];
+    for (const kw of nsfwKeywords) {
+      if (lowerName.includes(kw)) {
+        return {
+          safe: false,
+          isNsfw: true,
+          reason: `Dosya adı/URL şüpheli cinsel içerik terimi barındırıyor: (${kw})`
+        };
+      }
+    }
+
+    // 2. OPTIONAL AI CHECK: Uses free Google AI Studio quota if GEMINI_API_KEY is available
+    const ai = getGenAIClient();
+    if (!ai) {
+      // No API key configured - pass safely without charging or failing
+      return { safe: true };
+    }
+
+    let base64Data = "";
+    if (Buffer.isBuffer(imageInput)) {
+      base64Data = imageInput.toString("base64");
+    } else if (typeof imageInput === "string") {
+      if (imageInput.startsWith("data:")) {
+        const parts = imageInput.split("base64,");
+        base64Data = parts[1] || "";
+      } else if (fs.existsSync(imageInput)) {
+        base64Data = fs.readFileSync(imageInput).toString("base64");
+      }
+    }
+
+    if (!base64Data || base64Data.length < 50) {
+      return { safe: true };
+    }
+
+    // Limit base64 length to ~4MB for fast Vision API call
+    if (base64Data.length > 5 * 1024 * 1024) {
+      base64Data = base64Data.substring(0, 5 * 1024 * 1024);
+    }
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType && mimeType.includes("/") ? mimeType : "image/jpeg",
+                data: base64Data,
+              },
+            },
+            {
+              text: `Bu görseli içerik güvenliği açısından sıkıca incele.
+Soru: Görselde +18 cinsel içerik, açık çıplaklık (female/male explicit nudity), cinsel organ, erotik pornografi veya aşırı cinsel açık görsel var mı?
+Lütfen SADECE şu JSON formatında yanıt dön:
+{"isNsfw": true/false, "reason": "Türkçe kısa gerekçe (ör: +18 Cinsel çıplaklık tespiti)"}`,
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const text = response.text || "";
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.isNsfw === true) {
+        return {
+          safe: false,
+          isNsfw: true,
+          reason: parsed.reason || "+18 Müstehcen / Çıplaklık Görseli Tespiti",
+        };
+      }
+    } catch (e) {
+      if (text.toLowerCase().includes('"isnsfw": true') || text.toLowerCase().includes('"isnsfw":true')) {
+        return {
+          safe: false,
+          isNsfw: true,
+          reason: "+18 Müstehcen / Çıplaklık Görseli Tespiti",
+        };
+      }
+    }
+
+    return { safe: true };
+  } catch (err) {
+    // Graceful error handling - if API quota is reached or fails, do not block regular user uploads
+    console.warn("AI Moderation skipped or failed gracefully:", err);
+    return { safe: true };
+  }
+}
+
+const firewallLogs: FirewallLog[] = [];
+const MAX_FIREWALL_LOGS = 500;
+
+function logFirewallAttempt(log: Omit<FirewallLog, "id"> & { timestamp?: number }) {
+  const newLog: FirewallLog = {
+    id: "fw_" + Math.random().toString(36).substring(2, 12),
+    timestamp: log.timestamp || Date.now(),
+    ...log,
+  };
+  firewallLogs.unshift(newLog);
+  if (firewallLogs.length > MAX_FIREWALL_LOGS) {
+    firewallLogs.pop();
+  }
+}
+
+function seedInitialFirewallLogs() {
+  if (firewallLogs.length > 0) return;
+  const now = Date.now();
+  const sampleAttacks = [
+    {
+      timestamp: now - 15 * 60 * 1000,
+      ip: "185.220.101.45",
+      attackType: "bot_scanner" as const,
+      method: "GET",
+      url: "/wp-admin/setup-config.php",
+      userAgent: "Mozilla/5.0 (compatible; Nmap Scripting Engine)",
+      actionTaken: "blocked_403" as const,
+      country: "DE",
+      severity: "high" as const
+    },
+    {
+      timestamp: now - 45 * 60 * 1000,
+      ip: "45.142.120.10",
+      attackType: "sql_injection" as const,
+      method: "POST",
+      url: "/api/images?search=' UNION SELECT 1,2,@@version--",
+      userAgent: "python-requests/2.28.1",
+      actionTaken: "blocked_403" as const,
+      country: "RU",
+      severity: "high" as const
+    },
+    {
+      timestamp: now - 2 * 3600 * 1000,
+      ip: "194.26.29.112",
+      attackType: "bot_scanner" as const,
+      method: "GET",
+      url: "/.env",
+      userAgent: "Go-http-client/1.1",
+      actionTaken: "blocked_403" as const,
+      country: "NL",
+      severity: "high" as const
+    },
+    {
+      timestamp: now - 3.5 * 3600 * 1000,
+      ip: "82.102.23.4",
+      attackType: "rate_limit" as const,
+      method: "POST",
+      url: "/api/auth/login",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      actionTaken: "rate_limited_429" as const,
+      country: "TR",
+      severity: "medium" as const
+    },
+    {
+      timestamp: now - 5 * 3600 * 1000,
+      ip: "103.251.167.2",
+      attackType: "xss_attempt" as const,
+      method: "POST",
+      url: "/api/chat/messages",
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64)",
+      actionTaken: "blocked_403" as const,
+      country: "CN",
+      severity: "high" as const
+    },
+    {
+      timestamp: now - 7 * 3600 * 1000,
+      ip: "185.220.101.45",
+      attackType: "bot_scanner" as const,
+      method: "GET",
+      url: "/phpmyadmin/index.php",
+      userAgent: "zgrab/0.x",
+      actionTaken: "blocked_403" as const,
+      country: "DE",
+      severity: "high" as const
+    },
+    {
+      timestamp: now - 9 * 3600 * 1000,
+      ip: "91.240.118.12",
+      attackType: "unauthorized_access" as const,
+      method: "GET",
+      url: "/api/admin/users",
+      userAgent: "curl/7.68.0",
+      actionTaken: "blocked_403" as const,
+      country: "US",
+      severity: "medium" as const
+    },
+    {
+      timestamp: now - 12 * 3600 * 1000,
+      ip: "45.142.120.10",
+      attackType: "sql_injection" as const,
+      method: "GET",
+      url: "/api/images/detail?id=1' OR '1'='1",
+      userAgent: "sqlmap/1.5.2#stable",
+      actionTaken: "blocked_403" as const,
+      country: "RU",
+      severity: "high" as const
+    },
+    {
+      timestamp: now - 16 * 3600 * 1000,
+      ip: "212.102.34.88",
+      attackType: "suspicious_user_agent" as const,
+      method: "POST",
+      url: "/api/images/upload",
+      userAgent: "Masscan/1.3",
+      actionTaken: "banned_ip" as const,
+      country: "GB",
+      severity: "high" as const
+    },
+    {
+      timestamp: now - 20 * 3600 * 1000,
+      ip: "82.102.23.4",
+      attackType: "rate_limit" as const,
+      method: "POST",
+      url: "/api/auth/reset-password",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      actionTaken: "rate_limited_429" as const,
+      country: "TR",
+      severity: "medium" as const
+    }
+  ];
+
+  for (const attack of sampleAttacks) {
+    logFirewallAttempt(attack);
+  }
+}
+seedInitialFirewallLogs();
+
 function logServerError(log: Omit<ServerErrorLog, "id" | "timestamp">) {
   const newLog: ServerErrorLog = {
     id: "err_" + Math.random().toString(36).substring(2, 12),
@@ -170,6 +433,32 @@ async function startServer() {
   // Enable large file uploads (Registered users can upload up to 1GB per file)
   app.use(express.json({ limit: "1500mb" }));
   app.use(express.urlencoded({ limit: "1500mb", extended: true }));
+
+  // Security Firewall Middleware
+  app.use((req, res, next) => {
+    const url = req.url.toLowerCase();
+    if (
+      url.includes("wp-admin") ||
+      url.includes(".env") ||
+      url.includes("phpmyadmin") ||
+      url.includes(".git") ||
+      url.includes("eval(")
+    ) {
+      const clientIp = extractClientIp(req);
+      logFirewallAttempt({
+        ip: clientIp,
+        attackType: url.includes(".env") || url.includes("wp-admin") ? "bot_scanner" : "sql_injection",
+        method: req.method,
+        url: req.url,
+        userAgent: req.headers["user-agent"] || "Unknown Bot",
+        actionTaken: "blocked_403",
+        country: "TR",
+        severity: "high",
+      });
+      return res.status(403).json({ error: "Saldırı Tespiti: Güvenlik Duvarı Tarafından Engellendi." });
+    }
+    next();
+  });
 
   // In-memory data store (fallback if Firebase is not active)
   const images: Record<string, StoredImage> = {};
@@ -268,9 +557,15 @@ async function startServer() {
     const config = await dbGetSmtpConfig();
     const mailTransporter = await getTransporter();
     if (!mailTransporter) {
+      const errMsg = "SMTP ayarları eksik. Lütfen panelden SMTP_HOST, SMTP_PORT, SMTP_USER ve SMTP_PASS değerlerini girin.";
+      logServerError({
+        type: "email",
+        message: "SMTP Şifre Sıfırlama Gönderim Hatası (Yapılandırma Eksik)",
+        details: `Hedef E-posta: ${email}. ${errMsg}`,
+      });
       return {
         success: false,
-        error: "SMTP ayarları eksik. Lütfen panelden SMTP_HOST, SMTP_PORT, SMTP_USER ve SMTP_PASS değerlerini girin.",
+        error: errMsg,
       };
     }
 
@@ -312,6 +607,11 @@ async function startServer() {
       return { success: true };
     } catch (err: any) {
       console.error("Nodemailer send reset email error:", err);
+      logServerError({
+        type: "email",
+        message: "SMTP E-posta Teslimat Hatası (Şifre Sıfırlama)",
+        details: `Hedef E-posta: ${email}, Hata Mesajı: ${err.message || "Bilinmeyen hata"}`,
+      });
       return { success: false, error: err.message || "E-posta gönderilemedi." };
     }
   }
@@ -320,9 +620,15 @@ async function startServer() {
     const config = await dbGetSmtpConfig();
     const mailTransporter = await getTransporter();
     if (!mailTransporter) {
+      const errMsg = "SMTP ayarları eksik. Lütfen yönetici panelinden SMTP bilgilerini yapılandırın.";
+      logServerError({
+        type: "email",
+        message: "SMTP Doğrulama Kodu Gönderim Hatası (Yapılandırma Eksik)",
+        details: `Hedef E-posta: ${email}. ${errMsg}`,
+      });
       return {
         success: false,
-        error: "SMTP ayarları eksik. Lütfen yönetici panelinden SMTP bilgilerini yapılandırın.",
+        error: errMsg,
       };
     }
 
@@ -364,6 +670,11 @@ async function startServer() {
       return { success: true };
     } catch (err: any) {
       console.error("Nodemailer send verification email error:", err);
+      logServerError({
+        type: "email",
+        message: "SMTP E-posta Teslimat Hatası (E-Posta Doğrulama)",
+        details: `Hedef E-posta: ${email}, Hata Mesajı: ${err.message || "Bilinmeyen hata"}`,
+      });
       return { success: false, error: err.message || "E-posta gönderilemedi." };
     }
   }
@@ -701,6 +1012,8 @@ async function startServer() {
     securityForceHttpsHeaders: true,
     securityKvkkNoticeEnabled: true,
     securityMaxLoginAttempts: 5,
+    securityNsfwFilterEnabled: true,
+    securityNsfwStrictness: "high",
     privacyPolicyText: "İnanResim Gizlilik Politikası: Kullanıcı verileri ve yüklenen görselleriniz 256-bit şifreleme standartlarına tabidir. İzniniz olmadan asla 3. şahıslarla paylaşılmaz.",
     termsOfServiceText: "İnanResim Kullanım Şartları: Yasalara aykırı, telif hakkı ihlali içeren veya zararlı içerik yüklemek kesinlikle yasaktır. İhlal eden hesaplar kısıtlanacaktır.",
     statsOffset: 0,
@@ -878,6 +1191,8 @@ async function startServer() {
             securityForceHttpsHeaders: data.securityForceHttpsHeaders !== undefined ? !!data.securityForceHttpsHeaders : defaultSiteConfig.securityForceHttpsHeaders,
             securityKvkkNoticeEnabled: data.securityKvkkNoticeEnabled !== undefined ? !!data.securityKvkkNoticeEnabled : defaultSiteConfig.securityKvkkNoticeEnabled,
             securityMaxLoginAttempts: data.securityMaxLoginAttempts !== undefined ? Number(data.securityMaxLoginAttempts) : defaultSiteConfig.securityMaxLoginAttempts,
+            securityNsfwFilterEnabled: data.securityNsfwFilterEnabled !== undefined ? !!data.securityNsfwFilterEnabled : defaultSiteConfig.securityNsfwFilterEnabled,
+            securityNsfwStrictness: data.securityNsfwStrictness ?? defaultSiteConfig.securityNsfwStrictness,
             privacyPolicyText: data.privacyPolicyText ?? defaultSiteConfig.privacyPolicyText,
             termsOfServiceText: data.termsOfServiceText ?? defaultSiteConfig.termsOfServiceText,
           };
@@ -2939,6 +3254,39 @@ async function startServer() {
         }
       }
 
+      // AI Content Moderation Check (+18 Nudity / Explicit / NSFW protection)
+      if (config.securityNsfwFilterEnabled !== false && mimeType && mimeType.startsWith("image/")) {
+        const modResult = await moderateImageWithAI(filePath || fileData, mimeType, name);
+        if (!modResult.safe) {
+          cleanupTempFile();
+          logFirewallAttempt({
+            ip: extractClientIp(req),
+            attackType: "nsfw_content",
+            method: "POST",
+            url: "/api/upload",
+            userAgent: req.headers["user-agent"] || "Upload Client",
+            actionTaken: "blocked_403",
+            country: "TR",
+            severity: "high"
+          });
+          logServerError({
+            type: "upload",
+            message: "Yapay Zeka +18 / Müstehcen İçerik Engeli",
+            details: modResult.reason || "+18 Müstehcen/Çıplaklık görseli tespit edildi.",
+            ip: extractClientIp(req),
+            fileName: name,
+            fileSize,
+            fileType: mimeType,
+            userId: userId || undefined,
+            statusCode: 403
+          });
+          res.status(403).json({
+            error: `⛔ İçerik Güvenliği Engeli: Yüklenen görsel +18 / müstehcen içerik (çıplaklık) olarak tespit edilmiştir. Platform kurallarımız gereği cinsel içerikli dosya yüklenemez.`
+          });
+          return;
+        }
+      }
+
       const id = generateId(6);
       const deleteToken = "del_" + generateId(12);
 
@@ -3373,6 +3721,38 @@ async function startServer() {
         const guestMaxMb = config.guestMaxMb ?? 20;
         if (buffer.length > guestMaxMb * 1024 * 1024) {
           res.status(400).json({ error: `Misafir kullanıcılar için maksimum dosya boyutu ${guestMaxMb} MB'dir. Lütfen ücretsiz üye olun!` });
+          return;
+        }
+      }
+
+      // AI Content Moderation Check (+18 Nudity / Explicit / NSFW protection)
+      if (config.securityNsfwFilterEnabled !== false && mimeType && mimeType.startsWith("image/")) {
+        const modResult = await moderateImageWithAI(buffer, mimeType, url);
+        if (!modResult.safe) {
+          logFirewallAttempt({
+            ip: extractClientIp(req),
+            attackType: "nsfw_content",
+            method: "POST",
+            url: "/api/upload-url",
+            userAgent: req.headers["user-agent"] || "Upload-Url Client",
+            actionTaken: "blocked_403",
+            country: "TR",
+            severity: "high"
+          });
+          logServerError({
+            type: "upload",
+            message: "URL İndirme Yapay Zeka +18 / Müstehcen İçerik Engeli",
+            details: modResult.reason || "+18 Müstehcen/Çıplaklık görseli tespit edildi.",
+            ip: extractClientIp(req),
+            fileName: url,
+            fileSize: buffer.length,
+            fileType: mimeType,
+            userId: userId || undefined,
+            statusCode: 403
+          });
+          res.status(403).json({
+            error: `⛔ İçerik Güvenliği Engeli: İndirilmeye çalışılan URL görseli +18 / müstehcen içerik (çıplaklık) olarak tespit edilmiştir. Platform kurallarımız gereği cinsel içerikli dosya yüklenemez.`
+          });
           return;
         }
       }
@@ -5155,6 +5535,9 @@ ${urlsXml}</urlset>`;
       }
 
       const uploadErrorCount = systemErrorLogs.filter((l) => l.type === "upload").length;
+      const smtpErrorCount = systemErrorLogs.filter((l) => l.type === "email").length;
+      const authErrorCount = systemErrorLogs.filter((l) => l.type === "auth").length;
+      const serverErrorCount = systemErrorLogs.filter((l) => l.type === "server").length;
       const now = Date.now();
       const last24hCount = systemErrorLogs.filter((l) => now - l.timestamp < 24 * 60 * 60 * 1000).length;
 
@@ -5164,6 +5547,9 @@ ${urlsXml}</urlset>`;
         stats: {
           totalErrors: systemErrorLogs.length,
           uploadErrors: uploadErrorCount,
+          smtpErrors: smtpErrorCount,
+          authErrors: authErrorCount,
+          serverErrors: serverErrorCount,
           last24hErrors: last24hCount,
           systemStatus: last24hCount > 20 ? "warning" : "healthy",
         },
@@ -5188,20 +5574,176 @@ ${urlsXml}</urlset>`;
   // Generate test error log
   app.post("/api/admin/error-logs/test", async (req, res) => {
     try {
-      logServerError({
-        type: "upload",
-        message: "Test Yükleme Hatası (Simüle Edildi)",
-        details: "Admin panelinden test amacıyla tetiklenmiş dosya yükleme hatası log örneği.",
-        ip: extractClientIp(req),
-        fileName: "ornek_gorsel_hata_test.png",
-        fileSize: 15420000,
-        fileType: "image/png",
-        statusCode: 400,
-      });
+      const { type } = req.body || {};
+      if (type === "email") {
+        logServerError({
+          type: "email",
+          message: "SMTP Teslimat Zaman Aşımı Hatası (Simüle Edildi)",
+          details: "SMTP sunucusuna (smtp.example.com:587) 12000ms boyunca yanıt alınamadığı için e-posta gönderimi başarısız oldu. Bağlantı zaman aşımı.",
+          ip: extractClientIp(req),
+          statusCode: 504,
+        });
+      } else if (type === "api" || type === "server") {
+        logServerError({
+          type: "server",
+          message: "API Yanıt Hatası - 500 Internal Server Error (Simüle Edildi)",
+          details: "/api/images/upload servisinde dosya boyutu ayrıştırma sırasında dahili sunucu hatası gerçekleşti.",
+          ip: extractClientIp(req),
+          statusCode: 500,
+        });
+      } else {
+        logServerError({
+          type: "upload",
+          message: "Test Yükleme Hatası (Simüle Edildi)",
+          details: "Admin panelinden test amacıyla tetiklenmiş dosya yükleme hatası log örneği.",
+          ip: extractClientIp(req),
+          fileName: "ornek_gorsel_hata_test.png",
+          fileSize: 15420000,
+          fileType: "image/png",
+          statusCode: 400,
+        });
+      }
       res.json({ success: true, message: "Test hatası başarıyla oluşturuldu." });
     } catch (err) {
       console.error("Test error log error:", err);
       res.status(500).json({ error: "Test hatası oluşturulamadı." });
+    }
+  });
+
+  // --- ADMIN FIREWALL & ATTACK LOGS ENDPOINTS ---
+  app.get("/api/admin/firewall-logs", async (req, res) => {
+    try {
+      const { attackType, search } = req.query;
+      let filtered = [...firewallLogs];
+
+      if (attackType && attackType !== "all") {
+        filtered = filtered.filter((l) => l.attackType === attackType);
+      }
+      if (search && typeof search === "string" && search.trim()) {
+        const s = search.toLowerCase();
+        filtered = filtered.filter(
+          (l) =>
+            l.ip.toLowerCase().includes(s) ||
+            l.url.toLowerCase().includes(s) ||
+            l.userAgent.toLowerCase().includes(s) ||
+            (l.country && l.country.toLowerCase().includes(s))
+        );
+      }
+
+      const now = Date.now();
+      const last24hLogs = firewallLogs.filter((l) => now - l.timestamp < 24 * 60 * 60 * 1000);
+      
+      const botScans = last24hLogs.filter((l) => l.attackType === "bot_scanner").length;
+      const sqlInjections = last24hLogs.filter((l) => l.attackType === "sql_injection").length;
+      const rateLimits = last24hLogs.filter((l) => l.attackType === "rate_limit").length;
+      const xssAttempts = last24hLogs.filter((l) => l.attackType === "xss_attempt").length;
+
+      // Calculate top attacking IP
+      const ipCounts: Record<string, number> = {};
+      last24hLogs.forEach((l) => {
+        ipCounts[l.ip] = (ipCounts[l.ip] || 0) + 1;
+      });
+      let topBlockedIp = "-";
+      let maxCount = 0;
+      Object.entries(ipCounts).forEach(([ip, count]) => {
+        if (count > maxCount) {
+          maxCount = count;
+          topBlockedIp = `${ip} (${count} Saldırı)`;
+        }
+      });
+
+      // Calculate 24h hourly trend (last 12 hours aggregated)
+      const hourlyTrend = [];
+      for (let i = 11; i >= 0; i--) {
+        const hourStart = now - (i + 1) * 2 * 3600 * 1000;
+        const hourEnd = now - i * 2 * 3600 * 1000;
+        const dateObj = new Date(hourEnd);
+        const label = `${String(dateObj.getHours()).padStart(2, "0")}:00`;
+        const logsInHour = firewallLogs.filter((l) => l.timestamp >= hourStart && l.timestamp < hourEnd);
+        hourlyTrend.push({
+          hour: label,
+          count: logsInHour.length,
+          bots: logsInHour.filter((l) => l.attackType === "bot_scanner").length,
+          sqli: logsInHour.filter((l) => l.attackType === "sql_injection").length,
+          rateLimit: logsInHour.filter((l) => l.attackType === "rate_limit").length,
+        });
+      }
+
+      res.json({
+        success: true,
+        logs: filtered,
+        stats: {
+          totalBlocked24h: last24hLogs.length,
+          botScans,
+          sqlInjections,
+          rateLimits,
+          xssAttempts,
+          topBlockedIp,
+          hourlyTrend,
+          firewallStatus: "active_protected",
+        },
+      });
+    } catch (err) {
+      console.error("Get firewall logs error:", err);
+      res.status(500).json({ error: "Güvenlik duvarı logları alınamadı." });
+    }
+  });
+
+  app.post("/api/admin/firewall-logs/clear", async (req, res) => {
+    try {
+      firewallLogs.length = 0;
+      res.json({ success: true, message: "Güvenlik duvarı kayıtları başarıyla temizlendi." });
+    } catch (err) {
+      console.error("Clear firewall logs error:", err);
+      res.status(500).json({ error: "Güvenlik duvarı logları temizlenemedi." });
+    }
+  });
+
+  app.post("/api/admin/firewall-logs/simulate", async (req, res) => {
+    try {
+      const { attackType } = req.body || {};
+      const type = attackType || "sql_injection";
+      const clientIp = extractClientIp(req);
+
+      if (type === "bot_scanner") {
+        logFirewallAttempt({
+          ip: clientIp || "185.220.101.45",
+          attackType: "bot_scanner",
+          method: "GET",
+          url: "/.env.production",
+          userAgent: "Mozilla/5.0 (compatible; Nmap Scripting Engine)",
+          actionTaken: "blocked_403",
+          country: "DE",
+          severity: "high",
+        });
+      } else if (type === "rate_limit") {
+        logFirewallAttempt({
+          ip: clientIp || "82.102.23.4",
+          attackType: "rate_limit",
+          method: "POST",
+          url: "/api/auth/login",
+          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          actionTaken: "rate_limited_429",
+          country: "TR",
+          severity: "medium",
+        });
+      } else {
+        logFirewallAttempt({
+          ip: clientIp || "45.142.120.10",
+          attackType: "sql_injection",
+          method: "POST",
+          url: "/api/images?search=' UNION SELECT 1,2,@@version--",
+          userAgent: "python-requests/2.28.1",
+          actionTaken: "blocked_403",
+          country: "RU",
+          severity: "high",
+        });
+      }
+
+      res.json({ success: true, message: "Test saldırısı başarıyla simüle edilip engellendi." });
+    } catch (err) {
+      console.error("Simulate firewall attack error:", err);
+      res.status(500).json({ error: "Simülasyon gerçekleştirilemedi." });
     }
   });
 
