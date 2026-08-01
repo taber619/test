@@ -19,6 +19,36 @@ import FaqSection from "./components/FaqSection";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
+export function calculateUploadLimit(
+  user: (ClientUser & { role?: string }) | null | undefined, 
+  siteConfig: SiteConfig | null | undefined
+) {
+  if (!user) {
+    const guestMaxMb = siteConfig?.guestMaxMb ?? 100;
+    const maxSizeBytes = guestMaxMb * 1024 * 1024;
+    return {
+      maxMb: guestMaxMb,
+      maxSizeBytes,
+      limitStr: `${guestMaxMb} MB`,
+      userType: "guest" as const
+    };
+  }
+
+  const isVip = !!user.isVip || user.role === "admin";
+  const maxMb = isVip 
+    ? (siteConfig?.vipMaxMb ?? 5000) 
+    : ((siteConfig?.registeredMaxMb ?? 1000) || 1000);
+  const maxSizeBytes = maxMb * 1024 * 1024;
+  const limitStr = maxMb >= 1000 ? `${(maxMb / 1000).toFixed(1)} GB (${maxMb} MB)` : `${maxMb} MB`;
+
+  return {
+    maxMb,
+    maxSizeBytes,
+    limitStr,
+    userType: isVip ? ("vip" as const) : ("registered" as const)
+  };
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
@@ -262,23 +292,15 @@ export default function App() {
     }
   ) => {
     // Client-side pre-validation of file sizes against guest/member limits
+    const limitInfo = calculateUploadLimit(currentUser, siteConfig);
     for (const f of files) {
-      if (!currentUser) {
-        const guestMaxMb = siteConfig?.guestMaxMb ?? 100;
-        if (guestMaxMb > 0 && f.size > guestMaxMb * 1024 * 1024) {
-          alert(`"${f.name}" dosyası misafir yükleme limitini (${guestMaxMb} MB) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
-          return;
+      if (limitInfo.maxMb > 0 && f.size > limitInfo.maxSizeBytes) {
+        if (limitInfo.userType === "guest") {
+          alert(`"${f.name}" dosyası misafir yükleme limitini (${limitInfo.limitStr}) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
+        } else {
+          alert(`"${f.name}" dosyası üyelik limitinizi (${limitInfo.limitStr}) aşıyor.`);
         }
-      } else {
-        const isVip = !!currentUser.isVip || currentUser.role === "admin";
-        const maxMb = isVip 
-          ? (siteConfig?.vipMaxMb ?? 5000) 
-          : ((siteConfig?.registeredMaxMb ?? 1000) || 1000);
-        if (maxMb > 0 && f.size > maxMb * 1024 * 1024) {
-          const limitStr = maxMb >= 1000 ? `${(maxMb / 1000).toFixed(1)} GB (${maxMb} MB)` : `${maxMb} MB`;
-          alert(`"${f.name}" dosyası üyelik limitinizi (${limitStr}) aşıyor.`);
-          return;
-        }
+        return;
       }
     }
 

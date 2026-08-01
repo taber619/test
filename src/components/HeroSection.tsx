@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { calculateUploadLimit } from "../App";
 import { 
   UploadCloud, 
   Camera, 
@@ -313,21 +314,16 @@ export default function HeroSection({
         break;
       }
 
-      const limitMb = !currentUser 
-        ? guestMaxMb 
-        : (isVip ? (siteConfig?.vipMaxMb ?? 5000) : ((siteConfig?.registeredMaxMb ?? 1000) || 1000));
-      const maxSizeBytes = limitMb * 1024 * 1024;
+      const limitInfo = calculateUploadLimit(currentUser, siteConfig);
       
-      if (maxSizeBytes > 0 && f.size > maxSizeBytes) {
+      if (limitInfo.maxMb > 0 && f.size > limitInfo.maxSizeBytes) {
         if (!currentUser) {
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitMb} MB'ı aşıyor. Lütfen ücretsiz üye olun veya PRO VIP üyeliğe geçin!`);
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), misafir limiti olan ${limitInfo.limitStr}'ı aşıyor. Lütfen ücretsiz üye olun veya PRO VIP üyeliğe geçin!`);
         } else if (!isVip) {
-          const limitStr = limitMb >= 1000 ? `${(limitMb / 1000).toFixed(1)} GB (${limitMb} MB)` : `${limitMb} MB`;
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), standart üye limitini (${limitStr}) aşıyor. Lütfen daha büyük dosyalar yüklemek için PRO VIP üyeliğe geçin!`);
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), standart üye limitini (${limitInfo.limitStr}) aşıyor. Lütfen daha büyük dosyalar yüklemek için PRO VIP üyeliğe geçin!`);
           if (onOpenVipModal) onOpenVipModal();
         } else {
-          const limitStr = limitMb >= 1000 ? `${(limitMb / 1000).toFixed(1)} GB (${limitMb} MB)` : `${limitMb} MB`;
-          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), VIP dosya boyut limitini (${limitStr}) aşıyor.`);
+          setErrorMsg(`${f.name} boyutu (${(f.size / (1024 * 1024)).toFixed(1)} MB), VIP dosya boyut limitini (${limitInfo.limitStr}) aşıyor.`);
         }
         continue;
       }

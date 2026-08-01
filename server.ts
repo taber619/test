@@ -246,9 +246,9 @@ async function startServer() {
         host: host.trim(),
         port: Number(port) || 587,
         secure: Number(port) === 465,
-        connectionTimeout: 2500,
-        greetingTimeout: 2500,
-        socketTimeout: 2500,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
         auth: {
           user: user.trim(),
           pass: pass.trim(),
@@ -306,7 +306,7 @@ async function startServer() {
     try {
       const sendPromise = mailTransporter.sendMail(mailOptions);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("SMTP Bağlantı Zaman Aşımı")), 2500)
+        setTimeout(() => reject(new Error("SMTP Bağlantı Zaman Aşımı")), 12000)
       );
       await Promise.race([sendPromise, timeoutPromise]);
       return { success: true };
@@ -358,7 +358,7 @@ async function startServer() {
     try {
       const sendPromise = mailTransporter.sendMail(mailOptions);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("SMTP Bağlantı Zaman Aşımı")), 3500)
+        setTimeout(() => reject(new Error("SMTP Bağlantı Zaman Aşımı")), 12000)
       );
       await Promise.race([sendPromise, timeoutPromise]);
       return { success: true };
