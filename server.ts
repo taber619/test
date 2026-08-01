@@ -1918,13 +1918,13 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "images", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        const docSnap = await withTimeout(getDoc(docRef), 1500, null);
+        if (docSnap && docSnap.exists()) {
           const meta = docSnap.data();
           
-          // Increment views
+          // Increment views asynchronously in background
           const newViews = (meta.views || 0) + 1;
-          await updateDoc(docRef, { views: newViews });
+          updateDoc(docRef, { views: newViews }).catch(() => {});
 
           return {
             id: meta.id,
@@ -1976,10 +1976,22 @@ async function startServer() {
       if (found) {
         const diskPath = path.join(UPLOADS_DIR, found);
         const stat = fs.statSync(diskPath);
+        const cleanName = found.replace(new RegExp(`^${id}_`), "");
+
+        // Infer mime type
+        const ext = path.extname(cleanName).toLowerCase();
+        let mimeType = "application/octet-stream";
+        if ([".jpg", ".jpeg"].includes(ext)) mimeType = "image/jpeg";
+        else if (ext === ".png") mimeType = "image/png";
+        else if (ext === ".gif") mimeType = "image/gif";
+        else if (ext === ".webp") mimeType = "image/webp";
+        else if (ext === ".mp4") mimeType = "video/mp4";
+        else if (ext === ".webm") mimeType = "video/webm";
+
         return {
           id,
-          name: found,
-          mimeType: "image/jpeg",
+          name: cleanName || found,
+          mimeType,
           size: stat.size,
           uploadedAt: stat.birthtimeMs || Date.now(),
           deleteAfter: "never",
@@ -1996,12 +2008,11 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "images", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          await updateDoc(docRef, { password });
+        const docSnap = await withTimeout(getDoc(docRef), 1500, null);
+        if (docSnap && docSnap.exists()) {
+          updateDoc(docRef, { password }).catch(() => {});
           return true;
         }
-        return false;
       } catch (e) {
         console.error("Firebase lock image error:", e);
       }
@@ -2021,32 +2032,31 @@ async function startServer() {
     if (useFirebase && db) {
       try {
         const docRef = doc(db, "images", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        const docSnap = await withTimeout(getDoc(docRef), 1500, null);
+        if (docSnap && docSnap.exists()) {
           deletedMeta = docSnap.data();
           if (deletedMeta.filePath && fs.existsSync(deletedMeta.filePath)) {
             try { fs.unlinkSync(deletedMeta.filePath); } catch (e) {}
           }
 
-          // Delete metadata from Firebase
-          try { await deleteDoc(docRef); } catch (e) {}
+          // Delete metadata from Firebase in background
+          deleteDoc(docRef).catch(() => {});
 
           // Delete chunks from Firebase
           const chunkCount = deletedMeta.chunkCount || 0;
-          const deletePromises = [];
           for (let i = 0; i < chunkCount; i++) {
-            deletePromises.push(deleteDoc(doc(db, "image_chunks", `${id}_${i}`)).catch(() => {}));
+            deleteDoc(doc(db, "image_chunks", `${id}_${i}`)).catch(() => {});
           }
-          await Promise.all(deletePromises);
+          return deletedMeta;
+        }
+      } catch (e) {
+        console.error("Firebase delete image error:", e);
+      }
+    }
 
           if (imagesStore[id]) {
             delete imagesStore[id];
           }
-        }
-      } catch (e) {
-        // Firebase quota error or network failure
-      }
-    }
 
     const image = imagesStore[id];
     if (image) {

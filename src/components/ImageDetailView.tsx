@@ -63,8 +63,12 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   const loadMetadata = () => {
     setLoading(true);
     setError(null);
-    fetch(`/api/images/${imageId}/info`)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    fetch(`/api/images/${imageId}/info`, { signal: controller.signal })
       .then((res) => {
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error("Görsel veya dosya bulunamadı.");
         return res.json();
       })
@@ -75,7 +79,12 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
         }
       })
       .catch((err) => {
-        setError(err.message || "Dosya detayları yüklenirken bir hata oluştu.");
+        clearTimeout(timeoutId);
+        if (err.name === "AbortError") {
+          setError("Sunucu yanıtı zaman aşımına uğradı. Lütfen sayfayı yenileyip tekrar deneyin.");
+        } else {
+          setError(err.message || "Dosya detayları yüklenirken bir hata oluştu.");
+        }
       })
       .finally(() => {
         setLoading(false);
