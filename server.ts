@@ -181,26 +181,31 @@ async function moderateImageWithAI(
       return { safe: true };
     }
 
-    let base64Data = "";
+    let rawBuffer: Buffer | null = null;
     if (Buffer.isBuffer(imageInput)) {
-      base64Data = imageInput.toString("base64");
+      rawBuffer = imageInput;
     } else if (typeof imageInput === "string") {
       if (imageInput.startsWith("data:")) {
         const parts = imageInput.split("base64,");
-        base64Data = parts[1] || "";
+        rawBuffer = Buffer.from(parts[1] || "", "base64");
       } else if (fs.existsSync(imageInput)) {
-        base64Data = fs.readFileSync(imageInput).toString("base64");
+        rawBuffer = fs.readFileSync(imageInput);
+      } else {
+        // Raw base64 string or filename
+        rawBuffer = Buffer.from(imageInput, "base64");
       }
     }
 
-    if (!base64Data || base64Data.length < 50) {
+    if (!rawBuffer || rawBuffer.length < 50) {
       return { safe: true };
     }
 
-    // Limit base64 length to ~4MB for fast Vision API call
-    if (base64Data.length > 5 * 1024 * 1024) {
-      base64Data = base64Data.substring(0, 5 * 1024 * 1024);
+    // Limit buffer to max 3MB for fast Gemini Vision evaluation
+    if (rawBuffer.length > 3 * 1024 * 1024) {
+      rawBuffer = rawBuffer.subarray(0, 3 * 1024 * 1024);
     }
+
+    const base64Data = rawBuffer.toString("base64");
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
