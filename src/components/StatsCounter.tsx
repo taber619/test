@@ -8,10 +8,16 @@ interface StatsData {
 }
 
 export default function StatsCounter() {
-  const [stats, setStats] = useState<StatsData>({
-    totalImages: 0,
-    activeUsers: 1,
-    uploadedToday: 0,
+  const [stats, setStats] = useState<StatsData>(() => {
+    try {
+      const cached = localStorage.getItem("inanresim_stats_cache");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return {
+      totalImages: 0,
+      activeUsers: 1,
+      uploadedToday: 0,
+    };
   });
 
   useEffect(() => {
@@ -27,6 +33,9 @@ export default function StatsCounter() {
         .then((data) => {
           if (data && data.totalImages !== undefined) {
             setStats(data);
+            try {
+              localStorage.setItem("inanresim_stats_cache", JSON.stringify(data));
+            } catch (e) {}
           }
         })
         .catch((err) => console.log("Stats fetch error", err));

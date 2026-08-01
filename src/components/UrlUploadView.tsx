@@ -22,10 +22,16 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId, current
   const [watermarkPosition, setWatermarkPosition] = useState<"bottom-right" | "bottom-left" | "top-right" | "top-left" | "center">("bottom-right");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (!termsAccepted) {
+      setErrorMsg("Yüklemeye devam etmek için Kullanım Koşulları ve Yasal Beyanı kabul etmelisiniz.");
+      return;
+    }
 
     if (!url) {
       setErrorMsg("Lütfen geçerli bir resim veya video URL'si giriniz.");
@@ -225,6 +231,26 @@ export default function UrlUploadView({ onBack, onUploadSuccess, userId, current
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Terms Checkbox */}
+          <div className="pt-2">
+            <label className="flex items-start gap-2.5 cursor-pointer group text-left">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => {
+                  setTermsAccepted(e.target.checked);
+                  if (e.target.checked && errorMsg?.includes("Kullanım Koşulları")) {
+                    setErrorMsg(null);
+                  }
+                }}
+                className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-700 focus:ring-blue-500 cursor-pointer shrink-0"
+              />
+              <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 leading-tight">
+                Yüklediğim içeriğin <strong className="text-slate-800 dark:text-slate-100 font-bold">T.C. yasalarına, telif haklarına</strong> ve <strong className="text-slate-800 dark:text-slate-100 font-bold">topluluk kurallarına</strong> (+18 cinsel içerik barındırmayan) uygun olduğunu beyan eder, <span className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Kullanım Koşullarını</span> kabul ederim.
+              </span>
+            </label>
           </div>
 
           {/* Action button */}

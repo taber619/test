@@ -159,13 +159,17 @@ async function moderateImageWithAI(
   try {
     // 1. FREE LOCAL CHECK (0 Cost, 0 API Calls): Check filename or URL for obvious adult keywords
     const lowerName = (fileNameOrUrl || "").toLowerCase();
-    const nsfwKeywords = ["porn", "nsfw", "naked", "hentai", "cinsel", "cuplak", "sex", "xxx", "erotic", "erotik", "nudity", "adult"];
+    const nsfwKeywords = [
+      "porn", "nsfw", "naked", "hentai", "cinsel", "cuplak", "çulak", "ciplak", "ciplaklik", 
+      "sex", "xxx", "erotic", "erotik", "nudity", "adult", "nude", "boobs", "pussy", "dick",
+      "pompano", "porno", "pornosu", "sik", "am", "meme", "vajina", "penis", "sikiş", "sikis"
+    ];
     for (const kw of nsfwKeywords) {
       if (lowerName.includes(kw)) {
         return {
           safe: false,
           isNsfw: true,
-          reason: `Dosya adı/URL şüpheli cinsel içerik terimi barındırıyor: (${kw})`
+          reason: `Dosya adı/URL şüpheli +18 cinsel içerik terimi barındırıyor: (${kw})`
         };
       }
     }
@@ -173,7 +177,7 @@ async function moderateImageWithAI(
     // 2. OPTIONAL AI CHECK: Uses free Google AI Studio quota if GEMINI_API_KEY is available
     const ai = getGenAIClient();
     if (!ai) {
-      // No API key configured - pass safely without charging or failing
+      // No API key configured - pass safely
       return { safe: true };
     }
 
@@ -211,42 +215,102 @@ async function moderateImageWithAI(
               },
             },
             {
-              text: `Bu görseli içerik güvenliği açısından sıkıca incele.
-Soru: Görselde +18 cinsel içerik, açık çıplaklık (female/male explicit nudity), cinsel organ, erotik pornografi veya aşırı cinsel açık görsel var mı?
-Lütfen SADECE şu JSON formatında yanıt dön:
-{"isNsfw": true/false, "reason": "Türkçe kısa gerekçe (ör: +18 Cinsel çıplaklık tespiti)"}`,
+              text: `GÖREV: Bu görseli içerik güvenliği, cinsel açıklık ve +18 (NSFW) kurallarına göre SIKI BİR ŞEKİLDE değerlendir.
+TANIM: Görselde tam veya kısmi çıplaklık (nudity), açık cinsel organ, göğüs/kalça açıklığı, erotik/pornografik poz, cinsel birleşme, çamaşırlı/erotik duruş veya +18 cinsel vurgu VAR MI?
+KURAL: En ufak cinsel açıklık, çıplaklık veya +18 erotizm varsa isNsfw: true ver.
+ÇIKTI (SADECE JSON):
+{"isNsfw": true/false, "reason": "Türkçe kısa açıklama"}`,
             },
           ],
         },
       ],
       config: {
         responseMimeType: "application/json",
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as any,
+            threshold: "BLOCK_LOW_AND_ABOVE" as any,
+          },
+        ],
       },
     });
 
-    const text = response.text || "";
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed.isNsfw === true) {
+    // Check candidate safety status first
+    const candidate = response.candidates?.[0];
+    if (candidate) {
+      if (candidate.finishReason === "SAFETY" || candidate.finishReason === "BLOCKLIST" || (candidate.finishReason as string) === "RECITATION") {
         return {
           safe: false,
           isNsfw: true,
-          reason: parsed.reason || "+18 Müstehcen / Çıplaklık Görseli Tespiti",
+          reason: "🔞 +18 Cinsel / Müstehcen İçerik Tespiti (Gemini Otomatik Güvenlik Engeli)",
         };
       }
-    } catch (e) {
-      if (text.toLowerCase().includes('"isnsfw": true') || text.toLowerCase().includes('"isnsfw":true')) {
+      if (candidate.safetyRatings) {
+        const sexualRating = candidate.safetyRatings.find(
+          (r: any) => r.category?.includes("SEXUAL") || r.category === "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+        );
+        if (sexualRating && (sexualRating.probability === "HIGH" || sexualRating.probability === "MEDIUM")) {
+          return {
+            safe: false,
+            isNsfw: true,
+            reason: "🔞 +18 Cinsel İçerik Tespiti (Aşırı Cinsel Açıklık Derecelendirmesi)",
+          };
+        }
+      }
+    }
+
+    let text = "";
+    try {
+      text = response.text || "";
+    } catch (e: any) {
+      // Accessing response.text throws an error if candidate was blocked due to SAFETY!
+      const errStr = String(e || "").toLowerCase();
+      if (errStr.includes("safety") || errStr.includes("blocked") || errStr.includes("sexually") || errStr.includes("candidate")) {
         return {
           safe: false,
           isNsfw: true,
-          reason: "+18 Müstehcen / Çıplaklık Görseli Tespiti",
+          reason: "🔞 +18 Cinsel / Müstehcen İçerik Tespiti (Gemini Vision Güvenlik Engeli)",
         };
       }
     }
 
+    if (text) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.isNsfw === true) {
+          return {
+            safe: false,
+            isNsfw: true,
+            reason: parsed.reason || "🔞 +18 Müstehcen / Çıplaklık Görseli Tespiti",
+          };
+        }
+      } catch (e) {
+        if (text.toLowerCase().includes('"isnsfw": true') || text.toLowerCase().includes('"isnsfw":true')) {
+          return {
+            safe: false,
+            isNsfw: true,
+            reason: "🔞 +18 Müstehcen / Çıplaklık Görseli Tespiti",
+          };
+        }
+      }
+    }
+
     return { safe: true };
-  } catch (err) {
-    // Graceful error handling - if API quota is reached or fails, do not block regular user uploads
+  } catch (err: any) {
+    const errStr = String(err?.message || err || "").toLowerCase();
+    if (
+      errStr.includes("safety") || 
+      errStr.includes("blocked") || 
+      errStr.includes("sexually_explicit") || 
+      errStr.includes("finishreason") ||
+      errStr.includes("harm_category_sexually_explicit")
+    ) {
+      return {
+        safe: false,
+        isNsfw: true,
+        reason: "🔞 +18 Cinsel / Müstehcen İçerik Tespiti (Gemini Vision Güvenlik Filtresi)",
+      };
+    }
     console.warn("AI Moderation skipped or failed gracefully:", err);
     return { safe: true };
   }

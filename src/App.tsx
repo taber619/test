@@ -52,8 +52,16 @@ export function calculateUploadLimit(
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
-  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
-  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(() => {
+    try {
+      const cached = localStorage.getItem("inanresim_site_config");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return null;
+  });
+  const [isConfigLoaded, setIsConfigLoaded] = useState(() => {
+    return !!localStorage.getItem("inanresim_site_config");
+  });
   const [cachedMaintenance] = useState(() => localStorage.getItem("inanresim_maintenance_mode") === "true");
   const [theme] = useState<"dark">("dark");
 
@@ -72,6 +80,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSiteConfig(data);
+        try {
+          localStorage.setItem("inanresim_site_config", JSON.stringify(data));
+        } catch (e) {}
         if (data.maintenanceModeEnabled !== undefined) {
           localStorage.setItem("inanresim_maintenance_mode", String(data.maintenanceModeEnabled));
         }

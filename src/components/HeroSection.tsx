@@ -92,11 +92,47 @@ export default function HeroSection({
   const [isPublic, setIsPublic] = useState<boolean>(true);
   const [showEmailOrLock, setShowEmailOrLock] = useState<boolean>(false);
   const [recipientEmail, setRecipientEmail] = useState<string>("");
+  const [termsAccepted, setTermsAccepted] = useState<boolean>(true);
 
   // Guest upload count state
-  const [guestCount, setGuestCount] = useState<number>(0);
-  const [guestMaxCount, setGuestMaxCount] = useState<number>(5);
-  const [guestMaxMb, setGuestMaxMb] = useState<number>(20);
+  const [guestCount, setGuestCount] = useState<number>(() => {
+    try {
+      const cached = localStorage.getItem("inanresim_guest_upload_count");
+      if (cached) return Number(cached) || 0;
+    } catch (e) {}
+    return 0;
+  });
+  const [guestMaxCount, setGuestMaxCount] = useState<number>(() => {
+    if (siteConfig?.guestMaxUploadCount !== undefined) return siteConfig.guestMaxUploadCount;
+    try {
+      const cachedConfig = localStorage.getItem("inanresim_site_config");
+      if (cachedConfig) {
+        const parsed = JSON.parse(cachedConfig);
+        if (parsed.guestMaxUploadCount !== undefined) return parsed.guestMaxUploadCount;
+      }
+    } catch (e) {}
+    return 50;
+  });
+  const [guestMaxMb, setGuestMaxMb] = useState<number>(() => {
+    if (siteConfig?.guestMaxMb !== undefined) return siteConfig.guestMaxMb;
+    try {
+      const cachedConfig = localStorage.getItem("inanresim_site_config");
+      if (cachedConfig) {
+        const parsed = JSON.parse(cachedConfig);
+        if (parsed.guestMaxMb !== undefined) return parsed.guestMaxMb;
+      }
+    } catch (e) {}
+    return 100;
+  });
+
+  useEffect(() => {
+    if (siteConfig?.guestMaxUploadCount !== undefined) {
+      setGuestMaxCount(siteConfig.guestMaxUploadCount);
+    }
+    if (siteConfig?.guestMaxMb !== undefined) {
+      setGuestMaxMb(siteConfig.guestMaxMb);
+    }
+  }, [siteConfig]);
 
   const fetchGuestStatus = async () => {
     try {
@@ -107,9 +143,11 @@ export default function HeroSection({
         if (data.guestToken) {
           localStorage.setItem("inanresim_guest_token", data.guestToken);
         }
-        setGuestCount(data.guestUploadCount || 0);
-        setGuestMaxCount(data.guestMaxUploadCount ?? 5);
-        setGuestMaxMb(data.guestMaxMb ?? 20);
+        const count = data.guestUploadCount || 0;
+        setGuestCount(count);
+        localStorage.setItem("inanresim_guest_upload_count", String(count));
+        if (data.guestMaxUploadCount !== undefined) setGuestMaxCount(data.guestMaxUploadCount);
+        if (data.guestMaxMb !== undefined) setGuestMaxMb(data.guestMaxMb);
       }
     } catch (e) {
       console.error("Fetch guest status error:", e);
@@ -368,6 +406,10 @@ export default function HeroSection({
 
   const triggerUpload = async () => {
     if (selectedFiles.length === 0) return;
+    if (!termsAccepted) {
+      setErrorMsg("Yüklemeye devam etmek için Kullanım Koşulları ve Yasal Beyanı kabul etmelisiniz.");
+      return;
+    }
     setIsOptimizing(true);
     setErrorMsg(null);
     try {
@@ -996,6 +1038,26 @@ export default function HeroSection({
                 )}
               </div>
 
+              {/* Terms of Service & Legal Declaration Checkbox */}
+              <div className="pt-3 pb-1 border-t border-slate-200/80 dark:border-slate-800">
+                <label className="flex items-start gap-2.5 cursor-pointer group text-left">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(e) => {
+                      setTermsAccepted(e.target.checked);
+                      if (e.target.checked && errorMsg?.includes("Kullanım Koşulları")) {
+                        setErrorMsg(null);
+                      }
+                    }}
+                    className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-700 focus:ring-blue-500 cursor-pointer shrink-0"
+                  />
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 leading-tight">
+                    Yüklediğim dosyanın <strong className="text-slate-800 dark:text-slate-100 font-bold">T.C. yasalarına, telif haklarına</strong> ve <strong className="text-slate-800 dark:text-slate-100 font-bold">topluluk kurallarına</strong> (+18 cinsel içerik barındırmayan) uygun olduğunu beyan eder, <span className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Kullanım Koşullarını</span> kabul ederim.
+                  </span>
+                </label>
+              </div>
+
               {/* Bottom Buttons */}
               <div className="flex items-center justify-between gap-4 pt-2">
                 <button
@@ -1366,7 +1428,27 @@ export default function HeroSection({
               </div>
             </div>
 
-              {/* Execute trigger */}
+            {/* Terms Checkbox for queue review view */}
+            <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-slate-800">
+              <label className="flex items-start gap-2.5 cursor-pointer group text-left">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => {
+                    setTermsAccepted(e.target.checked);
+                    if (e.target.checked && errorMsg?.includes("Kullanım Koşulları")) {
+                      setErrorMsg(null);
+                    }
+                  }}
+                  className="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-700 focus:ring-blue-500 cursor-pointer shrink-0"
+                />
+                <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 leading-tight">
+                  Yüklediğim tüm içeriklerin <strong className="text-slate-800 dark:text-slate-100 font-bold">T.C. yasalarına, telif haklarına</strong> ve <strong className="text-slate-800 dark:text-slate-100 font-bold">topluluk kurallarına</strong> (+18 cinsel içerik barındırmayan) uygun olduğunu beyan eder, <span className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Kullanım Koşullarını</span> kabul ederim.
+                </span>
+              </label>
+            </div>
+
+            {/* Execute trigger */}
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => fileInputRef.current?.click()}
