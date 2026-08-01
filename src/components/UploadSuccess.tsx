@@ -308,7 +308,7 @@ export default function UploadSuccess({
         <QRCodeShareModal
           isOpen={!!qrModalImage}
           onClose={() => setQrModalImage(null)}
-          imageUrl={`${window.location.origin}/uploads/${qrModalImage.id}`}
+          imageUrl={`${window.location.origin}/i/${qrModalImage.id}`}
           previewUrl={`${window.location.origin}/i/${qrModalImage.id}`}
           title={qrModalImage.name}
         />
