@@ -1,13 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LogIn, UserPlus, Mail, Lock, User, AlertCircle, CheckCircle, Key, ArrowLeft, RefreshCw } from "lucide-react";
 import { ClientUser } from "../types";
 
 interface AuthViewProps {
   onLoginSuccess: (user: ClientUser) => void;
+  initialMode?: "login" | "register" | "forgot" | "reset" | "verify";
 }
 
-export default function AuthView({ onLoginSuccess }: AuthViewProps) {
-  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset" | "verify">("login");
+export default function AuthView({ onLoginSuccess, initialMode = "login" }: AuthViewProps) {
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset" | "verify">(initialMode);
+
+  useEffect(() => {
+    if (initialMode) {
+      setMode(initialMode);
+    }
+  }, [initialMode]);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

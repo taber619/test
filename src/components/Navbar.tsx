@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { 
   Image as ImageIcon, 
   LogIn, 
@@ -26,8 +27,8 @@ import {
 import { ActiveTab, ClientUser, SiteConfig } from "../types";
 
 interface NavbarProps {
-  activeTab: ActiveTab;
-  setActiveTab: (tab: ActiveTab) => void;
+  activeTab?: ActiveTab;
+  setActiveTab?: (tab: ActiveTab) => void;
   currentUser: ClientUser | null;
   onLogout: () => void;
   theme?: "light" | "dark";
@@ -48,6 +49,10 @@ export default function Navbar({
   onOpenInfoModal,
   siteConfig
 }: NavbarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname;
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -96,21 +101,10 @@ export default function Navbar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleMenuClick = (tab: ActiveTab) => {
-    setActiveTab(tab);
+  const handleNavigate = (path: string) => {
+    navigate(path);
     setDropdownOpen(false);
     setMoreMenuOpen(false);
-  };
-
-  const handleOpenInfo = (tab: "faq" | "privacy" | "abuse" | "contact") => {
-    setMoreMenuOpen(false);
-    setActiveTab(tab);
-    onOpenInfoModal?.(tab);
-  };
-
-  const handleBlogClick = () => {
-    setMoreMenuOpen(false);
-    setActiveTab("blog");
   };
 
   return (
@@ -121,7 +115,7 @@ export default function Navbar({
       {/* Brand Logo */}
       <div 
         onClick={() => {
-          setActiveTab("home");
+          handleNavigate("/");
           handleLogoClick();
         }} 
         className="flex items-center space-x-2.5 cursor-pointer select-none group"
@@ -157,14 +151,26 @@ export default function Navbar({
       <nav className="flex items-center space-x-2 sm:space-x-3 text-sm font-semibold" id="nav-menu">
         <button
           id="nav-btn-home"
-          onClick={() => handleMenuClick("home")}
+          onClick={() => handleNavigate("/")}
           className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 cursor-pointer ${
-            activeTab === "home" || activeTab === "url-upload" || activeTab === "image-detail"
+            currentPath === "/"
               ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
               : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900/60 hover:text-slate-900 dark:hover:text-slate-100"
           }`}
         >
           Ana Sayfa
+        </button>
+
+        <button
+          id="nav-btn-upload"
+          onClick={() => handleNavigate("/upload")}
+          className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 cursor-pointer ${
+            currentPath === "/upload"
+              ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900/60 hover:text-slate-900 dark:hover:text-slate-100"
+          }`}
+        >
+          Resim Yükle
         </button>
 
         {/* PRO VIP Button (Only if VIP system is enabled) */}
@@ -242,22 +248,34 @@ export default function Navbar({
                   )}
 
                   <button
-                    onClick={() => handleMenuClick("gallery")}
+                    onClick={() => handleNavigate("/dashboard")}
                     className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
-                      activeTab === "gallery"
+                      currentPath === "/dashboard"
                         ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
                         : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850"
                     }`}
                   >
                     <ImageIcon className="w-4 h-4 text-blue-500" />
-                    Benim Galerim
+                    Kullanıcı Paneli (Galerim)
+                  </button>
+
+                  <button
+                    onClick={() => handleNavigate("/gallery")}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
+                      currentPath === "/gallery"
+                        ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850"
+                    }`}
+                  >
+                    <Radio className="w-4 h-4 text-indigo-500" />
+                    Genel Galeri
                   </button>
 
                   {showAdminEntry && (
                     <button
-                      onClick={() => handleMenuClick("admin")}
+                      onClick={() => handleNavigate("/admin")}
                       className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
-                        activeTab === "admin"
+                        currentPath === "/admin"
                           ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
                           : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850"
                       }`}
@@ -274,6 +292,7 @@ export default function Navbar({
                     onClick={() => {
                       setDropdownOpen(false);
                       onLogout();
+                      handleNavigate("/");
                     }}
                     className="w-full text-left px-3 py-2 rounded-xl text-xs font-black text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all flex items-center gap-2.5 cursor-pointer"
                   >
@@ -290,9 +309,9 @@ export default function Navbar({
             {showAdminEntry && (
               <button
                 id="nav-btn-admin-guest"
-                onClick={() => handleMenuClick("admin")}
+                onClick={() => handleNavigate("/admin")}
                 className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer flex items-center gap-2 tracking-wide uppercase ${
-                  activeTab === "admin"
+                  currentPath === "/admin"
                     ? "bg-white dark:bg-slate-850 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200/30 dark:border-slate-800/30"
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                 }`}
@@ -303,16 +322,29 @@ export default function Navbar({
             )}
 
             <button
-              id="nav-btn-auth"
-              onClick={() => handleMenuClick("auth")}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer flex items-center gap-2 tracking-wide uppercase ${
-                activeTab === "auth"
+              id="nav-btn-login"
+              onClick={() => handleNavigate("/login")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer flex items-center gap-1.5 tracking-wide uppercase ${
+                currentPath === "/login"
                   ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
                   : "bg-blue-500 hover:bg-blue-600 text-white shadow-sm"
               }`}
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Giriş / Üye Ol</span>
+              <span>Giriş Yap</span>
+            </button>
+
+            <button
+              id="nav-btn-register"
+              onClick={() => handleNavigate("/register")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer flex items-center gap-1.5 tracking-wide uppercase ${
+                currentPath === "/register"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                  : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100"
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Kayıt Ol</span>
             </button>
           </div>
         )}
@@ -341,9 +373,9 @@ export default function Navbar({
               </div>
               <div className="space-y-0.5">
                 <button
-                  onClick={() => handleMenuClick("home")}
+                  onClick={() => handleNavigate("/upload")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "home" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/upload" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <Upload className="w-4 h-4 text-blue-500 shrink-0" />
@@ -351,9 +383,9 @@ export default function Navbar({
                 </button>
 
                 <button
-                  onClick={() => handleMenuClick("gallery")}
+                  onClick={() => handleNavigate("/gallery")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "gallery" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/gallery" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <Radio className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -361,9 +393,9 @@ export default function Navbar({
                 </button>
 
                 <button
-                  onClick={handleBlogClick}
+                  onClick={() => handleNavigate("/blog")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "blog" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/blog" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <BookOpen className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -379,9 +411,9 @@ export default function Navbar({
               </div>
               <div className="space-y-0.5">
                 <button
-                  onClick={() => handleMenuClick("about")}
+                  onClick={() => handleNavigate("/about")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "about" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/about" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <Info className="w-4 h-4 text-purple-500 shrink-0" />
@@ -398,9 +430,9 @@ export default function Navbar({
 
               <div className="space-y-0.5">
                 <button
-                  onClick={() => handleOpenInfo("faq")}
+                  onClick={() => handleNavigate("/help")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "faq" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/help" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <HelpCircle className="w-4 h-4 text-blue-500 shrink-0" />
@@ -408,9 +440,9 @@ export default function Navbar({
                 </button>
 
                 <button
-                  onClick={() => handleOpenInfo("privacy")}
+                  onClick={() => handleNavigate("/privacy")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "privacy" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/privacy" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -418,9 +450,9 @@ export default function Navbar({
                 </button>
 
                 <button
-                  onClick={() => handleMenuClick("terms")}
+                  onClick={() => handleNavigate("/terms")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "terms" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/terms" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <Scale className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -428,9 +460,9 @@ export default function Navbar({
                 </button>
 
                 <button
-                  onClick={() => handleOpenInfo("abuse")}
+                  onClick={() => handleNavigate("/abuse")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "abuse" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/abuse" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
@@ -438,9 +470,9 @@ export default function Navbar({
                 </button>
 
                 <button
-                  onClick={() => handleOpenInfo("contact")}
+                  onClick={() => handleNavigate("/contact")}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
-                    activeTab === "contact" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    currentPath === "/contact" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   <Mail className="w-4 h-4 text-amber-500 shrink-0" />
@@ -454,4 +486,5 @@ export default function Navbar({
     </header>
   );
 }
+
 

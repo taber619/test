@@ -5953,125 +5953,126 @@ export default function AdminView({ onBack }: AdminViewProps) {
               </div>
             </div>
           )}
-          {/* ANNOUNCEMENT TEMPLATE CREATE/EDIT MODAL */}
-          {showTplModal && (
-            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
-                <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                  <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-500" />
-                    {editingTpl ? "Hazır Taslağı Düzenle" : "Yeni Hazır Duyuru Taslağı Oluştur"}
-                  </h3>
+        </div>
+      )}
 
-                  <button
-                    type="button"
-                    onClick={() => setShowTplModal(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+      {/* ANNOUNCEMENT TEMPLATE CREATE/EDIT MODAL (GLOBAL) */}
+      {showTplModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                {editingTpl ? "Hazır Taslağı Düzenle" : "Yeni Hazır Duyuru Taslağı Oluştur"}
+              </h3>
+
+              <button
+                type="button"
+                onClick={() => setShowTplModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTplForm} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="font-extrabold text-slate-800 block mb-1">Taslak Başlığı *</label>
+                <input
+                  type="text"
+                  required
+                  value={tplTitle}
+                  onChange={(e) => setTplTitle(e.target.value)}
+                  placeholder="Örn: 🚀 İnanResim v3.0 Yayında!"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-extrabold text-slate-800 block mb-1">Kategori *</label>
+                  <select
+                    value={tplCategory}
+                    onChange={(e) => setTplCategory(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-bold text-slate-800"
                   >
-                    <X className="w-4 h-4" />
-                  </button>
+                    <option value="update">🚀 Sürüm Güncellemesi</option>
+                    <option value="maintenance">🛠️ Sistem Bakımı</option>
+                    <option value="campaign">🎁 Kampanya / VIP Fırsatı</option>
+                    <option value="security">🔒 Güvenlik & Gizlilik</option>
+                    <option value="warning">⚠️ Topluluk Uyarısı</option>
+                    <option value="info">ℹ️ Genel Bilgilendirme</option>
+                  </select>
                 </div>
 
-                <form onSubmit={handleSaveTplForm} className="p-5 space-y-3.5 text-xs">
-                  <div>
-                    <label className="font-extrabold text-slate-800 block mb-1">Taslak Başlığı *</label>
-                    <input
-                      type="text"
-                      required
-                      value={tplTitle}
-                      onChange={(e) => setTplTitle(e.target.value)}
-                      placeholder="Örn: 🚀 İnanResim v3.0 Yayında!"
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all font-bold text-slate-900"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-extrabold text-slate-800 block mb-1">Kategori *</label>
-                      <select
-                        value={tplCategory}
-                        onChange={(e) => setTplCategory(e.target.value as any)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-bold text-slate-800"
-                      >
-                        <option value="update">🚀 Sürüm Güncellemesi</option>
-                        <option value="maintenance">🛠️ Sistem Bakımı</option>
-                        <option value="campaign">🎁 Kampanya / VIP Fırsatı</option>
-                        <option value="security">🔒 Güvenlik & Gizlilik</option>
-                        <option value="warning">⚠️ Topluluk Uyarısı</option>
-                        <option value="info">ℹ️ Genel Bilgilendirme</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="font-extrabold text-slate-800 block mb-1">Öncelik Seviyesi</label>
-                      <select
-                        value={tplPriority}
-                        onChange={(e) => setTplPriority(e.target.value as any)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-bold text-slate-800"
-                      >
-                        <option value="high">🔥 Yüksek (En Üstte)</option>
-                        <option value="normal">⚡ Normal</option>
-                        <option value="low">💡 Düşük</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="font-extrabold text-slate-800 block mb-1">Taslak Detay İçeriği *</label>
-                    <textarea
-                      required
-                      rows={3}
-                      value={tplText}
-                      onChange={(e) => setTplText(e.target.value)}
-                      placeholder="Bu taslak seçildiğinde yer alacak duyuru mesaj metni..."
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-medium text-slate-800 leading-relaxed"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-extrabold text-slate-800 block mb-1">Buton Metni (Opsiyonel)</label>
-                      <input
-                        type="text"
-                        value={tplActionText}
-                        onChange={(e) => setTplActionText(e.target.value)}
-                        placeholder="Örn: VIP Özellikleri Gör"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-semibold text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="font-extrabold text-slate-800 block mb-1">Yönlendirme Linki (Opsiyonel)</label>
-                      <input
-                        type="text"
-                        value={tplActionUrl}
-                        onChange={(e) => setTplActionUrl(e.target.value)}
-                        placeholder="Örn: #vip veya https://..."
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-semibold text-slate-800"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowTplModal(false)}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all cursor-pointer"
-                    >
-                      İptal
-                    </button>
-
-                    <button
-                      type="submit"
-                      className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md transition-all cursor-pointer"
-                    >
-                      {editingTpl ? "Taslağı Güncelle" : "Kütüphaneye Kaydet"}
-                    </button>
-                  </div>
-                </form>
+                <div>
+                  <label className="font-extrabold text-slate-800 block mb-1">Öncelik Seviyesi</label>
+                  <select
+                    value={tplPriority}
+                    onChange={(e) => setTplPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-bold text-slate-800"
+                  >
+                    <option value="high">🔥 Yüksek (En Üstte)</option>
+                    <option value="normal">⚡ Normal</option>
+                    <option value="low">💡 Düşük</option>
+                  </select>
+                </div>
               </div>
-            </div>
-          )}
+
+              <div>
+                <label className="font-extrabold text-slate-800 block mb-1">Taslak Detay İçeriği *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={tplText}
+                  onChange={(e) => setTplText(e.target.value)}
+                  placeholder="Bu taslak seçildiğinde yer alacak duyuru mesaj metni..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-medium text-slate-800 leading-relaxed"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-extrabold text-slate-800 block mb-1">Buton Metni (Opsiyonel)</label>
+                  <input
+                    type="text"
+                    value={tplActionText}
+                    onChange={(e) => setTplActionText(e.target.value)}
+                    placeholder="Örn: VIP Özellikleri Gör"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-semibold text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-extrabold text-slate-800 block mb-1">Yönlendirme Linki (Opsiyonel)</label>
+                  <input
+                    type="text"
+                    value={tplActionUrl}
+                    onChange={(e) => setTplActionUrl(e.target.value)}
+                    placeholder="Örn: #vip veya https://..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-semibold text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTplModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  İptal
+                </button>
+
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  {editingTpl ? "Taslağı Güncelle" : "Kütüphaneye Kaydet"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
