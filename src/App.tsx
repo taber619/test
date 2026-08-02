@@ -97,7 +97,10 @@ export default function App() {
       const res = await fetch("/api/config");
       if (res.ok) {
         const data = await res.json();
-        setSiteConfig(data);
+        setSiteConfig((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+          return data;
+        });
         try {
           localStorage.setItem("inanresim_site_config", JSON.stringify(data));
         } catch (e) {}
@@ -161,7 +164,10 @@ export default function App() {
             const res = await fetch(`/api/auth/me?id=${encodeURIComponent(u.id)}`);
             if (res.ok) {
               const freshUser = await res.json();
-              setCurrentUser(freshUser);
+              setCurrentUser((prev) => {
+                if (JSON.stringify(prev) === JSON.stringify(freshUser)) return prev;
+                return freshUser;
+              });
               localStorage.setItem("hizli_resim_user", JSON.stringify(freshUser));
             }
           }
@@ -289,9 +295,6 @@ export default function App() {
 
       if (results.length > 0) {
         setUploadedImages(results);
-        if (results.length === 1) {
-          navigate(`/image/${results[0].id}`);
-        }
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -304,7 +307,7 @@ export default function App() {
 
   const handleUrlUploadSuccess = (img: ClientImage) => {
     setUploadedImages([img]);
-    navigate(`/image/${img.id}`);
+    navigate("/");
   };
 
   const handleLockImage = async (id: string, pass: string): Promise<boolean> => {

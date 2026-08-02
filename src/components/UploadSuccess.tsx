@@ -69,21 +69,35 @@ export default function UploadSuccess({
 
       <div className="space-y-8" id="uploaded-images-list">
         {uploadedImages.map((img) => {
-          const currentTab = activeTab[img.id] || "preview";
+          const currentTab = activeTab[img.id] || "direct";
           const isCopied = (type: string) => copiedIndex === `${img.id}-${type}`;
+
+          const origin = typeof window !== "undefined" ? window.location.origin : "";
+          const directUrl = img.directUrl || `${origin}/api/images/${img.id}`;
+          const previewUrl = img.previewUrl || `${origin}/i/${img.id}`;
+          const isVideo = img.mimeType?.startsWith("video/");
+          const bbCode = img.bbCode || (isVideo ? `[VIDEO]${directUrl}[/VIDEO]` : `[IMG]${directUrl}[/IMG]`);
+          const htmlCode = img.htmlCode || (isVideo 
+            ? `<video src="${directUrl}" controls width="100%"></video>` 
+            : `<a href="${previewUrl}"><img src="${directUrl}" alt="${img.name}" /></a>`);
+          const markdownCode = img.markdownCode || (isVideo 
+            ? `[${img.name}](${directUrl})` 
+            : `![${img.name}](${directUrl})`);
 
           const getLinkValue = () => {
             switch (currentTab) {
-              case "preview":
-                return img.previewUrl;
               case "direct":
-                return img.directUrl;
+                return directUrl;
+              case "preview":
+                return previewUrl;
               case "bbcode":
-                return img.bbCode;
+                return bbCode;
               case "html":
-                return img.htmlCode;
+                return htmlCode;
               case "markdown":
-                return img.markdownCode;
+                return markdownCode;
+              default:
+                return directUrl;
             }
           };
 
@@ -252,8 +266,8 @@ export default function UploadSuccess({
                   {/* Tabs */}
                   <div className="flex flex-wrap gap-1.5 mt-3 border-b border-slate-100 dark:border-slate-800 pb-2">
                     {[
-                      { id: "preview", label: "İndirme Sayfası Linki ⭐ (Önerilen)" },
-                      { id: "direct", label: "Doğrudan İndirme Bağlantısı" },
+                      { id: "direct", label: "Doğrudan Bağlantı (Direk Link) ⭐" },
+                      { id: "preview", label: "İndirme / Detay Sayfası Linki" },
                       { id: "bbcode", label: "BBCode (Forum)" },
                       { id: "html", label: "HTML Embed" },
                       { id: "markdown", label: "Markdown" },

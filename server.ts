@@ -3358,6 +3358,37 @@ async function startServer() {
     }
   });
 
+  function formatUploadResponse(img: StoredImage, req: any) {
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const directUrl = `${origin}/api/images/${img.id}`;
+    const previewUrl = `${origin}/i/${img.id}`;
+    const isVideo = img.mimeType?.startsWith("video/");
+    const bbCode = isVideo ? `[VIDEO]${directUrl}[/VIDEO]` : `[IMG]${directUrl}[/IMG]`;
+    const htmlCode = isVideo
+      ? `<video src="${directUrl}" controls width="100%"></video>`
+      : `<a href="${previewUrl}"><img src="${directUrl}" alt="${img.name}" /></a>`;
+    const markdownCode = isVideo
+      ? `[${img.name}](${directUrl})`
+      : `![${img.name}](${directUrl})`;
+
+    return {
+      success: true,
+      id: img.id,
+      name: img.name,
+      mimeType: img.mimeType,
+      size: img.size,
+      deleteToken: img.deleteToken,
+      deleteAfter: img.deleteAfter,
+      uploadedAt: img.uploadedAt,
+      directUrl,
+      previewUrl,
+      bbCode,
+      htmlCode,
+      markdownCode,
+      hasPassword: !!img.password,
+    };
+  }
+
   // Handle Image & File Upload
   app.post("/api/upload", (req: any, res: any, next: any) => {
     uploadMiddleware.single("file")(req, res, (err: any) => {
@@ -3669,14 +3700,7 @@ async function startServer() {
         res.setHeader("Set-Cookie", `guest_token=${token}; Path=/; Max-Age=31536000; SameSite=Lax`);
       }
 
-      res.status(200).json({
-        success: true,
-        id,
-        name,
-        size,
-        deleteToken,
-        uploadedAt: img.uploadedAt,
-      });
+      res.status(200).json(formatUploadResponse(img, req));
     } catch (err: any) {
       console.error("Upload error:", err);
       logServerError({
@@ -3938,14 +3962,7 @@ async function startServer() {
         res.setHeader("Set-Cookie", `guest_token=${token}; Path=/; Max-Age=31536000; SameSite=Lax`);
       }
 
-      res.status(200).json({
-        success: true,
-        id,
-        name: fileName,
-        size: finalSize,
-        deleteToken,
-        uploadedAt: img.uploadedAt,
-      });
+      res.status(200).json(formatUploadResponse(img, req));
     } catch (err: any) {
       console.error("Complete chunked upload error:", err);
       res.status(500).json({ error: "Parçalar birleştirilirken bir sunucu hatası oluştu." });
@@ -4138,14 +4155,7 @@ async function startServer() {
         res.setHeader("Set-Cookie", `guest_token=${token}; Path=/; Max-Age=31536000; SameSite=Lax`);
       }
 
-      res.status(200).json({
-        success: true,
-        id,
-        name,
-        size: buffer.length,
-        deleteToken,
-        uploadedAt: img.uploadedAt,
-      });
+      res.status(200).json(formatUploadResponse(img, req));
     } catch (err: any) {
       console.error("URL upload error:", err);
       res.status(500).json({ error: "URL'den resim indirilirken bir sunucu hatası oluştu." });
@@ -4163,14 +4173,6 @@ async function startServer() {
 
       if (!image) {
         res.status(404).send("Resim veya dosya bulunamadı.");
-        return;
-      }
-
-      // If visited directly in browser address bar without dl=1, redirect to the download UI page
-      const acceptHeader = req.headers.accept || "";
-      const secFetchDest = req.headers["sec-fetch-dest"];
-      if ((acceptHeader.includes("text/html") || secFetchDest === "document") && dl !== "1" && download !== "true") {
-        res.redirect(`/?view=image-detail&id=${id}`);
         return;
       }
 
