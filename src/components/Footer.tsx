@@ -21,6 +21,16 @@ export default function Footer({ onOpenAdsModal, onNavigateTab, onOpenInfoModal,
     }
   };
 
+  const showTerms = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigateTab?.("terms");
+  };
+
+  const showAbout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigateTab?.("about");
+  };
+
   const showFaq = (e: React.MouseEvent) => {
     e.preventDefault();
     if (onNavigateTab) {
@@ -41,24 +51,27 @@ export default function Footer({ onOpenAdsModal, onNavigateTab, onOpenInfoModal,
 
   const showApiDocs = (e: React.MouseEvent) => {
     e.preventDefault();
-    alert("API Dokümantasyonu:\nResimlerinizi programatik olarak yüklemek için API servisimiz yakında açılacaktır.");
+    onNavigateTab?.("api-docs");
   };
 
   return (
     <footer className="flex-none py-6 sm:h-14 bg-slate-900 border-t border-slate-800 px-6 lg:px-12 flex flex-col sm:flex-row items-center justify-between text-xs font-medium text-slate-400 gap-4" id="main-footer">
       <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
+        <button type="button" onClick={showAbout} className="hover:text-blue-400 transition-colors cursor-pointer">
+          Hakkımızda
+        </button>
         <button type="button" onClick={showPrivacy} className="hover:text-blue-400 transition-colors cursor-pointer">
-          Gizlilik & Kullanım Şartları
+          Gizlilik Politikası
+        </button>
+        <button type="button" onClick={showTerms} className="hover:text-blue-400 transition-colors cursor-pointer">
+          Kullanım Şartları
         </button>
         <button type="button" onClick={showFaq} className="hover:text-blue-400 transition-colors cursor-pointer">
           Yardım (SSS)
         </button>
         <button type="button" onClick={showContact} className="hover:text-blue-400 transition-colors cursor-pointer">
-          İletişim & Destek ({domain})
+          İletişim & Destek
         </button>
-        <a href="#api-doc" onClick={showApiDocs} className="hover:text-blue-400 transition-colors">
-          API Dokümantasyonu
-        </a>
         {onOpenAdsModal && (
           <button
             type="button"

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   BookOpen, 
   Search, 
@@ -53,8 +53,35 @@ export default function BlogView({ onNavigateHome, onOpenVipModal }: BlogViewPro
   const [newCommentText, setNewCommentText] = useState("");
   const [newCommentName, setNewCommentName] = useState("");
   const [commentAdded, setCommentAdded] = useState(false);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const posts: BlogPost[] = [
+  useEffect(() => {
+    fetchBlogPosts();
+  }, []);
+
+  const fetchBlogPosts = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/blog/posts");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.posts && Array.isArray(data.posts) && data.posts.length > 0) {
+          setPosts(data.posts);
+        } else {
+          setPosts(fallbackPosts);
+        }
+      } else {
+        setPosts(fallbackPosts);
+      }
+    } catch (e) {
+      setPosts(fallbackPosts);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fallbackPosts: BlogPost[] = [
     {
       id: "post-1",
       title: "İnanResim 2.0 Yayında: 5 GB VIP Transfer, Özel Filigran ve Yeni Sunucu Altyapısı!",

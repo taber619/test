@@ -21,6 +21,9 @@ import FaqSection from "./components/FaqSection";
 import PrivacyView from "./components/PrivacyView";
 import AbuseReportView from "./components/AbuseReportView";
 import ContactView from "./components/ContactView";
+import ApiDocsView from "./components/ApiDocsView";
+import AboutView from "./components/AboutView";
+import TermsView from "./components/TermsView";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -724,6 +727,33 @@ export default function App() {
       );
     }
 
+    if (activeTab === "api-docs") {
+      return (
+        <ApiDocsView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
+
+    if (activeTab === "about") {
+      return (
+        <AboutView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
+
+    if (activeTab === "terms") {
+      return (
+        <TermsView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
+
     // Default Home view
     if (uploadedImages.length > 0) {
       return (
@@ -1100,8 +1130,25 @@ export default function App() {
       )}
 
       {/* Main Container Workspace */}
-      <main className="flex-grow bg-slate-50/50 dark:bg-slate-950">
-        {renderContent()}
+      <main className="flex-grow bg-slate-50/50 dark:bg-slate-950 overflow-x-hidden relative">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={
+              activeTab === "image-detail" && selectedDetailId
+                ? `detail-${selectedDetailId}`
+                : uploadedImages.length > 0 && activeTab === "home"
+                ? "upload-success"
+                : activeTab
+            }
+            initial={{ opacity: 0, x: 28 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -28 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full min-h-full"
+          >
+            {renderContent()}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Floating Chat Panel */}

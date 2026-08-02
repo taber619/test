@@ -2818,6 +2818,243 @@ async function startServer() {
     inMemoryAdRequests = inMemoryAdRequests.filter(r => r.id !== id);
   }
 
+  // --- ABUSE REPORTS DATA ENGINE ---
+  interface AbuseReportItem {
+    id: string;
+    imageUrl: string;
+    reason: string;
+    email: string;
+    details: string;
+    createdAt: number;
+    status: "new" | "read" | "resolved";
+  }
+  let inMemoryAbuseReports: AbuseReportItem[] = [];
+
+  async function dbGetAbuseReports(): Promise<AbuseReportItem[]> {
+    if (useFirebase && db) {
+      try {
+        const snap = await getDocs(collection(db, "abuse_reports"));
+        const list: AbuseReportItem[] = [];
+        snap.forEach(docSnap => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as AbuseReportItem);
+        });
+        return list.sort((a, b) => b.createdAt - a.createdAt);
+      } catch (e) {
+        console.error("Firebase get abuse reports error:", e);
+      }
+    }
+    return [...inMemoryAbuseReports].sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async function dbSaveAbuseReport(item: AbuseReportItem): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "abuse_reports", item.id), item);
+      } catch (e) {
+        console.error("Firebase save abuse report error:", e);
+      }
+    }
+    inMemoryAbuseReports.push(item);
+  }
+
+  async function dbUpdateAbuseReportStatus(id: string, status: "new" | "read" | "resolved"): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await updateDoc(doc(db, "abuse_reports", id), { status });
+      } catch (e) {
+        console.error("Firebase update abuse report status error:", e);
+      }
+    }
+    const found = inMemoryAbuseReports.find(r => r.id === id);
+    if (found) found.status = status;
+  }
+
+  async function dbDeleteAbuseReport(id: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await deleteDoc(doc(db, "abuse_reports", id));
+      } catch (e) {
+        console.error("Firebase delete abuse report error:", e);
+      }
+    }
+    inMemoryAbuseReports = inMemoryAbuseReports.filter(r => r.id !== id);
+  }
+
+  // --- CONTACT MESSAGES DATA ENGINE ---
+  interface ContactMessageItem {
+    id: string;
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
+    createdAt: number;
+    status: "new" | "read" | "replied";
+  }
+  let inMemoryContactMessages: ContactMessageItem[] = [];
+
+  async function dbGetContactMessages(): Promise<ContactMessageItem[]> {
+    if (useFirebase && db) {
+      try {
+        const snap = await getDocs(collection(db, "contact_messages"));
+        const list: ContactMessageItem[] = [];
+        snap.forEach(docSnap => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as ContactMessageItem);
+        });
+        return list.sort((a, b) => b.createdAt - a.createdAt);
+      } catch (e) {
+        console.error("Firebase get contact messages error:", e);
+      }
+    }
+    return [...inMemoryContactMessages].sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async function dbSaveContactMessage(item: ContactMessageItem): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "contact_messages", item.id), item);
+      } catch (e) {
+        console.error("Firebase save contact message error:", e);
+      }
+    }
+    inMemoryContactMessages.push(item);
+  }
+
+  async function dbUpdateContactMessageStatus(id: string, status: "new" | "read" | "replied"): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await updateDoc(doc(db, "contact_messages", id), { status });
+      } catch (e) {
+        console.error("Firebase update contact message status error:", e);
+      }
+    }
+    const found = inMemoryContactMessages.find(r => r.id === id);
+    if (found) found.status = status;
+  }
+
+  async function dbDeleteContactMessage(id: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await deleteDoc(doc(db, "contact_messages", id));
+      } catch (e) {
+        console.error("Firebase delete contact message error:", e);
+      }
+    }
+    inMemoryContactMessages = inMemoryContactMessages.filter(r => r.id !== id);
+  }
+
+  // --- BLOG POSTS DATA ENGINE ---
+  interface BlogPostItem {
+    id: string;
+    title: string;
+    summary: string;
+    content: string[];
+    category: "guncelleme" | "rehber" | "guvenlik";
+    categoryLabel: string;
+    author: string;
+    date: string;
+    readTime: string;
+    imageUrl: string;
+    views: number;
+    likes: number;
+    tags: string[];
+    createdAt: number;
+  }
+
+  const defaultBlogPosts: BlogPostItem[] = [
+    {
+      id: "post-1",
+      title: "İnanResim 2.0 Yayında: 5 GB VIP Transfer, Özel Filigran ve Yeni Sunucu Altyapısı!",
+      summary: "Türkiye'nin en hızlı resim yükleme platformu İnanResim yenilendi! PRO VIP üyeler için 5 GB tek seferlik transfer, şifreli klasörleme ve filigran motoru aktif edildi.",
+      category: "guncelleme",
+      categoryLabel: "Sistem Güncellemesi",
+      author: "İnanResim Sistem Ekibi",
+      date: "02 Ağustos 2026",
+      readTime: "3 dk okuma",
+      imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+      views: 1420,
+      likes: 89,
+      tags: ["Güncelleme", "VIP", "Filigran", "Yüksek Hız"],
+      createdAt: Date.now() - 86400000 * 2
+    },
+    {
+      id: "post-2",
+      title: "Fotoğrafçılık Rehberi: Resim Sıkıştırma ve Kalite Kaybını Önleme Teknikleri",
+      summary: "Web siteleriniz ve forum paylaşımlarınız için yüksek çözünürlüklü fotoğrafları kalite kaybı yaşamadan nasıl optimize edebilirsiniz? Detaylı teknik rehberimiz.",
+      category: "rehber",
+      categoryLabel: "Fotoğrafçılık & Rehber",
+      author: "Murat Can (Kıdemli Tasarımcı)",
+      date: "28 Temmuz 2026",
+      readTime: "5 dk okuma",
+      imageUrl: "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=1000&q=80",
+      views: 2150,
+      likes: 134,
+      tags: ["Rehber", "Optimizasyon", "WEBP", "Sıkıştırma"],
+      createdAt: Date.now() - 86400000 * 5
+    },
+    {
+      id: "post-3",
+      title: "Uçtan Uca Şifreleme ve Veri Güvenliği Standartlarımız Nelerdir?",
+      summary: "Gizliliğiniz bizim için her şeyden önemli. İnanResim sunucularında yüklenen resimlerin KVKK ve AES-256 standartlarına uygun olarak nasıl korunduğunu öğrenin.",
+      category: "guvenlik",
+      categoryLabel: "Güvenlik & Gizlilik",
+      author: "Güvenlik Operasyon Merkezi",
+      date: "20 Temmuz 2026",
+      readTime: "4 dk okuma",
+      imageUrl: "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1000&q=80",
+      views: 1890,
+      likes: 112,
+      tags: ["Güvenlik", "Şifreleme", "KVKK", "Gizlilik"],
+      createdAt: Date.now() - 86400000 * 10
+    }
+  ];
+
+  let inMemoryBlogPosts: BlogPostItem[] = [...defaultBlogPosts];
+
+  async function dbGetBlogPosts(): Promise<BlogPostItem[]> {
+    if (useFirebase && db) {
+      try {
+        const snap = await getDocs(collection(db, "blog_posts"));
+        if (!snap.empty) {
+          const list: BlogPostItem[] = [];
+          snap.forEach(docSnap => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as BlogPostItem);
+          });
+          return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        }
+      } catch (e) {
+        console.error("Firebase get blog posts error:", e);
+      }
+    }
+    return [...inMemoryBlogPosts].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
+  async function dbSaveBlogPost(post: BlogPostItem): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await setDoc(doc(db, "blog_posts", post.id), post);
+      } catch (e) {
+        console.error("Firebase save blog post error:", e);
+      }
+    }
+    const idx = inMemoryBlogPosts.findIndex(p => p.id === post.id);
+    if (idx >= 0) {
+      inMemoryBlogPosts[idx] = post;
+    } else {
+      inMemoryBlogPosts.push(post);
+    }
+  }
+
+  async function dbDeleteBlogPost(id: string): Promise<void> {
+    if (useFirebase && db) {
+      try {
+        await deleteDoc(doc(db, "blog_posts", id));
+      } catch (e) {
+        console.error("Firebase delete blog post error:", e);
+      }
+    }
+    inMemoryBlogPosts = inMemoryBlogPosts.filter(p => p.id !== id);
+  }
+
   async function dbIncrementGuestUploadCount(guestToken: string): Promise<number> {
     const current = await dbGetGuestUploadCount(guestToken);
     const newCount = current + 1;
@@ -5459,6 +5696,254 @@ ${urlsXml}</urlset>`;
     } catch (err) {
       console.error("Delete ad request error:", err);
       res.status(500).json({ error: "Silinemedi." });
+    }
+  });
+
+  // --- ABUSE REPORTS ENDPOINTS ---
+
+  // Submit Abuse Report (Public)
+  app.post("/api/report-abuse", async (req, res) => {
+    try {
+      const { imageUrl, reason, email, details } = req.body;
+      if (!imageUrl || !email) {
+        return res.status(400).json({ error: "Görsel adresi ve e-posta zorunludur." });
+      }
+
+      const report: AbuseReportItem = {
+        id: "rep_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+        imageUrl: imageUrl.trim(),
+        reason: reason || "dmca",
+        email: email.trim(),
+        details: (details || "").trim(),
+        createdAt: Date.now(),
+        status: "new"
+      };
+
+      await dbSaveAbuseReport(report);
+      res.json({ success: true, message: "İhbarınız başarıyla kaydedildi." });
+    } catch (err) {
+      console.error("Report abuse error:", err);
+      res.status(500).json({ error: "İhbar iletilirken bir hata oluştu." });
+    }
+  });
+
+  // Get Abuse Reports (Admin only)
+  app.get("/api/admin/reports", async (req, res) => {
+    try {
+      const reports = await dbGetAbuseReports();
+      res.json({ reports });
+    } catch (err) {
+      console.error("Get abuse reports error:", err);
+      res.status(500).json({ error: "İhbarlar alınamadı." });
+    }
+  });
+
+  // Update Abuse Report Status (Admin only)
+  app.post("/api/admin/reports/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!status || !["new", "read", "resolved"].includes(status)) {
+        return res.status(400).json({ error: "Geçersiz durum." });
+      }
+      await dbUpdateAbuseReportStatus(id, status);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Update report status error:", err);
+      res.status(500).json({ error: "Durum güncellenemedi." });
+    }
+  });
+
+  // Delete Abuse Report (Admin only)
+  app.delete("/api/admin/reports/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await dbDeleteAbuseReport(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete report error:", err);
+      res.status(500).json({ error: "Silinemedi." });
+    }
+  });
+
+  // --- CONTACT MESSAGES ENDPOINTS ---
+
+  // Submit Contact Message (Public)
+  app.post("/api/contact-message", async (req, res) => {
+    try {
+      const { name, email, subject, message } = req.body;
+      if (!name || !email || !message) {
+        return res.status(400).json({ error: "Ad Soyad, E-posta ve Mesaj alanları zorunludur." });
+      }
+
+      const msg: ContactMessageItem = {
+        id: "msg_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+        name: name.trim(),
+        email: email.trim(),
+        subject: (subject || "Destek / Genel").trim(),
+        message: message.trim(),
+        createdAt: Date.now(),
+        status: "new"
+      };
+
+      await dbSaveContactMessage(msg);
+      res.json({ success: true, message: "Mesajınız başarıyla iletildi." });
+    } catch (err) {
+      console.error("Contact message error:", err);
+      res.status(500).json({ error: "Mesaj iletilirken bir hata oluştu." });
+    }
+  });
+
+  // Get Contact Messages (Admin only)
+  app.get("/api/admin/contact-messages", async (req, res) => {
+    try {
+      const messages = await dbGetContactMessages();
+      res.json({ messages });
+    } catch (err) {
+      console.error("Get contact messages error:", err);
+      res.status(500).json({ error: "Mesajlar alınamadı." });
+    }
+  });
+
+  // Update Contact Message Status (Admin only)
+  app.post("/api/admin/contact-messages/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!status || !["new", "read", "replied"].includes(status)) {
+        return res.status(400).json({ error: "Geçersiz durum." });
+      }
+      await dbUpdateContactMessageStatus(id, status);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Update contact message status error:", err);
+      res.status(500).json({ error: "Durum güncellenemedi." });
+    }
+  });
+
+  // Delete Contact Message (Admin only)
+  app.delete("/api/admin/contact-messages/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await dbDeleteContactMessage(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete contact message error:", err);
+      res.status(500).json({ error: "Silinemedi." });
+    }
+  });
+
+  // --- BLOG POSTS ENDPOINTS ---
+
+  // Get Blog Posts (Public)
+  app.get("/api/blog/posts", async (req, res) => {
+    try {
+      const posts = await dbGetBlogPosts();
+      res.json({ posts });
+    } catch (err) {
+      console.error("Get blog posts error:", err);
+      res.status(500).json({ error: "Blog yazıları alınamadı." });
+    }
+  });
+
+  // Create Blog Post (Admin only)
+  app.post("/api/admin/blog/posts", async (req, res) => {
+    try {
+      const { title, summary, content, category, categoryLabel, author, date, readTime, imageUrl, tags } = req.body;
+      if (!title || !summary || !content) {
+        return res.status(400).json({ error: "Başlık, özet ve içerik alanları zorunludur." });
+      }
+
+      const contentArray = Array.isArray(content) 
+        ? content 
+        : typeof content === "string" 
+          ? content.split("\n").filter(line => line.trim().length > 0)
+          : [];
+
+      const tagsArray = Array.isArray(tags)
+        ? tags
+        : typeof tags === "string"
+          ? tags.split(",").map(t => t.trim()).filter(Boolean)
+          : [];
+
+      const newPost: BlogPostItem = {
+        id: "post_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+        title: title.trim(),
+        summary: summary.trim(),
+        content: contentArray,
+        category: category || "guncelleme",
+        categoryLabel: categoryLabel || (category === "guncelleme" ? "Sistem Güncellemesi" : category === "rehber" ? "Rehber" : "Güvenlik"),
+        author: (author || "İnanResim Ekibi").trim(),
+        date: date || new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" }),
+        readTime: readTime || "3 dk okuma",
+        imageUrl: imageUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+        views: 0,
+        likes: 0,
+        tags: tagsArray,
+        createdAt: Date.now()
+      };
+
+      await dbSaveBlogPost(newPost);
+      res.json({ success: true, post: newPost });
+    } catch (err) {
+      console.error("Create blog post error:", err);
+      res.status(500).json({ error: "Blog yazısı eklenirken hata oluştu." });
+    }
+  });
+
+  // Update Blog Post (Admin only)
+  app.put("/api/admin/blog/posts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, summary, content, category, categoryLabel, author, date, readTime, imageUrl, tags, views, likes } = req.body;
+      
+      const posts = await dbGetBlogPosts();
+      const existing = posts.find(p => p.id === id);
+      if (!existing) {
+        return res.status(404).json({ error: "Yazı bulunamadı." });
+      }
+
+      const contentArray = content !== undefined
+        ? (Array.isArray(content) ? content : String(content).split("\n").filter(l => l.trim()))
+        : existing.content;
+
+      const tagsArray = tags !== undefined
+        ? (Array.isArray(tags) ? tags : String(tags).split(",").map(t => t.trim()).filter(Boolean))
+        : existing.tags;
+
+      const updatedPost: BlogPostItem = {
+        ...existing,
+        title: title !== undefined ? title.trim() : existing.title,
+        summary: summary !== undefined ? summary.trim() : existing.summary,
+        content: contentArray,
+        category: category || existing.category,
+        categoryLabel: categoryLabel || existing.categoryLabel,
+        author: author !== undefined ? author.trim() : existing.author,
+        date: date || existing.date,
+        readTime: readTime || existing.readTime,
+        imageUrl: imageUrl !== undefined ? imageUrl : existing.imageUrl,
+        tags: tagsArray,
+        views: views !== undefined ? Number(views) : existing.views,
+        likes: likes !== undefined ? Number(likes) : existing.likes
+      };
+
+      await dbSaveBlogPost(updatedPost);
+      res.json({ success: true, post: updatedPost });
+    } catch (err) {
+      console.error("Update blog post error:", err);
+      res.status(500).json({ error: "Blog yazısı güncellenirken hata oluştu." });
+    }
+  });
+
+  // Delete Blog Post (Admin only)
+  app.delete("/api/admin/blog/posts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await dbDeleteBlogPost(id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Delete blog post error:", err);
+      res.status(500).json({ error: "Blog yazısı silinirken hata oluştu." });
     }
   });
 

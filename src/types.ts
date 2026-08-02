@@ -71,7 +71,7 @@ export interface ClientImage {
   markdownCode: string;
 }
 
-export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-detail" | "admin" | "blog" | "faq" | "privacy" | "abuse" | "contact";
+export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-detail" | "admin" | "blog" | "faq" | "privacy" | "abuse" | "contact" | "api-docs" | "about" | "terms";
 
 export interface AdBanner {
   id: string;
@@ -92,6 +92,43 @@ export interface AdRequest {
   senderMessage: string;
   createdAt: number;
   status: "new" | "read" | "contacted";
+}
+
+export interface AbuseReportItem {
+  id: string;
+  imageUrl: string;
+  reason: string;
+  email: string;
+  details: string;
+  createdAt: number;
+  status: "new" | "read" | "resolved";
+}
+
+export interface ContactMessageItem {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  createdAt: number;
+  status: "new" | "read" | "replied";
+}
+
+export interface BlogPostItem {
+  id: string;
+  title: string;
+  summary: string;
+  content: string[];
+  category: "guncelleme" | "rehber" | "guvenlik";
+  categoryLabel: string;
+  author: string;
+  date: string;
+  readTime: string;
+  imageUrl: string;
+  views: number;
+  likes: number;
+  tags: string[];
+  createdAt?: number;
 }
 
 export interface AnnouncementItem {
