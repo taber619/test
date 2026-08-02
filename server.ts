@@ -2965,6 +2965,10 @@ async function startServer() {
       id: "post-1",
       title: "İnanResim 2.0 Yayında: 5 GB VIP Transfer, Özel Filigran ve Yeni Sunucu Altyapısı!",
       summary: "Türkiye'nin en hızlı resim yükleme platformu İnanResim yenilendi! PRO VIP üyeler için 5 GB tek seferlik transfer, şifreli klasörleme ve filigran motoru aktif edildi.",
+      content: [
+        "Türkiye'nin lider görsel depolama platformu İnanResim, 2.0 sürümüyle büyük altyapı güncellemelerini duyurmaktan gurur duyar.",
+        "PRO VIP kullanıcılarımız artık tek seferde 5 GB'a kadar dev görsel dosyalarını kayıpsız yükleyebilecekler."
+      ],
       category: "guncelleme",
       categoryLabel: "Sistem Güncellemesi",
       author: "İnanResim Sistem Ekibi",
@@ -2980,6 +2984,10 @@ async function startServer() {
       id: "post-2",
       title: "Fotoğrafçılık Rehberi: Resim Sıkıştırma ve Kalite Kaybını Önleme Teknikleri",
       summary: "Web siteleriniz ve forum paylaşımlarınız için yüksek çözünürlüklü fotoğrafları kalite kaybı yaşamadan nasıl optimize edebilirsiniz? Detaylı teknik rehberimiz.",
+      content: [
+        "Görsellerinizin hızlı yüklenmesi hem kullanıcı deneyimi hem de SEO açısından hayati önem taşır.",
+        "WEBP formatı ve doğru sıkıştırma oranları kullanarak kaliteden ödün vermeden %80 dosya boyutu tasarrufu sağlayabilirsiniz."
+      ],
       category: "rehber",
       categoryLabel: "Fotoğrafçılık & Rehber",
       author: "Murat Can (Kıdemli Tasarımcı)",
@@ -2995,6 +3003,10 @@ async function startServer() {
       id: "post-3",
       title: "Uçtan Uca Şifreleme ve Veri Güvenliği Standartlarımız Nelerdir?",
       summary: "Gizliliğiniz bizim için her şeyden önemli. İnanResim sunucularında yüklenen resimlerin KVKK ve AES-256 standartlarına uygun olarak nasıl korunduğunu öğrenin.",
+      content: [
+        "Platformumuzda paylaşılan tüm gizli görseller 256-bit AES standartlarında şifrelenir.",
+        "KVKK düzenlemelerine tam uyum sağlayarak verilerinizin üçüncü şahıslarla asla paylaşılmamasını garanti ediyoruz."
+      ],
       category: "guvenlik",
       categoryLabel: "Güvenlik & Gizlilik",
       author: "Güvenlik Operasyon Merkezi",

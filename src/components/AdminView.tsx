@@ -46,9 +46,64 @@ import {
   Wrench,
   Power,
   ShieldX,
-  Filter
+  Filter,
+  BookOpen,
+  User
 } from "lucide-react";
-import { SiteConfig, AdBanner, AdRequest, BankAccount, PaymentRequest, PaymentGatewayConfig, AnnouncementItem, AbuseReportItem, ContactMessageItem, BlogPostItem } from "../types";
+import { SiteConfig, AdBanner, AdRequest, BankAccount, PaymentRequest, PaymentGatewayConfig, AnnouncementItem, AbuseReportItem, ContactMessageItem, BlogPostItem, AnnouncementTemplateItem } from "../types";
+
+const DEFAULT_ANNOUNCEMENT_TEMPLATES: AnnouncementTemplateItem[] = [
+  {
+    id: "tpl-1",
+    title: "🚀 İnanResim v3.0 Yayında!",
+    text: "Yeni sürümümüz ile PRO VIP Üyelik, Gelişmiş Şifreli Görsel Paylaşımı ve Yüksek Hızlı Sunucular hizmetinizde.",
+    category: "update",
+    priority: "high",
+    actionText: "VIP Özellikleri Gör",
+    actionUrl: "#vip"
+  },
+  {
+    id: "tpl-2",
+    title: "🛠️ Planlı Sistem Bakımı",
+    text: "Sistemlerimizde yapılacak veritabanı optimizasyon çalışması nedeniyle bu gece 02:00-04:00 saatleri arasında kısa süreli kesintiler yaşanabilir.",
+    category: "maintenance",
+    priority: "high",
+    actionText: "Sistem Durumu"
+  },
+  {
+    id: "tpl-3",
+    title: "🎁 PRO VIP Yıllık İndirim Kampanyası!",
+    text: "Sınırsız resim yükleme, doğrudan resim linkleri ve reklamsız deneyim sunan PRO VIP üyelikte %20 dev fırsat başladı!",
+    category: "campaign",
+    priority: "high",
+    actionText: "Hemen VIP Ol",
+    actionUrl: "#vip"
+  },
+  {
+    id: "tpl-4",
+    title: "🔒 Uçtan Uca Şifreleme & KVKK Uyumlu",
+    text: "Yüklediğiniz tüm hassas görseller 256-bit AES standartlarına uygun şifrelenmektedir. Gizliliğiniz %100 koruma altındadır.",
+    category: "security",
+    priority: "normal",
+    actionText: "Gizlilik Politikası"
+  },
+  {
+    id: "tpl-5",
+    title: "💬 7/24 Admin Canlı Destek",
+    text: "Sorularınız veya geri bildirimleriniz için canlı chat panelinden yöneticilerimize anında mesaj gönderebilirsiniz.",
+    category: "info",
+    priority: "low",
+    actionText: "Canlı Destek"
+  },
+  {
+    id: "tpl-6",
+    title: "⚠️ Topluluk & Telif Kuralları Hatırlatması",
+    text: "Telif hakkı ihlali içeren veya yasa dışı görseller sistemimiz tarafından tespit edildiğinde derhal silinmektedir.",
+    category: "warning",
+    priority: "normal",
+    actionText: "Kuralları İncele"
+  }
+];
 
 interface AdminUser {
   id: string;
@@ -177,6 +232,17 @@ export default function AdminView({ onBack }: AdminViewProps) {
   const [annActionText, setAnnActionText] = useState("");
   const [annActionUrl, setAnnActionUrl] = useState("");
   const [showAnnModal, setShowAnnModal] = useState(false);
+
+  // Announcement Template Management States
+  const [announcementTemplates, setAnnouncementTemplates] = useState<AnnouncementTemplateItem[]>(DEFAULT_ANNOUNCEMENT_TEMPLATES);
+  const [showTplModal, setShowTplModal] = useState(false);
+  const [editingTpl, setEditingTpl] = useState<AnnouncementTemplateItem | null>(null);
+  const [tplTitle, setTplTitle] = useState("");
+  const [tplText, setTplText] = useState("");
+  const [tplCategory, setTplCategory] = useState<"info" | "warning" | "campaign" | "maintenance" | "update" | "security">("update");
+  const [tplPriority, setTplPriority] = useState<"low" | "normal" | "high">("high");
+  const [tplActionText, setTplActionText] = useState("");
+  const [tplActionUrl, setTplActionUrl] = useState("");
   
   // VIP & Payment states
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
@@ -413,9 +479,117 @@ export default function AdminView({ onBack }: AdminViewProps) {
         setSiteConfig(data);
         setAnnouncements(data.announcements || (data.announcementText ? [data.announcementText] : []));
         setStructuredAnnouncements(data.structuredAnnouncements || []);
+        if (data.announcementTemplates && data.announcementTemplates.length > 0) {
+          setAnnouncementTemplates(data.announcementTemplates);
+        }
       }
     } catch (e) {
       console.error("Config fetch error", e);
+    }
+  };
+
+  const saveTemplatesToBackend = async (newTemplates: AnnouncementTemplateItem[]) => {
+    setAnnouncementTemplates(newTemplates);
+    const updatedConfig = { ...siteConfig, announcementTemplates: newTemplates };
+    setSiteConfig(updatedConfig);
+    try {
+      await fetch("/api/admin/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...updatedConfig, announcements, structuredAnnouncements })
+      });
+    } catch (err) {
+      console.error("Save announcement templates error:", err);
+    }
+  };
+
+  const handleOpenNewTplModal = () => {
+    setEditingTpl(null);
+    setTplTitle("");
+    setTplText("");
+    setTplCategory("update");
+    setTplPriority("high");
+    setTplActionText("");
+    setTplActionUrl("");
+    setShowTplModal(true);
+  };
+
+  const handleOpenEditTplModal = (tpl: AnnouncementTemplateItem) => {
+    setEditingTpl(tpl);
+    setTplTitle(tpl.title);
+    setTplText(tpl.text);
+    setTplCategory(tpl.category);
+    setTplPriority(tpl.priority || "normal");
+    setTplActionText(tpl.actionText || "");
+    setTplActionUrl(tpl.actionUrl || "");
+    setShowTplModal(true);
+  };
+
+  const handleSaveTplForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tplTitle.trim() || !tplText.trim()) {
+      alert("Lütfen taslak başlığı ve içerik metnini doldurunuz.");
+      return;
+    }
+
+    let nextTemplates: AnnouncementTemplateItem[];
+    if (editingTpl) {
+      nextTemplates = announcementTemplates.map(t =>
+        t.id === editingTpl.id
+          ? {
+              ...t,
+              title: tplTitle.trim(),
+              text: tplText.trim(),
+              category: tplCategory,
+              priority: tplPriority,
+              actionText: tplActionText.trim() || undefined,
+              actionUrl: tplActionUrl.trim() || undefined
+            }
+          : t
+      );
+    } else {
+      const newTpl: AnnouncementTemplateItem = {
+        id: `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        title: tplTitle.trim(),
+        text: tplText.trim(),
+        category: tplCategory,
+        priority: tplPriority,
+        actionText: tplActionText.trim() || undefined,
+        actionUrl: tplActionUrl.trim() || undefined
+      };
+      nextTemplates = [newTpl, ...announcementTemplates];
+    }
+
+    saveTemplatesToBackend(nextTemplates);
+    setShowTplModal(false);
+  };
+
+  const handleDeleteTpl = (id: string) => {
+    if (!window.confirm("Bu hazır taslağı kütüphaneden silmek istediğinizden emin misiniz?")) return;
+    const nextTemplates = announcementTemplates.filter(t => t.id !== id);
+    saveTemplatesToBackend(nextTemplates);
+  };
+
+  const handleResetDefaultTemplates = () => {
+    if (!window.confirm("Tüm taslakları varsayılan orijinal taslak kümesine sıfırlamak istediğinize emin misiniz?")) return;
+    saveTemplatesToBackend(DEFAULT_ANNOUNCEMENT_TEMPLATES);
+  };
+
+  const handleLoadTplToForm = (tpl: AnnouncementTemplateItem) => {
+    setAnnTitle(tpl.title);
+    setAnnText(tpl.text);
+    setAnnCategory(tpl.category);
+    setAnnPriority(tpl.priority || "high");
+    setAnnActionText(tpl.actionText || "");
+    setAnnActionUrl(tpl.actionUrl || "");
+
+    const formElem = document.getElementById("custom-announcement-form");
+    if (formElem) {
+      formElem.scrollIntoView({ behavior: "smooth", block: "center" });
+      formElem.classList.add("ring-2", "ring-blue-500", "ring-offset-2");
+      setTimeout(() => {
+        formElem.classList.remove("ring-2", "ring-blue-500", "ring-offset-2");
+      }, 2000);
     }
   };
 
@@ -1837,95 +2011,141 @@ export default function AdminView({ onBack }: AdminViewProps) {
               <p className="text-xs text-slate-400 italic mb-4">Şu an yapılandırılmış aktif duyuru bulunmuyor.</p>
             )}
 
-            {/* Ready-made Announcement Templates Builder */}
-            <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 border border-slate-200/80 rounded-2xl p-4 mb-4">
-              <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                Hazır Duyuru Taslak Kütüphanesi (1-Tıkla Yayınla)
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {[
-                  {
-                    title: "🚀 İnanResim v3.0 Yayında!",
-                    text: "Yeni sürümümüz ile PRO VIP Üyelik, Gelişmiş Şifreli Görsel Paylaşımı ve Yüksek Hızlı Sunucular hizmetinizde.",
-                    category: "update" as const,
-                    priority: "high" as const,
-                    actionText: "VIP Özellikleri Gör",
-                    actionUrl: "#vip"
-                  },
-                  {
-                    title: "🛠️ Planlı Sistem Bakımı",
-                    text: "Sistemlerimizde yapılacak veritabanı optimizasyon çalışması nedeniyle bu gece 02:00-04:00 saatleri arasında kısa süreli kesintiler yaşanabilir.",
-                    category: "maintenance" as const,
-                    priority: "high" as const,
-                    actionText: "Sistem Durumu"
-                  },
-                  {
-                    title: "🎁 PRO VIP Yıllık İndirim Kampanyası!",
-                    text: "Sınırsız resim yükleme, doğrudan resim linkleri ve reklamsız deneyim sunan PRO VIP üyelikte %20 dev fırsat başladı!",
-                    category: "campaign" as const,
-                    priority: "high" as const,
-                    actionText: "Hemen VIP Ol",
-                    actionUrl: "#vip"
-                  },
-                  {
-                    title: "🔒 Uçtan Uca Şifreleme & KVKK Uyumlu",
-                    text: "Yüklediğiniz tüm hassas görseller 256-bit AES standartlarına uygun şifrelenmektedir. Gizliliğiniz %100 koruma altındadır.",
-                    category: "security" as const,
-                    priority: "normal" as const,
-                    actionText: "Gizlilik Politikası"
-                  },
-                  {
-                    title: "💬 7/24 Admin Canlı Destek",
-                    text: "Sorularınız veya geri bildirimleriniz için canlı chat panelinden yöneticilerimize anında mesaj gönderebilirsiniz.",
-                    category: "info" as const,
-                    priority: "low" as const,
-                    actionText: "Canlı Destek"
-                  },
-                  {
-                    title: "⚠️ Topluluk & Telif Kuralları Hatırlatması",
-                    text: "Telif hakkı ihlali içeren veya yasa dışı görseller sistemimiz tarafından tespit edildiğinde derhal silinmektedir.",
-                    category: "warning" as const,
-                    priority: "normal" as const,
-                    actionText: "Kuralları İncele"
-                  }
-                ].map((tpl, i) => (
+            {/* Ready-made Announcement Templates Builder & Custom Manager */}
+            <div className="bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 rounded-2xl p-4 mb-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-200/60">
+                <div>
+                  <span className="text-[12px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    Hazır Duyuru Taslak Kütüphanesi ({announcementTemplates.length} Taslak)
+                  </span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Taslakları 1-tıkla doğrudan yayınlayın, düzenleyip forma aktarın veya kütüphaneye kendi özel taslaklarınızı ekleyin.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
                   <button
-                    key={i}
                     type="button"
-                    disabled={!siteConfig.announcementEnabled}
-                    onClick={() => {
-                      const newAnn: AnnouncementItem = {
-                        id: `ann_${Date.now()}_${i}`,
-                        title: tpl.title,
-                        text: tpl.text,
-                        category: tpl.category,
-                        priority: tpl.priority,
-                        actionText: tpl.actionText,
-                        actionUrl: tpl.actionUrl,
-                        createdAt: Date.now(),
-                        enabled: true
-                      };
-                      const next = [newAnn, ...structuredAnnouncements];
-                      setStructuredAnnouncements(next);
-                      const textList = next.map(a => a.text);
-                      setAnnouncements(textList);
-                      setSiteConfig(prev => ({ ...prev, announcementText: textList[0] || "" }));
-                    }}
-                    className="text-left p-3 bg-white hover:bg-blue-50/50 border border-slate-200 hover:border-blue-300 disabled:opacity-50 rounded-xl transition-all cursor-pointer shadow-sm group"
+                    onClick={handleOpenNewTplModal}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-xl transition-all shadow-sm cursor-pointer flex items-center gap-1"
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-extrabold text-slate-800 group-hover:text-blue-600 transition-colors">{tpl.title}</span>
-                      <Plus className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0" />
-                    </div>
-                    <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{tpl.text}</p>
+                    <Plus className="w-3.5 h-3.5" />
+                    Yeni Taslak Ekle
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResetDefaultTemplates}
+                    className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 font-bold text-[10px] rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                    title="Varsayılan Orijinal Taslaklara Sıfırla"
+                  >
+                    <RefreshCw className="w-3 h-3 text-slate-400" />
+                    Sıfırla
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {announcementTemplates.map((tpl) => (
+                  <div
+                    key={tpl.id}
+                    className="p-3.5 bg-white border border-slate-200/90 hover:border-blue-300 rounded-2xl shadow-sm transition-all flex flex-col justify-between group space-y-2.5"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className={`px-2 py-0.5 text-[9px] font-black rounded-md uppercase tracking-wider ${
+                          tpl.category === 'update' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                          tpl.category === 'maintenance' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                          tpl.category === 'campaign' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                          tpl.category === 'security' ? 'bg-violet-100 text-violet-700 border border-violet-200' :
+                          tpl.category === 'warning' ? 'bg-red-100 text-red-700 border border-red-200' :
+                          'bg-blue-100 text-blue-700 border border-blue-200'
+                        }`}>
+                          {tpl.category === 'update' && '🚀 Güncelleme'}
+                          {tpl.category === 'maintenance' && '🛠️ Bakım'}
+                          {tpl.category === 'campaign' && '🎁 Kampanya'}
+                          {tpl.category === 'security' && '🔒 Güvenlik'}
+                          {tpl.category === 'warning' && '⚠️ Uyarı'}
+                          {tpl.category === 'info' && 'ℹ️ Bilgi'}
+                        </span>
+
+                        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditTplModal(tpl)}
+                            className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                            title="Taslağı Kütüphanede Düzenle"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTpl(tpl.id)}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Taslağı Sil"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <h5 className="text-[11px] font-black text-slate-800 line-clamp-1 mb-1">{tpl.title}</h5>
+                      <p className="text-[10px] text-slate-600 line-clamp-3 leading-relaxed">{tpl.text}</p>
+                      
+                      {tpl.actionText && (
+                        <span className="inline-block mt-1 text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                          {tpl.actionText} → {tpl.actionUrl || "#"}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleLoadTplToForm(tpl)}
+                        className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[10px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1"
+                        title="Bu taslak bilgilerini aşağıdaki Özel Duyuru Oluştur formuna aktarır ve düzenlemenize imkan tanır"
+                      >
+                        <Edit3 className="w-3 h-3 text-slate-500" />
+                        Form'a Aktar
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!siteConfig.announcementEnabled}
+                        onClick={() => {
+                          const newAnn: AnnouncementItem = {
+                            id: `ann_${Date.now()}`,
+                            title: tpl.title,
+                            text: tpl.text,
+                            category: tpl.category,
+                            priority: tpl.priority || "high",
+                            actionText: tpl.actionText,
+                            actionUrl: tpl.actionUrl,
+                            createdAt: Date.now(),
+                            enabled: true
+                          };
+                          const next = [newAnn, ...structuredAnnouncements];
+                          setStructuredAnnouncements(next);
+                          const textList = next.map(a => a.text);
+                          setAnnouncements(textList);
+                          setSiteConfig(prev => ({ ...prev, announcementText: textList[0] || "" }));
+                        }}
+                        className="flex-1 py-1.5 px-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-extrabold text-[10px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                        title="Taslağı doğrudan yayına alır"
+                      >
+                        <Plus className="w-3 h-3" />
+                        1-Tıkla Yayınla
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
 
             {/* Custom Structured Announcement Form */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4">
+            <div id="custom-announcement-form" className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 transition-all duration-300">
               <h5 className="text-xs font-black text-slate-800 mb-3 flex items-center gap-1.5">
                 <Plus className="w-4 h-4 text-blue-600" />
                 Özel Duyuru Oluştur
@@ -5727,6 +5947,125 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-md transition-all cursor-pointer"
                     >
                       {editingBlogPost ? "Görseli / Yazıyı Güncelle" : "Yayınla"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+          {/* ANNOUNCEMENT TEMPLATE CREATE/EDIT MODAL */}
+          {showTplModal && (
+            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+                <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                  <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    {editingTpl ? "Hazır Taslağı Düzenle" : "Yeni Hazır Duyuru Taslağı Oluştur"}
+                  </h3>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowTplModal(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveTplForm} className="p-5 space-y-3.5 text-xs">
+                  <div>
+                    <label className="font-extrabold text-slate-800 block mb-1">Taslak Başlığı *</label>
+                    <input
+                      type="text"
+                      required
+                      value={tplTitle}
+                      onChange={(e) => setTplTitle(e.target.value)}
+                      placeholder="Örn: 🚀 İnanResim v3.0 Yayında!"
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all font-bold text-slate-900"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-extrabold text-slate-800 block mb-1">Kategori *</label>
+                      <select
+                        value={tplCategory}
+                        onChange={(e) => setTplCategory(e.target.value as any)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-bold text-slate-800"
+                      >
+                        <option value="update">🚀 Sürüm Güncellemesi</option>
+                        <option value="maintenance">🛠️ Sistem Bakımı</option>
+                        <option value="campaign">🎁 Kampanya / VIP Fırsatı</option>
+                        <option value="security">🔒 Güvenlik & Gizlilik</option>
+                        <option value="warning">⚠️ Topluluk Uyarısı</option>
+                        <option value="info">ℹ️ Genel Bilgilendirme</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="font-extrabold text-slate-800 block mb-1">Öncelik Seviyesi</label>
+                      <select
+                        value={tplPriority}
+                        onChange={(e) => setTplPriority(e.target.value as any)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-bold text-slate-800"
+                      >
+                        <option value="high">🔥 Yüksek (En Üstte)</option>
+                        <option value="normal">⚡ Normal</option>
+                        <option value="low">💡 Düşük</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-extrabold text-slate-800 block mb-1">Taslak Detay İçeriği *</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={tplText}
+                      onChange={(e) => setTplText(e.target.value)}
+                      placeholder="Bu taslak seçildiğinde yer alacak duyuru mesaj metni..."
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-medium text-slate-800 leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-extrabold text-slate-800 block mb-1">Buton Metni (Opsiyonel)</label>
+                      <input
+                        type="text"
+                        value={tplActionText}
+                        onChange={(e) => setTplActionText(e.target.value)}
+                        placeholder="Örn: VIP Özellikleri Gör"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-semibold text-slate-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-extrabold text-slate-800 block mb-1">Yönlendirme Linki (Opsiyonel)</label>
+                      <input
+                        type="text"
+                        value={tplActionUrl}
+                        onChange={(e) => setTplActionUrl(e.target.value)}
+                        placeholder="Örn: #vip veya https://..."
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-600 outline-none font-semibold text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowTplModal(false)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all cursor-pointer"
+                    >
+                      İptal
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md transition-all cursor-pointer"
+                    >
+                      {editingTpl ? "Taslağı Güncelle" : "Kütüphaneye Kaydet"}
                     </button>
                   </div>
                 </form>

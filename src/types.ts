@@ -144,6 +144,16 @@ export interface AnnouncementItem {
   enabled?: boolean;
 }
 
+export interface AnnouncementTemplateItem {
+  id: string;
+  title: string;
+  text: string;
+  category: "info" | "warning" | "campaign" | "maintenance" | "update" | "security";
+  priority?: "low" | "normal" | "high";
+  actionText?: string;
+  actionUrl?: string;
+}
+
 export interface SiteConfig {
   siteName?: string;
   siteDomain?: string;
@@ -153,6 +163,7 @@ export interface SiteConfig {
   announcementText: string;
   announcements?: string[];
   structuredAnnouncements?: AnnouncementItem[];
+  announcementTemplates?: AnnouncementTemplateItem[];
   statsOffset: number;
   usersOffset: number;
   todayOffset: number;
