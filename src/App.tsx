@@ -295,6 +295,9 @@ export default function App() {
 
       if (results.length > 0) {
         setUploadedImages(results);
+        if (results.length === 1) {
+          navigate(`/image/${results[0].id}`);
+        }
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -307,7 +310,7 @@ export default function App() {
 
   const handleUrlUploadSuccess = (img: ClientImage) => {
     setUploadedImages([img]);
-    navigate("/");
+    navigate(`/image/${img.id}`);
   };
 
   const handleLockImage = async (id: string, pass: string): Promise<boolean> => {
