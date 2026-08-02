@@ -15,7 +15,12 @@ import AdContactModal from "./components/AdContactModal";
 import AdBannerSection from "./components/AdBannerSection";
 import VipModal from "./components/VipModal";
 import AnnouncementBanner from "./components/AnnouncementBanner";
+import InfoModals from "./components/InfoModals";
+import BlogView from "./components/BlogView";
 import FaqSection from "./components/FaqSection";
+import PrivacyView from "./components/PrivacyView";
+import AbuseReportView from "./components/AbuseReportView";
+import ContactView from "./components/ContactView";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -51,6 +56,7 @@ export function calculateUploadLimit(
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
+  const [activeInfoModal, setActiveInfoModal] = useState<"faq" | "privacy" | "abuse" | "contact" | null>(null);
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(() => {
     try {
@@ -672,6 +678,52 @@ export default function App() {
       return <AdminView onBack={navigateBack} />;
     }
 
+    if (activeTab === "blog") {
+      return (
+        <BlogView
+          onNavigateHome={() => setActiveTab("home")}
+          onOpenVipModal={() => setIsVipModalOpen(true)}
+        />
+      );
+    }
+
+    if (activeTab === "faq") {
+      return (
+        <div className="py-8">
+          <FaqSection
+            onOpenAuth={() => setActiveTab("auth")}
+            onOpenVipModal={() => setIsVipModalOpen(true)}
+          />
+        </div>
+      );
+    }
+
+    if (activeTab === "privacy") {
+      return (
+        <PrivacyView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
+
+    if (activeTab === "abuse") {
+      return (
+        <AbuseReportView
+          onNavigateHome={() => setActiveTab("home")}
+        />
+      );
+    }
+
+    if (activeTab === "contact") {
+      return (
+        <ContactView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
+
     // Default Home view
     if (uploadedImages.length > 0) {
       return (
@@ -850,12 +902,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* SSS Accordion Section */}
-        <FaqSection
-          onOpenAuth={() => setActiveTab("auth")}
-          onOpenVipModal={() => setIsVipModalOpen(true)}
-        />
-
         {/* Join Member CTA Banner */}
         {!currentUser && (
           <section className="py-12 px-4 max-w-5xl mx-auto" id="landing-cta-banner">
@@ -1026,6 +1072,7 @@ export default function App() {
         onLogout={handleLogout}
         theme="dark"
         onOpenVipModal={() => setIsVipModalOpen(true)}
+        onOpenInfoModal={(modal) => setActiveInfoModal(modal)}
         siteConfig={siteConfig}
       />
 
@@ -1135,7 +1182,21 @@ export default function App() {
       />
 
       {/* Bottom Footer block */}
-      <Footer onOpenAdsModal={() => setShowAdModal(true)} siteConfig={siteConfig} />
+      <Footer 
+        onOpenAdsModal={() => setShowAdModal(true)} 
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        onOpenInfoModal={(modal) => setActiveTab(modal)}
+        siteConfig={siteConfig} 
+      />
+
+      {/* Global Info / FAQ / Privacy / DMCA Modals */}
+      <InfoModals
+        activeModal={activeInfoModal}
+        onClose={() => setActiveInfoModal(null)}
+        siteConfig={siteConfig}
+        onOpenAuth={() => setActiveTab("auth")}
+        onOpenVipModal={() => setIsVipModalOpen(true)}
+      />
     </div>
   );
 }

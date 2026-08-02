@@ -12,7 +12,15 @@ import {
   Code,
   Sparkles,
   Info,
-  Crown
+  Crown,
+  MoreVertical,
+  HelpCircle,
+  ShieldCheck,
+  AlertTriangle,
+  Mail,
+  Upload,
+  BookOpen,
+  Radio
 } from "lucide-react";
 import { ActiveTab, ClientUser, SiteConfig } from "../types";
 
@@ -24,6 +32,7 @@ interface NavbarProps {
   theme?: "light" | "dark";
   onToggleTheme?: () => void;
   onOpenVipModal?: () => void;
+  onOpenInfoModal?: (modal: "faq" | "privacy" | "abuse" | "contact") => void;
   siteConfig?: SiteConfig | null;
 }
 
@@ -35,10 +44,14 @@ export default function Navbar({
   theme = "dark", 
   onToggleTheme,
   onOpenVipModal,
+  onOpenInfoModal,
   siteConfig
 }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [logoClicks, setLogoClicks] = useState(0);
   const [showAdminEntry, setShowAdminEntry] = useState(() => localStorage.getItem("inanresim_admin_visible") === "true");
@@ -68,11 +81,14 @@ export default function Navbar({
     }
   };
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        setMoreMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -82,10 +98,18 @@ export default function Navbar({
   const handleMenuClick = (tab: ActiveTab) => {
     setActiveTab(tab);
     setDropdownOpen(false);
+    setMoreMenuOpen(false);
   };
 
-  const handleApiClick = () => {
-    alert("✨ İnanResim API Çok Yakında!\nGeliştiriciler için doğrudan resim yükleme ve yönetim API servisimiz çok yakında aktif olacaktır.");
+  const handleOpenInfo = (tab: "faq" | "privacy" | "abuse" | "contact") => {
+    setMoreMenuOpen(false);
+    setActiveTab(tab);
+    onOpenInfoModal?.(tab);
+  };
+
+  const handleBlogClick = () => {
+    setMoreMenuOpen(false);
+    setActiveTab("blog");
   };
 
   return (
@@ -128,8 +152,8 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Main Navigation Menu (Desktop & Centered) */}
-      <nav className="flex items-center space-x-1 sm:space-x-3 text-sm font-semibold" id="nav-menu">
+      {/* Main Navigation Menu (Desktop & Right) */}
+      <nav className="flex items-center space-x-2 sm:space-x-3 text-sm font-semibold" id="nav-menu">
         <button
           id="nav-btn-home"
           onClick={() => handleMenuClick("home")}
@@ -156,7 +180,7 @@ export default function Navbar({
 
         {/* User Auth Status Area */}
         {currentUser ? (
-          /* Profile Dropdown trigger (Keeps navbar extremely pristine) */
+          /* Profile Dropdown trigger */
           <div className="relative" ref={dropdownRef}>
             <button
               id="profile-dropdown-trigger"
@@ -175,7 +199,7 @@ export default function Navbar({
               <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
             </button>
 
-            {/* Premium Profile Dropdown Overlay */}
+            {/* Profile Dropdown Panel */}
             {dropdownOpen && (
               <div 
                 className="absolute right-0 mt-2.5 w-64 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-2xl p-4 animate-fade-in z-[100]"
@@ -260,7 +284,7 @@ export default function Navbar({
             )}
           </div>
         ) : (
-          /* Beautiful Unified Guest Controls Capsule */
+          /* Guest Actions */
           <div className="flex items-center bg-slate-50/80 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800/80 p-1.5 rounded-2xl gap-1" id="nav-guest-actions">
             {showAdminEntry && (
               <button
@@ -291,7 +315,94 @@ export default function Navbar({
             </button>
           </div>
         )}
+
+        {/* 3-Dots Menu Dropdown (Sağ Üst Panel 3 Nokta Menüsü) */}
+        <div className="relative" ref={moreMenuRef}>
+          <button
+            id="more-menu-trigger"
+            onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+            className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200/80 dark:border-slate-800/80 transition-all cursor-pointer flex items-center justify-center hover:scale-105 active:scale-95"
+            title="Diğer Seçenekler & Menü"
+          >
+            <MoreVertical className="w-5 h-5" />
+          </button>
+
+          {moreMenuOpen && (
+            <div 
+              className="absolute right-0 mt-2.5 w-60 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800/90 rounded-2xl shadow-2xl p-2.5 animate-fade-in z-[110]"
+              id="more-menu-panel"
+            >
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => handleMenuClick("home")}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-3 cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-blue-500 shrink-0" />
+                  <span>Resim Yükle</span>
+                </button>
+
+                <button
+                  onClick={() => handleMenuClick("gallery")}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-3 cursor-pointer"
+                >
+                  <Radio className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Yayın Akışı & Galeri</span>
+                </button>
+
+                <button
+                  onClick={handleBlogClick}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-3 cursor-pointer"
+                >
+                  <BookOpen className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Blog & Duyurular</span>
+                </button>
+              </div>
+
+              {/* Section Divider: DİĞER */}
+              <div className="my-2 pt-2 border-t border-slate-100 dark:border-slate-800/80 px-3">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                  DİĞER
+                </span>
+              </div>
+
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => handleOpenInfo("faq")}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-3 cursor-pointer"
+                >
+                  <HelpCircle className="w-4 h-4 text-blue-500 shrink-0" />
+                  <span>Yardım & SSS</span>
+                </button>
+
+                <button
+                  onClick={() => handleOpenInfo("privacy")}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-3 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Gizlilik Sözleşmesi</span>
+                </button>
+
+                <button
+                  onClick={() => handleOpenInfo("abuse")}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-3 cursor-pointer"
+                >
+                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span>Kötüye Kullanım Bildir</span>
+                </button>
+
+                <button
+                  onClick={() => handleOpenInfo("contact")}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-3 cursor-pointer"
+                >
+                  <Mail className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span>İletişim & Destek</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </nav>
     </header>
   );
 }
+

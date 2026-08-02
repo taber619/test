@@ -71,7 +71,7 @@ export interface ClientImage {
   markdownCode: string;
 }
 
-export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-detail" | "admin";
+export type ActiveTab = "home" | "url-upload" | "gallery" | "auth" | "image-detail" | "admin" | "blog" | "faq" | "privacy" | "abuse" | "contact";
 
 export interface AdBanner {
   id: string;
@@ -156,4 +156,5 @@ export interface SiteConfig {
   securityNsfwStrictness?: "high" | "medium" | "low";
   privacyPolicyText?: string;
   termsOfServiceText?: string;
+  supportEmail?: string;
 }

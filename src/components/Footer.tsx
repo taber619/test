@@ -1,23 +1,42 @@
 import React from "react";
-import { SiteConfig } from "../types";
+import { ActiveTab, SiteConfig } from "../types";
 
 interface FooterProps {
   onOpenAdsModal?: () => void;
+  onNavigateTab?: (tab: ActiveTab) => void;
+  onOpenInfoModal?: (modal: "faq" | "privacy" | "abuse" | "contact") => void;
   siteConfig?: SiteConfig | null;
 }
 
-export default function Footer({ onOpenAdsModal, siteConfig }: FooterProps) {
+export default function Footer({ onOpenAdsModal, onNavigateTab, onOpenInfoModal, siteConfig }: FooterProps) {
   const domain = siteConfig?.siteDomain || "resimresim.com";
   const name = siteConfig?.siteName || "resimresim.com";
 
-  const showTerms = (e: React.MouseEvent) => {
-    e.preventDefault();
-    alert("Kullanım Şartları:\n1. T.C. kanunlarına aykırı görseller yüklenemez.\n2. Telif hakkı ihlali barındıran içerikler silinir.");
-  };
-
   const showPrivacy = (e: React.MouseEvent) => {
     e.preventDefault();
-    alert("Gizlilik Politikası:\nResimlerinizi korumak bizim önceliğimizdir. Loglar 30 gün içinde anonimleştirilir.");
+    if (onNavigateTab) {
+      onNavigateTab("privacy");
+    } else if (onOpenInfoModal) {
+      onOpenInfoModal("privacy");
+    }
+  };
+
+  const showFaq = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onNavigateTab) {
+      onNavigateTab("faq");
+    } else if (onOpenInfoModal) {
+      onOpenInfoModal("faq");
+    }
+  };
+
+  const showContact = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onNavigateTab) {
+      onNavigateTab("contact");
+    } else if (onOpenInfoModal) {
+      onOpenInfoModal("contact");
+    }
   };
 
   const showApiDocs = (e: React.MouseEvent) => {
@@ -28,10 +47,18 @@ export default function Footer({ onOpenAdsModal, siteConfig }: FooterProps) {
   return (
     <footer className="flex-none py-6 sm:h-14 bg-slate-900 border-t border-slate-800 px-6 lg:px-12 flex flex-col sm:flex-row items-center justify-between text-xs font-medium text-slate-400 gap-4" id="main-footer">
       <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
-        <a href="#privacy" onClick={showPrivacy} className="hover:text-blue-400 transition-colors">Gizlilik Politikası</a>
-        <a href="#rules" onClick={showTerms} className="hover:text-blue-400 transition-colors">Kullanım Şartları</a>
-        <a href={`mailto:destek@${domain}`} className="hover:text-blue-400 transition-colors">İletişim ({domain})</a>
-        <a href="#api-doc" onClick={showApiDocs} className="hover:text-blue-400 transition-colors">API Dokümantasyonu</a>
+        <button type="button" onClick={showPrivacy} className="hover:text-blue-400 transition-colors cursor-pointer">
+          Gizlilik & Kullanım Şartları
+        </button>
+        <button type="button" onClick={showFaq} className="hover:text-blue-400 transition-colors cursor-pointer">
+          Yardım (SSS)
+        </button>
+        <button type="button" onClick={showContact} className="hover:text-blue-400 transition-colors cursor-pointer">
+          İletişim & Destek ({domain})
+        </button>
+        <a href="#api-doc" onClick={showApiDocs} className="hover:text-blue-400 transition-colors">
+          API Dokümantasyonu
+        </a>
         {onOpenAdsModal && (
           <button
             type="button"
@@ -48,3 +75,4 @@ export default function Footer({ onOpenAdsModal, siteConfig }: FooterProps) {
     </footer>
   );
 }
+

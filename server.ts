@@ -324,7 +324,7 @@ KURAL: En ufak cinsel açıklık, çıplaklık veya +18 erotizm varsa isNsfw: tr
 const firewallLogs: FirewallLog[] = [];
 const MAX_FIREWALL_LOGS = 500;
 
-function logFirewallAttempt(log: Omit<FirewallLog, "id"> & { timestamp?: number }) {
+function logFirewallAttempt(log: Omit<FirewallLog, "id" | "timestamp"> & { timestamp?: number }) {
   const newLog: FirewallLog = {
     id: "fw_" + Math.random().toString(36).substring(2, 12),
     timestamp: log.timestamp || Date.now(),
@@ -894,8 +894,11 @@ async function startServer() {
     securityForceHttpsHeaders?: boolean;
     securityKvkkNoticeEnabled?: boolean;
     securityMaxLoginAttempts?: number;
+    securityNsfwFilterEnabled?: boolean;
+    securityNsfwStrictness?: "high" | "medium" | "low";
     privacyPolicyText?: string;
     termsOfServiceText?: string;
+    supportEmail?: string;
   }
 
   interface ChatMessage {
