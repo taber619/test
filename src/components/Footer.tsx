@@ -1,5 +1,4 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
 import { ActiveTab, SiteConfig } from "../types";
 
 interface FooterProps {
@@ -10,28 +9,69 @@ interface FooterProps {
 }
 
 export default function Footer({ onOpenAdsModal, onNavigateTab, onOpenInfoModal, siteConfig }: FooterProps) {
-  const navigate = useNavigate();
   const domain = siteConfig?.siteDomain || "resimresim.com";
   const name = siteConfig?.siteName || "resimresim.com";
+
+  const showPrivacy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onNavigateTab) {
+      onNavigateTab("privacy");
+    } else if (onOpenInfoModal) {
+      onOpenInfoModal("privacy");
+    }
+  };
+
+  const showTerms = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigateTab?.("terms");
+  };
+
+  const showAbout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigateTab?.("about");
+  };
+
+  const showFaq = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onNavigateTab) {
+      onNavigateTab("faq");
+    } else if (onOpenInfoModal) {
+      onOpenInfoModal("faq");
+    }
+  };
+
+  const showContact = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onNavigateTab) {
+      onNavigateTab("contact");
+    } else if (onOpenInfoModal) {
+      onOpenInfoModal("contact");
+    }
+  };
+
+  const showApiDocs = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigateTab?.("api-docs");
+  };
 
   return (
     <footer className="flex-none py-6 sm:h-14 bg-slate-900 border-t border-slate-800 px-6 lg:px-12 flex flex-col sm:flex-row items-center justify-between text-xs font-medium text-slate-400 gap-4" id="main-footer">
       <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
-        <Link to="/about" className="hover:text-blue-400 transition-colors cursor-pointer">
+        <button type="button" onClick={showAbout} className="hover:text-blue-400 transition-colors cursor-pointer">
           Hakkımızda
-        </Link>
-        <Link to="/privacy" className="hover:text-blue-400 transition-colors cursor-pointer">
+        </button>
+        <button type="button" onClick={showPrivacy} className="hover:text-blue-400 transition-colors cursor-pointer">
           Gizlilik Politikası
-        </Link>
-        <Link to="/terms" className="hover:text-blue-400 transition-colors cursor-pointer">
+        </button>
+        <button type="button" onClick={showTerms} className="hover:text-blue-400 transition-colors cursor-pointer">
           Kullanım Şartları
-        </Link>
-        <Link to="/help" className="hover:text-blue-400 transition-colors cursor-pointer">
+        </button>
+        <button type="button" onClick={showFaq} className="hover:text-blue-400 transition-colors cursor-pointer">
           Yardım (SSS)
-        </Link>
-        <Link to="/contact" className="hover:text-blue-400 transition-colors cursor-pointer">
+        </button>
+        <button type="button" onClick={showContact} className="hover:text-blue-400 transition-colors cursor-pointer">
           İletişim & Destek
-        </Link>
+        </button>
         {onOpenAdsModal && (
           <button
             type="button"
@@ -48,5 +88,4 @@ export default function Footer({ onOpenAdsModal, onNavigateTab, onOpenInfoModal,
     </footer>
   );
 }
-
 

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { Routes, Route, useNavigate, useParams, useLocation, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -25,7 +24,7 @@ import ContactView from "./components/ContactView";
 import ApiDocsView from "./components/ApiDocsView";
 import AboutView from "./components/AboutView";
 import TermsView from "./components/TermsView";
-import { ClientImage, ClientUser, SiteConfig } from "./types";
+import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
 export function calculateUploadLimit(
@@ -58,21 +57,8 @@ export function calculateUploadLimit(
   };
 }
 
-function ImageDetailRouteWrapper() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-
-  if (!id) {
-    return <Navigate to="/" replace />;
-  }
-
-  return <ImageDetailView imageId={id} onBack={() => navigate(-1)} />;
-}
-
 export default function App() {
-  const navigate = useNavigate();
-  const location = useLocation();
-
+  const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [activeInfoModal, setActiveInfoModal] = useState<"faq" | "privacy" | "abuse" | "contact" | null>(null);
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(() => {
@@ -86,6 +72,11 @@ export default function App() {
     return !!localStorage.getItem("inanresim_site_config");
   });
   const [cachedMaintenance] = useState(() => localStorage.getItem("inanresim_maintenance_mode") === "true");
+  const [theme] = useState<"dark">("dark");
+
+  useEffect(() => {
+    document.documentElement.classList.add("dark");
+  }, []);
 
   // Live reload version checking states
   const initialAppVersionRef = React.useRef<string | null>(null);
@@ -97,10 +88,7 @@ export default function App() {
       const res = await fetch("/api/config");
       if (res.ok) {
         const data = await res.json();
-        setSiteConfig((prev) => {
-          if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-          return data;
-        });
+        setSiteConfig(data);
         try {
           localStorage.setItem("inanresim_site_config", JSON.stringify(data));
         } catch (e) {}
@@ -118,114 +106,188 @@ export default function App() {
         }
       }
     } catch (e) {
-      // Load cached site configuration seamlessly on network error
-      const cached = localStorage.getItem("inanresim_site_config");
-      if (cached) {
-        try {
-          setSiteConfig(JSON.parse(cached));
-        } catch (parseErr) {}
-      }
+      console.error("Failed to load site config:", e);
     } finally {
       setIsConfigLoaded(true);
     }
   };
 
+  // Automatic reload countdown trigger
   useEffect(() => {
-    document.documentElement.classList.add("dark");
-    fetchSiteConfig();
-    const interval = setInterval(fetchSiteConfig, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Update Toast Countdown logic
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (showUpdateToast) {
-      if (updateCountdown > 0) {
-        timer = setTimeout(() => {
-          setUpdateCountdown((prev) => prev - 1);
-        }, 1000);
-      } else {
-        window.location.reload();
-      }
+    if (!showUpdateToast) return;
+    if (updateCountdown <= 0) {
+      window.location.reload();
+      return;
     }
+    const timer = setTimeout(() => {
+      setUpdateCountdown((prev) => prev - 1);
+    }, 1000);
     return () => clearTimeout(timer);
   }, [showUpdateToast, updateCountdown]);
 
-  // Auth User Session Restore
   useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        const stored = localStorage.getItem("hizli_resim_user");
-        if (stored) {
-          const u = JSON.parse(stored);
-          if (u && u.id) {
-            setCurrentUser(u);
-            const res = await fetch(`/api/auth/me?id=${encodeURIComponent(u.id)}`);
-            if (res.ok) {
-              const freshUser = await res.json();
-              setCurrentUser((prev) => {
-                if (JSON.stringify(prev) === JSON.stringify(freshUser)) return prev;
-                return freshUser;
-              });
-              localStorage.setItem("hizli_resim_user", JSON.stringify(freshUser));
-            }
-          }
-        }
-      } catch (e) {}
-    };
+    fetchSiteConfig();
+    
+    // Set up rapid background polling to instantly reflect any admin modifications
+    const interval = setInterval(() => {
+      fetchSiteConfig();
+    }, 3000);
 
-    restoreSession();
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
+  // Announcement Slider & View States
+  const [currentAnnIdx, setCurrentAnnIdx] = useState(0);
+  const [isAnnDismissed, setIsAnnDismissed] = useState(false);
+  const [showAllAnnouncements, setShowAllAnnouncements] = useState(false);
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [isVipModalOpen, setIsVipModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!siteConfig || !siteConfig.announcementEnabled) return;
+    const list = (siteConfig.announcements || [siteConfig.announcementText]).filter(Boolean);
+    if (list.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCurrentAnnIdx((prev) => (prev + 1) % list.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [siteConfig]);
+  
+  // Upload states
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedImages, setUploadedImages] = useState<ClientImage[]>([]);
+  const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
+
+  // Realtime User Session Syncing (VIP Updates, Banned status)
+  const syncUserSession = async (userToSync?: ClientUser | null) => {
+    const stored = localStorage.getItem("hizli_resim_user");
+    let activeId = userToSync?.id || currentUser?.id;
+    if (!activeId && stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        activeId = parsed.id;
+      } catch (e) {}
+    }
+    if (!activeId) return;
+
+    try {
+      const res = await fetch(`/api/auth/me?userId=${activeId}`);
+      if (res.ok) {
+        const me = await res.json();
+        setCurrentUser(me);
+        localStorage.setItem("hizli_resim_user", JSON.stringify(me));
+      }
+    } catch (e) {
+      console.error("User session sync error:", e);
+    }
+  };
+
+  // Parse custom parameters on mount (to support shareable preview links: /?view=image-detail&id=xyz)
+  useEffect(() => {
+    // Load local auth session if any
+    const stored = localStorage.getItem("hizli_resim_user");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setCurrentUser(parsed);
+        syncUserSession(parsed);
+      } catch (e) {}
+    }
 
     const handleSessionUpdate = () => {
-      restoreSession();
+      const updatedStored = localStorage.getItem("hizli_resim_user");
+      if (updatedStored) {
+        try {
+          const parsed = JSON.parse(updatedStored);
+          setCurrentUser(parsed);
+          syncUserSession(parsed);
+        } catch (e) {}
+      }
     };
+
     window.addEventListener("user_session_updated", handleSessionUpdate);
+    
+    // Periodically sync logged-in user profile (every 5 seconds)
+    const userSyncInterval = setInterval(() => {
+      const currentStored = localStorage.getItem("hizli_resim_user");
+      if (currentStored) {
+        try {
+          const parsed = JSON.parse(currentStored);
+          syncUserSession(parsed);
+        } catch (e) {}
+      }
+    }, 5000);
 
-    const userSyncInterval = setInterval(restoreSession, 15000);
+    const checkRoute = () => {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get("view");
+      const id = params.get("id");
+      const adminParam = params.get("admin");
 
+      // Support path-based short routes (/i/XYZ, /d/XYZ, /download/XYZ, /v/XYZ, /f/XYZ, /file/XYZ)
+      const pathname = window.location.pathname;
+      let pathId: string | null = null;
+      const pathParts = pathname.split("/").filter(Boolean);
+      if (pathParts.length >= 2 && ["i", "d", "download", "v", "f", "file"].includes(pathParts[0])) {
+        pathId = pathParts[1];
+      }
+
+      const activeDetailId = id || pathId;
+
+      if (adminParam === "true" || view === "admin") {
+        localStorage.setItem("inanresim_admin_visible", "true");
+        setActiveTab("admin");
+      } else if ((view === "image-detail" || pathId) && activeDetailId) {
+        setSelectedDetailId(activeDetailId);
+        setActiveTab("image-detail");
+      } else {
+        // Fallback default
+        setSelectedDetailId(null);
+        if (activeTab === "image-detail") {
+          setActiveTab("home");
+        }
+      }
+    };
+
+    checkRoute();
+    // Watch history changes
+    window.addEventListener("popstate", checkRoute);
     return () => {
+      window.removeEventListener("popstate", checkRoute);
       window.removeEventListener("user_session_updated", handleSessionUpdate);
       clearInterval(userSyncInterval);
     };
   }, []);
 
-  // Backwards compatibility for query params like ?view=image-detail&id=123 or ?admin=true
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const viewParam = params.get("view");
-    const idParam = params.get("id");
-    const adminParam = params.get("admin");
-
-    if (adminParam === "true" || viewParam === "admin") {
-      localStorage.setItem("inanresim_admin_visible", "true");
-      if (location.pathname !== "/admin") {
-        navigate("/admin", { replace: true });
-      }
-    } else if (viewParam === "image-detail" && idParam) {
-      if (location.pathname !== `/image/${idParam}`) {
-        navigate(`/image/${idParam}`, { replace: true });
-      }
-    }
-  }, [location.search, location.pathname, navigate]);
-
-  const [uploadedImages, setUploadedImages] = useState<ClientImage[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-
-  const [showAdModal, setShowAdModal] = useState(false);
-  const [isVipModalOpen, setIsVipModalOpen] = useState(false);
-
   const handleLoginSuccess = (user: ClientUser) => {
     setCurrentUser(user);
     localStorage.setItem("hizli_resim_user", JSON.stringify(user));
+    setActiveTab("home");
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem("hizli_resim_user");
+    setActiveTab("home");
   };
 
+  const navigateToImageDetail = (id: string) => {
+    window.history.pushState({}, "", `/?view=image-detail&id=${id}`);
+    setSelectedDetailId(id);
+    setActiveTab("image-detail");
+  };
+
+  const navigateBack = () => {
+    window.history.pushState({}, "", "/");
+    setSelectedDetailId(null);
+    setUploadedImages([]); // reset
+    setActiveTab("home");
+  };
+
+  // Helper to read file as Base64 string asynchronously
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -235,279 +297,469 @@ export default function App() {
     });
   };
 
+  // Handle local files uploads
   const handleLocalUpload = async (
     files: File[], 
     deleteAfter: string, 
     password?: string,
-    watermarkOptions?: any
+    watermarkOptions?: {
+      addWatermark: boolean;
+      watermarkText: string;
+      watermarkOpacity: number;
+      watermarkColor: string;
+      watermarkSize: number;
+      watermarkPosition: string;
+    }
   ) => {
+    // Client-side pre-validation of file sizes against guest/member limits
+    const limitInfo = calculateUploadLimit(currentUser, siteConfig);
+    for (const f of files) {
+      if (limitInfo.maxMb > 0 && f.size > limitInfo.maxSizeBytes) {
+        if (limitInfo.userType === "guest") {
+          alert(`"${f.name}" dosyası misafir yükleme limitini (${limitInfo.limitStr}) aşıyor. Lütfen ücretsiz üye olun veya giriş yapın!`);
+        } else {
+          alert(`"${f.name}" dosyası üyelik limitinizi (${limitInfo.limitStr}) aşıyor.`);
+        }
+        return;
+      }
+    }
+
     setIsUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(5);
+
+    const totalFilesSize = files.reduce((acc, file) => acc + file.size, 0) || 1;
+    let uploadedBytesPriorFiles = 0;
 
     try {
+      let guestToken = localStorage.getItem("inanresim_guest_token");
+      if (!guestToken) {
+        guestToken = "gst_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+        localStorage.setItem("inanresim_guest_token", guestToken);
+      }
+
       const results: ClientImage[] = [];
-      const total = files.length;
+      const failedFiles: { name: string; error: string }[] = [];
 
-      for (let i = 0; i < total; i++) {
-        const file = files[i];
-        const base64 = await fileToBase64(file);
+      for (const file of files) {
+        // Chunked & direct stream file uploader
+        const uploadSingleFile = async (): Promise<any> => {
+          const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB per chunk for optimal speed
+          const CONCURRENCY = 3; // 3 parallel streams for fast uploads
 
-        let guestToken = localStorage.getItem("inanresim_guest_token") || "";
+          // Small files (<= 8MB): Direct single POST request
+          if (file.size <= CHUNK_SIZE) {
+            return new Promise((resolve, reject) => {
+              const formData = new FormData();
+              formData.append("file", file);
+              formData.append("name", file.name);
+              formData.append("mimeType", file.type || "application/octet-stream");
+              formData.append("size", String(file.size));
+              formData.append("deleteAfter", deleteAfter);
+              if (password) formData.append("password", password);
+              if (currentUser?.id) formData.append("userId", currentUser.id);
+              if (guestToken) formData.append("guestToken", guestToken);
+              if (watermarkOptions?.watermarkText) formData.append("watermarkText", watermarkOptions.watermarkText);
+              if (watermarkOptions?.watermarkOpacity !== undefined) formData.append("watermarkOpacity", String(watermarkOptions.watermarkOpacity));
+              if (watermarkOptions?.watermarkColor) formData.append("watermarkColor", watermarkOptions.watermarkColor);
+              if (watermarkOptions?.watermarkSize !== undefined) formData.append("watermarkSize", String(watermarkOptions.watermarkSize));
+              if (watermarkOptions?.watermarkPosition) formData.append("watermarkPosition", watermarkOptions.watermarkPosition);
 
-        const payload: any = {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          data: base64,
-          deleteAfter,
-          password: password || undefined,
-          userId: currentUser?.id,
-          guestToken: guestToken || undefined,
-          watermarkOptions,
+              const xhr = new XMLHttpRequest();
+              xhr.open("POST", "/api/upload");
+              xhr.timeout = 10 * 60 * 1000;
+
+              xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable && event.total > 0) {
+                  const currentFileRatio = event.loaded / event.total;
+                  const currentFileUploadedBytes = currentFileRatio * file.size;
+                  const totalUploaded = uploadedBytesPriorFiles + currentFileUploadedBytes;
+                  const percent = Math.min(95, Math.max(1, Math.round((totalUploaded / totalFilesSize) * 95)));
+                  setUploadProgress(percent);
+                }
+              };
+
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  try {
+                    resolve(JSON.parse(xhr.responseText));
+                  } catch (e) {
+                    reject(new Error("Sunucudan geçersiz yanıt alındı."));
+                  }
+                } else {
+                  try {
+                    const errData = JSON.parse(xhr.responseText);
+                    reject(new Error(errData.error || `Dosya yüklenemedi (Hata Kodu: ${xhr.status})`));
+                  } catch (e) {
+                    reject(new Error(`Yükleme başarısız oldu (Sunucu Yanıt Kodu: ${xhr.status})`));
+                  }
+                }
+              };
+
+              xhr.onerror = () => {
+                reject(new Error("Sunucuya bağlanırken ağ hatası oluştu. Lütfen bağlantınızı kontrol edip tekrar deneyin."));
+              };
+
+              xhr.ontimeout = () => {
+                reject(new Error("Dosya yükleme zaman aşımına uğradı."));
+              };
+
+              xhr.send(formData);
+            });
+          }
+
+          // Large files (> 8MB): Parallel Chunked upload (Çoklu paralel parçalı yükleme - Maksimum Hız)
+          const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+          const uploadId = "up_" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+
+          const chunkProgresses = new Array(totalChunks).fill(0);
+
+          const updateOverallProgress = () => {
+            const uploadedInCurrentFile = chunkProgresses.reduce((acc, bytes) => acc + bytes, 0);
+            const totalUploadedOverall = uploadedBytesPriorFiles + uploadedInCurrentFile;
+            const percent = Math.min(95, Math.max(1, Math.round((totalUploadedOverall / totalFilesSize) * 95)));
+            setUploadProgress(percent);
+          };
+
+          const uploadSingleChunk = async (i: number) => {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(file.size, start + CHUNK_SIZE);
+            const chunkBlob = file.slice(start, end);
+            const chunkSize = end - start;
+
+            let lastError = "";
+
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                await new Promise((resolve, reject) => {
+                  const formData = new FormData();
+                  formData.append("file", chunkBlob, file.name);
+                  formData.append("uploadId", uploadId);
+                  formData.append("chunkIndex", String(i));
+                  formData.append("totalChunks", String(totalChunks));
+                  formData.append("fileName", file.name);
+                  formData.append("fileSize", String(file.size));
+                  formData.append("mimeType", file.type || "application/octet-stream");
+                  if (currentUser?.id) formData.append("userId", currentUser.id);
+                  if (guestToken) formData.append("guestToken", guestToken);
+
+                  const xhr = new XMLHttpRequest();
+                  xhr.open("POST", "/api/upload-chunk");
+                  xhr.timeout = 2 * 60 * 1000;
+
+                  xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable && event.total > 0) {
+                      chunkProgresses[i] = event.loaded;
+                      updateOverallProgress();
+                    }
+                  };
+
+                  xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                      chunkProgresses[i] = chunkSize;
+                      updateOverallProgress();
+                      resolve(true);
+                    } else {
+                      try {
+                        const errData = JSON.parse(xhr.responseText);
+                        reject(new Error(errData.error || `Parça ${i + 1}/${totalChunks} yüklenemedi.`));
+                      } catch (e) {
+                        reject(new Error(`Parça ${i + 1}/${totalChunks} yükleme hatası (${xhr.status}).`));
+                      }
+                    }
+                  };
+
+                  xhr.onerror = () => reject(new Error("Ağ hatası oluştu, tekrar deneniyor..."));
+                  xhr.ontimeout = () => reject(new Error("Parça zaman aşımına uğradı, tekrar deneniyor..."));
+                  xhr.send(formData);
+                });
+
+                return; // Chunk uploaded successfully!
+              } catch (err: any) {
+                lastError = err.message || "Parça yüklenemedi";
+                if (err.message && (err.message.includes("limit") || err.message.includes("engellendi"))) {
+                  throw err;
+                }
+                await new Promise((res) => setTimeout(res, 1000 * (attempt + 1)));
+              }
+            }
+
+            throw new Error(lastError || `Parça ${i + 1}/${totalChunks} yüklenirken ağ hatası oluştu.`);
+          };
+
+          // Queue worker for parallel chunk uploading (up to 3 chunks in parallel)
+          let chunkQueueIndex = 0;
+          const workers = Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, async () => {
+            while (chunkQueueIndex < totalChunks) {
+              const i = chunkQueueIndex++;
+              await uploadSingleChunk(i);
+            }
+          });
+
+          await Promise.all(workers);
+
+          // Combine chunks on server
+          setUploadProgress(96);
+          const completeRes = await fetch("/api/upload-complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              uploadId,
+              fileName: file.name,
+              fileSize: file.size,
+              mimeType: file.type || "application/octet-stream",
+              totalChunks,
+              userId: currentUser?.id,
+              guestToken,
+              deleteAfter,
+              password: password || undefined,
+              watermarkText: watermarkOptions?.watermarkText,
+              watermarkOpacity: watermarkOptions?.watermarkOpacity,
+              watermarkColor: watermarkOptions?.watermarkColor,
+              watermarkSize: watermarkOptions?.watermarkSize,
+              watermarkPosition: watermarkOptions?.watermarkPosition,
+            }),
+          });
+
+          const completeData = await completeRes.json();
+          if (!completeRes.ok) {
+            throw new Error(completeData.error || "Parçalar birleştirilirken hata oluştu.");
+          }
+
+          return completeData;
         };
 
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        try {
+          const uploadResult = await uploadSingleFile();
+          uploadedBytesPriorFiles += file.size;
 
-        if (res.ok) {
-          const img: ClientImage = await res.json();
-          results.push(img);
-          if ((img as any).guestToken) {
-            localStorage.setItem("inanresim_guest_token", (img as any).guestToken);
-          }
-          if ((img as any).guestUploadCount !== undefined) {
-            localStorage.setItem("inanresim_guest_upload_count", String((img as any).guestUploadCount));
-          }
-        } else {
-          let errText = "Görsel yüklenemedi.";
-          try {
-            const errJson = await res.json();
-            if (errJson.error) errText = errJson.error;
-          } catch (e) {}
-          alert(errText);
+          const origin = window.location.origin;
+          results.push({
+            id: uploadResult.id,
+            name: uploadResult.name,
+            size: uploadResult.size,
+            mimeType: file.type,
+            uploadedAt: uploadResult.uploadedAt,
+            deleteAfter: deleteAfter as any,
+            views: 0,
+            deleteToken: uploadResult.deleteToken,
+            watermarkText: watermarkOptions?.watermarkText,
+            watermarkOpacity: watermarkOptions?.watermarkOpacity,
+            watermarkColor: watermarkOptions?.watermarkColor,
+            watermarkSize: watermarkOptions?.watermarkSize,
+            watermarkPosition: watermarkOptions?.watermarkPosition,
+            directUrl: `${origin}/api/images/${uploadResult.id}`,
+            previewUrl: `${origin}/i/${uploadResult.id}`,
+            bbCode: `[url=${origin}/i/${uploadResult.id}][img]${origin}/api/images/${uploadResult.id}[/img][/url]`,
+            htmlCode: `<a href="${origin}/i/${uploadResult.id}"><img src="${origin}/api/images/${uploadResult.id}" alt="${uploadResult.name}" /></a>`,
+            markdownCode: `[![${uploadResult.name}](${origin}/api/images/${uploadResult.id})](${origin}/i/${uploadResult.id})`,
+          });
+        } catch (fileErr: any) {
+          uploadedBytesPriorFiles += file.size;
+          failedFiles.push({ name: file.name, error: fileErr.message || "Yükleme hatası" });
         }
 
-        setUploadProgress(Math.round(((i + 1) / total) * 100));
+        // Keep the progress updated smoothly between sequential file uploads
+        const immediatePercent = Math.min(99, Math.round((uploadedBytesPriorFiles / totalFilesSize) * 100));
+        setUploadProgress(immediatePercent);
       }
 
-      if (results.length > 0) {
-        setUploadedImages(results);
-        if (results.length === 1) {
-          navigate(`/image/${results[0].id}`);
+      setUploadProgress(100);
+      setTimeout(() => {
+        if (results.length > 0) {
+          setUploadedImages(results);
         }
-      }
-    } catch (error) {
-      console.error("Upload error:", error);
-      alert("Yükleme sırasında teknik bir hata oluştu.");
-    } finally {
+        setIsUploading(false);
+
+        if (failedFiles.length > 0) {
+          if (results.length > 0) {
+            alert(`${results.length}/${files.length} dosya başarıyla yüklendi.\n${failedFiles.length} dosya yüklenemedi: ${failedFiles[0].error}`);
+          } else {
+            alert(`Dosyalar yüklenemedi: ${failedFiles[0].error}`);
+          }
+        }
+      }, 300);
+
+    } catch (err: any) {
       setIsUploading(false);
-      setUploadProgress(0);
+      alert(err.message || "Görseller yüklenirken bir hata oluştu.");
     }
   };
 
-  const handleUrlUploadSuccess = (img: ClientImage) => {
-    setUploadedImages([img]);
-    navigate(`/image/${img.id}`);
+  // Handle url upload success conversion
+  const handleUrlUploadSuccess = (data: any) => {
+    const origin = window.location.origin;
+    const clientImg: ClientImage = {
+      id: data.id,
+      name: data.name,
+      size: data.size,
+      mimeType: "image/jpeg", // typical fallback
+      uploadedAt: data.uploadedAt,
+      deleteAfter: data.deleteAfter || "never",
+      views: 0,
+      deleteToken: data.deleteToken,
+      directUrl: `${origin}/api/images/${data.id}`,
+      previewUrl: `${origin}/i/${data.id}`,
+      bbCode: `[url=${origin}/i/${data.id}][img]${origin}/api/images/${data.id}[/img][/url]`,
+      htmlCode: `<a href="${origin}/i/${data.id}"><img src="${origin}/api/images/${data.id}" alt="${data.name}" /></a>`,
+      markdownCode: `[![${data.name}](${origin}/api/images/${data.id})](${origin}/i/${data.id})`,
+    };
+
+    setUploadedImages([clientImg]);
+    setActiveTab("home"); // Render success panel within the homepage context
   };
 
-  const handleLockImage = async (id: string, pass: string): Promise<boolean> => {
+  // Password set/lock API handler
+  const handleLockImage = async (id: string, pwd: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/images/${id}/password`, {
-        method: "PUT",
+      const res = await fetch(`/api/images/${id}/lock`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pass, userId: currentUser?.id }),
+        body: JSON.stringify({ password: pwd }),
       });
-      if (res.ok) {
-        setUploadedImages((prev) =>
-          prev.map((x) => (x.id === id ? { ...x, isProtected: !!pass } : x))
-        );
-        alert("Görsel şifresi başarıyla güncellendi.");
-        return true;
-      } else {
-        alert("Şifre güncellenemedi.");
-        return false;
-      }
+      return res.ok;
     } catch (e) {
-      alert("Bir hata oluştu.");
       return false;
     }
   };
 
-  const handleDeleteImage = async (id: string, deleteKey?: string) => {
+  // Delete image API handler
+  const handleDeleteImage = async (id: string, token: string) => {
     try {
-      const url = `/api/images/${id}?deleteKey=${encodeURIComponent(deleteKey || "")}&userId=${encodeURIComponent(currentUser?.id || "")}`;
-      const res = await fetch(url, { method: "DELETE" });
+      const res = await fetch(`/api/images/${id}?token=${token}`, {
+        method: "DELETE",
+      });
       if (res.ok) {
-        setUploadedImages((prev) => prev.filter((x) => x.id !== id));
         alert("Görsel başarıyla silindi.");
-        navigate("/");
+        // If viewing deleted image, navigate back
+        if (selectedDetailId === id) {
+          navigateBack();
+        } else {
+          setUploadedImages((prev) => prev.filter((img) => img.id !== id));
+        }
       } else {
-        alert("Silme yetkiniz yok veya görsel bulunamadı.");
+        const d = await res.json();
+        alert(d.error || "Görsel silinemedi.");
       }
-    } catch (e) {
+    } catch (err) {
       alert("Silme işlemi sırasında hata oluştu.");
     }
   };
 
-  const [isAdminState, setIsAdminState] = useState<boolean>(
-    () => localStorage.getItem("inanresim_admin_token") === "true"
-  );
-  const [showMaintenanceAdminModal, setShowMaintenanceAdminModal] = useState(false);
-  const [maintPassword, setMaintPassword] = useState("");
-  const [maintError, setMaintError] = useState<string | null>(null);
-  const [maintLoading, setMaintLoading] = useState(false);
-
-  const handleMaintLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMaintLoading(true);
-    setMaintError(null);
-    try {
-      const res = await fetch("/api/admin/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: maintPassword }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        localStorage.setItem("inanresim_admin_token", "true");
-        localStorage.setItem("inanresim_admin_visible", "true");
-        setIsAdminState(true);
-        setShowMaintenanceAdminModal(false);
-        navigate("/admin");
-      } else {
-        setMaintError(data.error || "Hatalı yönetici şifresi!");
-      }
-    } catch (err) {
-      setMaintError("Bağlantı hatası oluştu.");
-    } finally {
-      setMaintLoading(false);
+  const renderContent = () => {
+    if (activeTab === "image-detail" && selectedDetailId) {
+      return <ImageDetailView imageId={selectedDetailId} onBack={navigateBack} />;
     }
-  };
 
-  const isMaintenanceActive = (siteConfig ? siteConfig.maintenanceModeEnabled : cachedMaintenance) && !isAdminState;
+    if (activeTab === "url-upload") {
+      return (
+        <UrlUploadView
+          onBack={() => setActiveTab("home")}
+          onUploadSuccess={handleUrlUploadSuccess}
+          userId={currentUser?.id}
+          currentUser={currentUser}
+          siteConfig={siteConfig}
+          onOpenVipModal={() => setIsVipModalOpen(true)}
+        />
+      );
+    }
 
-  if (isMaintenanceActive) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative font-sans select-none overflow-hidden" id="maintenance-overlay">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full filter blur-[100px] animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full filter blur-[100px] animate-pulse"></div>
+    if (activeTab === "gallery") {
+      return (
+        <GalleryView
+          currentUser={currentUser}
+          onSelectImage={navigateToImageDetail}
+          onDeleteImage={handleDeleteImage}
+        />
+      );
+    }
 
-        <div className="max-w-md w-full text-center space-y-6 z-10">
-          <div className="inline-flex w-20 h-20 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-3xl items-center justify-center text-4xl animate-bounce">
-            🔧
-          </div>
-          
-          <div className="space-y-2">
-            <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              Sistem Bakımda
-            </h1>
-            <p className="text-sm text-slate-400 leading-relaxed">
-              İnanResim'i daha kararlı ve hızlı hale getirmek için planlı bakım çalışması yapıyoruz. Kısa süre sonra tekrar çevrimiçi olacağız!
-            </p>
-          </div>
+    if (activeTab === "auth") {
+      return <AuthView onLoginSuccess={handleLoginSuccess} />;
+    }
 
-          <div className="p-4.5 bg-slate-900/80 border border-slate-800/90 rounded-2xl space-y-3 shadow-xl backdrop-blur-md">
-            <div className="flex items-center justify-between text-xs font-bold">
-              <span className="text-slate-300 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block"></span>
-                Bakım İlerlemesi
-              </span>
-              <span className="text-amber-400 font-mono font-black text-xs">%72 Tamamlandı</span>
-            </div>
+    if (activeTab === "admin") {
+      return <AdminView onBack={navigateBack} />;
+    }
 
-            <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800 p-0.5 relative">
-              <div 
-                className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 h-full rounded-full transition-all duration-1000 relative shadow-[0_0_10px_rgba(245,158,11,0.6)]"
-                style={{ width: "72%" }}
-              >
-                <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.2)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.2)_50%,rgba(255,255,255,0.2)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[stripe_2s_linear_infinite]"></div>
-              </div>
-            </div>
+    if (activeTab === "blog") {
+      return (
+        <BlogView
+          onNavigateHome={() => setActiveTab("home")}
+          onOpenVipModal={() => setIsVipModalOpen(true)}
+        />
+      );
+    }
 
-            <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 font-medium">
-              <span>Sistem optimizasyonları ve veritabanı bakımı</span>
-              <span className="text-amber-400/90 font-semibold shrink-0">~15 dakika</span>
-            </div>
-          </div>
+    if (activeTab === "faq") {
+      return (
+        <div className="py-8">
+          <FaqSection
+            onOpenAuth={() => setActiveTab("auth")}
+            onOpenVipModal={() => setIsVipModalOpen(true)}
+          />
         </div>
+      );
+    }
 
-        <div className="absolute bottom-8 left-0 right-0 text-center z-10">
-          <p className="text-[10px] text-slate-600">© 2026 İnanResim. Tüm hakları saklıdır.</p>
-          <button 
-            onClick={() => {
-              setShowMaintenanceAdminModal(true);
-              setMaintError(null);
-            }}
-            className="mt-3 text-xs text-amber-500/80 hover:text-amber-400 font-bold transition-colors cursor-pointer px-3 py-1.5 rounded-xl bg-slate-900/80 border border-amber-500/20 hover:border-amber-500/40 inline-flex items-center gap-1.5"
-          >
-            <span>🔐</span> Yönetici Girişi
-          </button>
-        </div>
+    if (activeTab === "privacy") {
+      return (
+        <PrivacyView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
 
-        {showMaintenanceAdminModal && (
-          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl animate-fade-in">
-              <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto text-xl border border-amber-500/20">
-                🔐
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-white">Yönetici Paneli Girişi</h3>
-                <p className="text-xs text-slate-400 mt-1">Bakım modunu geçmek ve yönetim paneline erişmek için şifrenizi girin.</p>
-              </div>
+    if (activeTab === "abuse") {
+      return (
+        <AbuseReportView
+          onNavigateHome={() => setActiveTab("home")}
+        />
+      );
+    }
 
-              <form onSubmit={handleMaintLoginSubmit} className="space-y-3">
-                <input
-                  type="password"
-                  required
-                  autoFocus
-                  placeholder="Yönetici Şifresi..."
-                  value={maintPassword}
-                  onChange={(e) => setMaintPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
-                />
+    if (activeTab === "contact") {
+      return (
+        <ContactView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
 
-                {maintError && (
-                  <p className="text-xs font-bold text-rose-400">{maintError}</p>
-                )}
+    if (activeTab === "api-docs") {
+      return (
+        <ApiDocsView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
 
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMaintenanceAdminModal(false);
-                      setMaintPassword("");
-                      setMaintError(null);
-                    }}
-                    className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition-colors"
-                  >
-                    İptal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={maintLoading}
-                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
-                  >
-                    {maintLoading ? "Giriş yapılıyor..." : "Giriş Yap 🚀"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+    if (activeTab === "about") {
+      return (
+        <AboutView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
 
-  // Home Page Component
-  const HomeViewComponent = () => {
+    if (activeTab === "terms") {
+      return (
+        <TermsView
+          onNavigateHome={() => setActiveTab("home")}
+          siteConfig={siteConfig}
+        />
+      );
+    }
+
+    // Default Home view
     if (uploadedImages.length > 0) {
       return (
         <UploadSuccess
           uploadedImages={uploadedImages}
-          onReset={() => setUploadedImages([])}
+          onReset={navigateBack}
           onDeleteImage={handleDeleteImage}
           onSetPassword={handleLockImage}
         />
@@ -523,10 +775,11 @@ export default function App() {
           />
         )}
 
+        {/* Upload Hero Section */}
         <HeroSection
           onUploadStart={handleLocalUpload}
-          onSwitchToUrlUpload={() => navigate("/upload")}
-          onSwitchToAuth={() => navigate("/login")}
+          onSwitchToUrlUpload={() => setActiveTab("url-upload")}
+          onSwitchToAuth={() => setActiveTab("auth")}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
           homepageTitle={siteConfig?.homepageTitle}
@@ -536,8 +789,10 @@ export default function App() {
           onOpenVipModal={() => setIsVipModalOpen(true)}
         />
 
+        {/* Real-time stats */}
         <StatsCounter />
 
+        {/* Feature info sections */}
         <section className="py-16 bg-gray-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800/80" id="landing-benefits">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-10">
@@ -596,6 +851,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* Unlimited Membership Banner */}
             <div className="mt-8 p-6 sm:p-8 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="space-y-2 text-center md:text-left">
                 <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-white">
@@ -613,7 +869,7 @@ export default function App() {
                 {currentUser ? (
                   <button
                     type="button"
-                    onClick={() => navigate("/dashboard")}
+                    onClick={() => setActiveTab("gallery")}
                     className="px-6 py-3.5 bg-white text-blue-700 hover:bg-blue-50 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all cursor-pointer flex items-center gap-2"
                   >
                     <ImageIcon className="w-4 h-4" />
@@ -622,7 +878,7 @@ export default function App() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => navigate("/register")}
+                    onClick={() => setActiveTab("auth")}
                     className="px-6 py-3.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg transition-all cursor-pointer flex items-center gap-2"
                   >
                     <UserPlus className="w-4 h-4" />
@@ -634,6 +890,7 @@ export default function App() {
           </div>
         </section>
 
+        {/* 3-Step Guide */}
         <section className="py-16 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800/80" id="landing-guide">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/60 px-3.5 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800/40">
@@ -675,6 +932,7 @@ export default function App() {
           </div>
         </section>
 
+        {/* Join Member CTA Banner */}
         {!currentUser && (
           <section className="py-12 px-4 max-w-5xl mx-auto" id="landing-cta-banner">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-blue-100">
@@ -688,10 +946,11 @@ export default function App() {
                 </p>
               </div>
               <button
-                onClick={() => navigate("/register")}
+                onClick={() => setActiveTab("auth")}
                 className="px-6 py-3.5 bg-white text-blue-600 hover:bg-blue-50 font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
               >
                 Hemen Üye Ol
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </section>
@@ -700,10 +959,165 @@ export default function App() {
     );
   };
 
+  const [isAdminState, setIsAdminState] = useState<boolean>(
+    () => localStorage.getItem("inanresim_admin_token") === "true"
+  );
+  const [showMaintenanceAdminModal, setShowMaintenanceAdminModal] = useState(false);
+  const [maintPassword, setMaintPassword] = useState("");
+  const [maintError, setMaintError] = useState<string | null>(null);
+  const [maintLoading, setMaintLoading] = useState(false);
+
+  const handleMaintLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMaintLoading(true);
+    setMaintError(null);
+    try {
+      const res = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: maintPassword }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem("inanresim_admin_token", "true");
+        localStorage.setItem("inanresim_admin_visible", "true");
+        setIsAdminState(true);
+        setActiveTab("admin");
+        setShowMaintenanceAdminModal(false);
+      } else {
+        setMaintError(data.error || "Hatalı yönetici şifresi!");
+      }
+    } catch (err) {
+      setMaintError("Bağlantı hatası oluştu.");
+    } finally {
+      setMaintLoading(false);
+    }
+  };
+
+  const isMaintenanceActive = (siteConfig ? siteConfig.maintenanceModeEnabled : cachedMaintenance) && !isAdminState;
+
+  if (isMaintenanceActive) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative font-sans select-none overflow-hidden" id="maintenance-overlay">
+        {/* Subtle background graphics */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full filter blur-[100px] animate-pulse"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full filter blur-[100px] animate-pulse"></div>
+
+        <div className="max-w-md w-full text-center space-y-6 z-10">
+          <div className="inline-flex w-20 h-20 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-3xl items-center justify-center text-4xl animate-bounce">
+            🔧
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 bg-clip-text text-transparent">
+              Sistem Bakımda
+            </h1>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              İnanResim'i daha kararlı ve hızlı hale getirmek için planlı bakım çalışması yapıyoruz. Kısa süre sonra tekrar çevrimiçi olacağız!
+            </p>
+          </div>
+
+          {/* Maintenance Progress Bar & Status */}
+          <div className="p-4.5 bg-slate-900/80 border border-slate-800/90 rounded-2xl space-y-3 shadow-xl backdrop-blur-md">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-slate-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block"></span>
+                Bakım İlerlemesi
+              </span>
+              <span className="text-amber-400 font-mono font-black text-xs">%72 Tamamlandı</span>
+            </div>
+
+            <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800 p-0.5 relative">
+              <div 
+                className="bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 h-full rounded-full transition-all duration-1000 relative shadow-[0_0_10px_rgba(245,158,11,0.6)]"
+                style={{ width: "72%" }}
+              >
+                <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.2)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.2)_50%,rgba(255,255,255,0.2)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[stripe_2s_linear_infinite]"></div>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 font-medium">
+              <span>Sistem optimizasyonları ve veritabanı bakımı</span>
+              <span className="text-amber-400/90 font-semibold shrink-0">~15 dakika</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer with a working secret click-to-login for administrators */}
+        <div className="absolute bottom-8 left-0 right-0 text-center z-10">
+          <p className="text-[10px] text-slate-600">© 2026 İnanResim. Tüm hakları saklıdır.</p>
+          <button 
+            onClick={() => {
+              setShowMaintenanceAdminModal(true);
+              setMaintError(null);
+            }}
+            className="mt-3 text-xs text-amber-500/80 hover:text-amber-400 font-bold transition-colors cursor-pointer px-3 py-1.5 rounded-xl bg-slate-900/80 border border-amber-500/20 hover:border-amber-500/40 inline-flex items-center gap-1.5"
+          >
+            <span>🔐</span> Yönetici Girişi
+          </button>
+        </div>
+
+        {/* Admin Login Modal for Maintenance Mode */}
+        {showMaintenanceAdminModal && (
+          <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl animate-fade-in">
+              <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto text-xl border border-amber-500/20">
+                🔐
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">Yönetici Paneli Girişi</h3>
+                <p className="text-xs text-slate-400 mt-1">Bakım modunu geçmek ve yönetim paneline erişmek için şifrenizi girin.</p>
+              </div>
+
+              <form onSubmit={handleMaintLoginSubmit} className="space-y-3">
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  placeholder="Yönetici Şifresi..."
+                  value={maintPassword}
+                  onChange={(e) => setMaintPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
+                />
+
+                {maintError && (
+                  <p className="text-xs font-bold text-rose-400">{maintError}</p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMaintenanceAdminModal(false);
+                      setMaintPassword("");
+                      setMaintError(null);
+                    }}
+                    className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={maintLoading}
+                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {maintLoading ? "Giriş yapılıyor..." : "Giriş Yap 🚀"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden flex flex-col font-sans dark bg-slate-950 text-slate-100" id="app-root-container">
       {/* Navigation Header */}
       <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
         currentUser={currentUser}
         onLogout={handleLogout}
         theme="dark"
@@ -739,132 +1153,20 @@ export default function App() {
       <main className="flex-grow bg-slate-50/50 dark:bg-slate-950 overflow-x-hidden relative">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
-            key={location.pathname}
+            key={
+              activeTab === "image-detail" && selectedDetailId
+                ? `detail-${selectedDetailId}`
+                : uploadedImages.length > 0 && activeTab === "home"
+                ? "upload-success"
+                : activeTab
+            }
             initial={{ opacity: 0, x: 28 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -28 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className="w-full min-h-full"
           >
-            <Routes>
-              <Route path="/" element={<HomeViewComponent />} />
-              <Route
-                path="/upload"
-                element={
-                  <UrlUploadView
-                    onBack={() => navigate("/")}
-                    onUploadSuccess={handleUrlUploadSuccess}
-                    userId={currentUser?.id}
-                    currentUser={currentUser}
-                    siteConfig={siteConfig}
-                    onOpenVipModal={() => setIsVipModalOpen(true)}
-                  />
-                }
-              />
-              <Route
-                path="/gallery"
-                element={
-                  <GalleryView
-                    currentUser={currentUser}
-                    onSelectImage={(id) => navigate(`/image/${id}`)}
-                    onDeleteImage={handleDeleteImage}
-                  />
-                }
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  currentUser ? (
-                    <GalleryView
-                      currentUser={currentUser}
-                      onSelectImage={(id) => navigate(`/image/${id}`)}
-                      onDeleteImage={handleDeleteImage}
-                    />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-              <Route
-                path="/blog"
-                element={
-                  <BlogView
-                    onNavigateHome={() => navigate("/")}
-                    onOpenVipModal={() => setIsVipModalOpen(true)}
-                  />
-                }
-              />
-              <Route
-                path="/help"
-                element={
-                  <div className="py-8">
-                    <FaqSection
-                      onOpenAuth={() => navigate("/login")}
-                      onOpenVipModal={() => setIsVipModalOpen(true)}
-                    />
-                  </div>
-                }
-              />
-              <Route
-                path="/privacy"
-                element={
-                  <PrivacyView
-                    onNavigateHome={() => navigate("/")}
-                    siteConfig={siteConfig}
-                  />
-                }
-              />
-              <Route
-                path="/contact"
-                element={
-                  <ContactView
-                    onNavigateHome={() => navigate("/")}
-                    siteConfig={siteConfig}
-                  />
-                }
-              />
-              <Route
-                path="/login"
-                element={
-                  <AuthView
-                    onLoginSuccess={(u) => {
-                      handleLoginSuccess(u);
-                      navigate("/dashboard");
-                    }}
-                    initialMode="login"
-                  />
-                }
-              />
-              <Route
-                path="/register"
-                element={
-                  <AuthView
-                    onLoginSuccess={(u) => {
-                      handleLoginSuccess(u);
-                      navigate("/dashboard");
-                    }}
-                    initialMode="register"
-                  />
-                }
-              />
-              <Route path="/admin" element={<AdminView onBack={() => navigate("/")} />} />
-              <Route path="/terms" element={<TermsView onNavigateHome={() => navigate("/")} siteConfig={siteConfig} />} />
-              <Route path="/about" element={<AboutView onNavigateHome={() => navigate("/")} siteConfig={siteConfig} />} />
-              <Route path="/abuse" element={<AbuseReportView onNavigateHome={() => navigate("/")} />} />
-              <Route path="/api-docs" element={<ApiDocsView onNavigateHome={() => navigate("/")} siteConfig={siteConfig} />} />
-
-              {/* Image Detail routes */}
-              <Route path="/image/:id" element={<ImageDetailRouteWrapper />} />
-              <Route path="/i/:id" element={<ImageDetailRouteWrapper />} />
-              <Route path="/d/:id" element={<ImageDetailRouteWrapper />} />
-              <Route path="/download/:id" element={<ImageDetailRouteWrapper />} />
-              <Route path="/v/:id" element={<ImageDetailRouteWrapper />} />
-              <Route path="/f/:id" element={<ImageDetailRouteWrapper />} />
-              <Route path="/file/:id" element={<ImageDetailRouteWrapper />} />
-
-              {/* Catch-all fallback */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            {renderContent()}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -896,6 +1198,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setShowUpdateToast(false);
+                      // Set current config version as acknowledged so we don't prompt again until next server reboot
                       if (siteConfig?.appVersion) {
                         initialAppVersionRef.current = siteConfig.appVersion;
                       }
@@ -933,6 +1236,7 @@ export default function App() {
         siteConfig={siteConfig || undefined}
         onVipSuccess={() => {
           fetchSiteConfig();
+          // Reload user or update status if needed
         }}
       />
 
@@ -947,6 +1251,8 @@ export default function App() {
       {/* Bottom Footer block */}
       <Footer 
         onOpenAdsModal={() => setShowAdModal(true)} 
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        onOpenInfoModal={(modal) => setActiveTab(modal)}
         siteConfig={siteConfig} 
       />
 
@@ -955,7 +1261,7 @@ export default function App() {
         activeModal={activeInfoModal}
         onClose={() => setActiveInfoModal(null)}
         siteConfig={siteConfig}
-        onOpenAuth={() => navigate("/login")}
+        onOpenAuth={() => setActiveTab("auth")}
         onOpenVipModal={() => setIsVipModalOpen(true)}
       />
     </div>

@@ -55,7 +55,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   const [error, setError] = useState<string | null>(null);
   const [verifiedDataUrl, setVerifiedDataUrl] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"preview" | "direct" | "bbcode" | "html" | "markdown">("direct");
+  const [activeTab, setActiveTab] = useState<"preview" | "direct" | "bbcode" | "html" | "markdown">("preview");
   const [showQrModal, setShowQrModal] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
@@ -475,8 +475,8 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
           {/* Link Selector Tabs */}
           <div className="flex flex-wrap gap-1.5 mb-4">
             {[
-              { id: "direct", label: "Doğrudan Bağlantı (Direk Link) ⭐" },
-              { id: "preview", label: "İndirme Sayfası Linki" },
+              { id: "preview", label: "İndirme Sayfası Linki ⭐ (Önerilen)" },
+              { id: "direct", label: "Doğrudan İndirme Bağlantısı" },
               { id: "bbcode", label: "Forum (BBCode)" },
               { id: "html", label: "HTML Kodu" },
               { id: "markdown", label: "Markdown" },
