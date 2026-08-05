@@ -43,6 +43,11 @@ import {
   Activity,
   Clock,
   HardDrive,
+  Bot,
+  Zap,
+  Play,
+  Pause,
+  TrendingUp,
   Wrench,
   Power,
   ShieldX,
@@ -2504,17 +2509,79 @@ export default function AdminView({ onBack }: AdminViewProps) {
           </div>
 
           <div className="border-t border-slate-100 pt-6">
-            <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-4">İstatistik Sayaçları Başlangıç Değerleri (Seed Offset)</h4>
-            <p className="text-[11px] text-slate-400 mb-4 -mt-3">Sitede gösterilen toplam sayaçları zenginleştirmek için offset ekleyebilirsiniz.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-indigo-600" />
+                  İstatistik Sayaçları & Otomatik Artış Botu (Seed Offset Bot)
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Sitede gösterilen toplam sayaçların başlangıç değerlerini ayarlayın veya otomatik artan botu çalıştırın.
+                </p>
+              </div>
+
+              {/* Bot Active Status Indicator Badge */}
+              <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 self-start sm:self-auto shrink-0 ${
+                siteConfig.statsBotEnabled
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-slate-100 text-slate-600 border-slate-200"
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  siteConfig.statsBotEnabled ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                }`}></span>
+                <span className="text-xs font-extrabold">
+                  {siteConfig.statsBotEnabled ? "🤖 Bot Aktif (Arka Planda Yükseliyor)" : "⏸️ Bot Durduruldu"}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Seed Setting Presets */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl mb-5">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-2 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                Hızlı Başlangıç Değeri Atama (Presets)
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSiteConfig(prev => ({ ...prev, statsOffset: 5000, usersOffset: 150, todayOffset: 450 }))}
+                  className="px-3 py-1.5 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-600 border border-slate-200 hover:border-blue-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                >
+                  🎯 5.000 Resim / 150 Üye / 450 Bugün
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSiteConfig(prev => ({ ...prev, statsOffset: 10000, usersOffset: 350, todayOffset: 920 }))}
+                  className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                >
+                  🚀 10.000 Resim / 350 Üye / 920 Bugün
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSiteConfig(prev => ({ ...prev, statsOffset: 50000, usersOffset: 1200, todayOffset: 3400 }))}
+                  className="px-3 py-1.5 bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-600 border border-slate-200 hover:border-purple-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                >
+                  ⚡ 50.000 Resim / 1.200 Üye / 3.400 Bugün
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSiteConfig(prev => ({ ...prev, statsOffset: (prev.statsOffset || 0) + 100, todayOffset: (prev.todayOffset || 0) + 100 }))}
+                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                >
+                  ➕ Anında +100 Ekle
+                </button>
+              </div>
+            </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Seed Offset Input Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Toplam Resim Başlangıç</label>
                 <input
                   type="number"
                   value={siteConfig.statsOffset}
                   onChange={(e) => setSiteConfig({ ...siteConfig, statsOffset: Number(e.target.value) })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-black text-slate-800"
                   required
                 />
               </div>
@@ -2525,7 +2592,7 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   type="number"
                   value={siteConfig.usersOffset}
                   onChange={(e) => setSiteConfig({ ...siteConfig, usersOffset: Number(e.target.value) })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-black text-slate-800"
                   required
                 />
               </div>
@@ -2536,9 +2603,172 @@ export default function AdminView({ onBack }: AdminViewProps) {
                   type="number"
                   value={siteConfig.todayOffset}
                   onChange={(e) => setSiteConfig({ ...siteConfig, todayOffset: Number(e.target.value) })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-black text-slate-800"
                   required
                 />
+              </div>
+            </div>
+
+            {/* Otomatik Sayaç Yükseltici Bot (Stats Bot Configuration) */}
+            <div className="p-5 bg-gradient-to-br from-indigo-900 via-slate-900 to-blue-950 text-white rounded-3xl border border-indigo-700/50 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-800/80 pb-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 bg-indigo-600/30 border border-indigo-500/40 rounded-2xl text-indigo-300 shrink-0">
+                    <Bot className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-black text-white flex items-center gap-2">
+                      🤖 Otomatik Sayaç Yükseltici Bot
+                      {siteConfig.statsBotEnabled && (
+                        <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-md text-[10px] font-black">
+                          CANLI ÇALIŞIYOR
+                        </span>
+                      )}
+                    </h5>
+                    <p className="text-xs text-indigo-200/80 mt-0.5">
+                      Siz uyurken veya sayfa kapalıyken bile sunucu arka planında sayaçları kendiliğinden organik olarak yükseltir.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Main Bot Toggle Switch */}
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 self-start sm:self-center">
+                  <input 
+                    type="checkbox" 
+                    checked={!!siteConfig.statsBotEnabled}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, statsBotEnabled: e.target.checked })}
+                    className="sr-only peer" 
+                  />
+                  <div className="w-14 h-7 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+
+              {/* Bot Details & Speed Settings */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Speed selector */}
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-300 mb-1.5 uppercase flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    Artış Hızı Seçeneği
+                  </label>
+                  <select
+                    value={siteConfig.statsBotSpeed || "medium"}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, statsBotSpeed: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-indigo-700/60 rounded-xl text-xs font-extrabold text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+                  >
+                    <option value="slow">🐢 Yavaş (Organik ~30 saniyede bir)</option>
+                    <option value="medium">⚡ Orta (Dengeli ~12 saniyede bir)</option>
+                    <option value="fast">🚀 Hızlı (Yoğun ~3 saniyede bir)</option>
+                  </select>
+                </div>
+
+                {/* Min step */}
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-300 mb-1.5 uppercase">
+                    Minimum Adım Miktarı
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={siteConfig.statsBotMinStep ?? 1}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, statsBotMinStep: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2 bg-slate-950/80 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <span className="text-[10px] text-indigo-300/60 mt-1 block">Her tetiklenmede en az kaç adım değişecek</span>
+                </div>
+
+                {/* Max step */}
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-300 mb-1.5 uppercase">
+                    Maksimum Adım Miktarı
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={siteConfig.statsBotMaxStep ?? 5}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, statsBotMaxStep: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2 bg-slate-950/80 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <span className="text-[10px] text-indigo-300/60 mt-1 block">Her tetiklenmede en fazla kaç adım değişecek</span>
+                </div>
+              </div>
+
+              {/* Active Users Special Wave Settings */}
+              <div className="p-3.5 bg-indigo-950/80 border border-indigo-800/80 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-300 mb-1.5 uppercase flex items-center gap-1">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                    👥 Aktif Üye Trafik Modu (Canlı Dalgalanma)
+                  </label>
+                  <select
+                    value={siteConfig.statsBotUsersMode || "fluctuate"}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, statsBotUsersMode: e.target.value as any })}
+                    className="w-full px-3.5 py-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-black text-emerald-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+                  >
+                    <option value="fluctuate">🌊 Gerçekçi Canlı Dalgalanma (Trafik hem artar hem azalır +3 / -2)</option>
+                    <option value="increment_only">📈 Sadece Yükseliş (Sürekli Artış)</option>
+                  </select>
+                  <span className="text-[10px] text-indigo-200/70 mt-1 block">
+                    Gerçek canlı ziyaretçiler gibi zaman zaman kullanıcı katılır ve ayrılır.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-300 mb-1.5 uppercase">
+                    🛑 Aktif Üye Taban Limiti (Min Floor)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={siteConfig.statsBotUsersMinFloor ?? 10}
+                    onChange={(e) => setSiteConfig({ ...siteConfig, statsBotUsersMinFloor: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <span className="text-[10px] text-indigo-200/70 mt-1 block">
+                    Kullanıcı sayısı azalsa dahi bu taban değerin altına asla düşmez.
+                  </span>
+                </div>
+              </div>
+
+              {/* Checkboxes for which targets to increment */}
+              <div className="pt-2 border-t border-indigo-800/60 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-indigo-100">
+                  <span className="text-[11px] text-indigo-300 uppercase font-black">Arttırılacak Sayaçlar:</span>
+                  <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={siteConfig.statsBotIncrementImages !== false}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, statsBotIncrementImages: e.target.checked })}
+                      className="rounded border-indigo-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    🖼️ Toplam Resim Offseti
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={siteConfig.statsBotIncrementToday !== false}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, statsBotIncrementToday: e.target.checked })}
+                      className="rounded border-indigo-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    📅 Bugün Yüklenenler
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+                    <input
+                      type="checkbox"
+                      checked={siteConfig.statsBotIncrementUsers !== false}
+                      onChange={(e) => setSiteConfig({ ...siteConfig, statsBotIncrementUsers: e.target.checked })}
+                      className="rounded border-indigo-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    👥 Aktif Üye Sayısı
+                  </label>
+                </div>
+
+                <div className="text-[11px] text-indigo-300/80 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Son İşlem: {siteConfig.statsBotLastTick ? new Date(siteConfig.statsBotLastTick).toLocaleTimeString("tr-TR") : "Henüz Başlamadı"}</span>
+                </div>
               </div>
             </div>
           </div>

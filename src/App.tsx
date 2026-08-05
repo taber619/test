@@ -25,8 +25,33 @@ import ApiDocsView from "./components/ApiDocsView";
 import AboutView from "./components/AboutView";
 import TermsView from "./components/TermsView";
 import SEOMetaManager from "./components/SEOMetaManager";
+import ToastContainer from "./components/ToastContainer";
+import { toast } from "./utils/toast";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
+
+export const FALLBACK_SITE_CONFIG: SiteConfig = {
+  homepageTitle: "Türkiye'nin En Hızlı ve Güvenilir Ücretsiz Görsel Yükleme Servisi",
+  homepageSubtitle: "Görsellerinizi ve fotoğraflarınızı anında yükleyin, direkt linkler, HTML ve BBCode kodları alın.",
+  announcementEnabled: true,
+  announcementText: "HızlıResim'e Hoş Geldiniz! Yüksek hızlı sunucularımızda görsellerinizi güvenle saklayabilirsiniz.",
+  statsOffset: 5000,
+  usersOffset: 150,
+  todayOffset: 450,
+  statsBotEnabled: true,
+  statsBotSpeed: "medium",
+  statsBotMinStep: 1,
+  statsBotMaxStep: 5,
+  statsBotUsersMode: "fluctuate",
+  statsBotUsersMinFloor: 10,
+  guestMaxMb: 100,
+  guestMaxUploadCount: 20,
+  registeredMaxMb: 1000,
+  vipMaxMb: 5000,
+  miniChatEnabled: true,
+  adsEnabled: true,
+  vipEnabled: true
+};
 
 export function calculateUploadLimit(
   user: (ClientUser & { role?: string }) | null | undefined, 
@@ -62,16 +87,16 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [activeInfoModal, setActiveInfoModal] = useState<"faq" | "privacy" | "abuse" | "contact" | null>(null);
   const [currentUser, setCurrentUser] = useState<ClientUser | null>(null);
-  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(() => {
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>(() => {
     try {
       const cached = localStorage.getItem("inanresim_site_config");
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        return { ...FALLBACK_SITE_CONFIG, ...JSON.parse(cached) };
+      }
     } catch (e) {}
-    return null;
+    return FALLBACK_SITE_CONFIG;
   });
-  const [isConfigLoaded, setIsConfigLoaded] = useState(() => {
-    return !!localStorage.getItem("inanresim_site_config");
-  });
+  const [isConfigLoaded, setIsConfigLoaded] = useState(true);
   const [cachedMaintenance] = useState(() => localStorage.getItem("inanresim_maintenance_mode") === "true");
   const [theme] = useState<"dark">("dark");
 
@@ -96,7 +121,7 @@ export default function App() {
           return;
         }
         if (data) {
-          setSiteConfig(data);
+          setSiteConfig((prev) => ({ ...FALLBACK_SITE_CONFIG, ...prev, ...data }));
           try {
             localStorage.setItem("inanresim_site_config", JSON.stringify(data));
           } catch (e) {}
@@ -115,7 +140,7 @@ export default function App() {
         }
       }
     } catch (e) {
-      console.error("Failed to load site config:", e);
+      // Quietly swallow transient network errors during background config polling
     } finally {
       setIsConfigLoaded(true);
     }
@@ -577,21 +602,34 @@ export default function App() {
       setTimeout(() => {
         if (results.length > 0) {
           setUploadedImages(results);
+          toast.success(
+            "Yükleme Tamamlandı!",
+            `${results.length} adet görsel başarıyla sunucuya yüklendi ve linkler hazırlandı.`,
+            5000
+          );
         }
         setIsUploading(false);
 
         if (failedFiles.length > 0) {
           if (results.length > 0) {
-            alert(`${results.length}/${files.length} dosya başarıyla yüklendi.\n${failedFiles.length} dosya yüklenemedi: ${failedFiles[0].error}`);
+            toast.warning(
+              "Kısmi Yükleme Başarılı",
+              `${results.length}/${files.length} dosya yüklendi, ${failedFiles.length} dosya yüklenemedi: ${failedFiles[0].error}`,
+              6000
+            );
           } else {
-            alert(`Dosyalar yüklenemedi: ${failedFiles[0].error}`);
+            toast.error(
+              "Yükleme Başarısız",
+              `Dosyalar yüklenemedi: ${failedFiles[0].error}`,
+              6000
+            );
           }
         }
       }, 300);
 
     } catch (err: any) {
       setIsUploading(false);
-      alert(err.message || "Görseller yüklenirken bir hata oluştu.");
+      toast.error("Yükleme Hatası", err.message || "Görseller yüklenirken bir hata oluştu.");
     }
   };
 
@@ -616,6 +654,7 @@ export default function App() {
 
     setUploadedImages([clientImg]);
     setActiveTab("home"); // Render success panel within the homepage context
+    toast.success("URL Yüklemesi Tamamlandı!", "Görsel başarıyla aktarıldı ve paylaşıma hazır.");
   };
 
   // Password set/lock API handler
@@ -1130,6 +1169,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden flex flex-col font-sans dark bg-slate-950 text-slate-100" id="app-root-container">
+      {/* Toast Notification Container */}
+      <ToastContainer />
+
       {/* SEO Meta Manager (Dynamic titles, meta tags, and Schema.org JSON-LD for Google) */}
       <SEOMetaManager
         activeTab={activeTab}

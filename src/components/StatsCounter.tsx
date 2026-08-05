@@ -64,15 +64,19 @@ export default function StatsCounter() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-6 rounded-2xl shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
-        <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-6 rounded-2xl shadow-sm flex items-center gap-4 hover:shadow-md transition-all relative overflow-hidden">
+        <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold relative shrink-0">
           <Users className="w-6 h-6" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse"></span>
         </div>
         <div>
-          <div className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight" id="stat-active-users">
+          <div className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2" id="stat-active-users">
             {formatNum(stats.activeUsers)}
+            <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 tracking-wider">
+              Çevrimiçi
+            </span>
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Aktif Kullanıcılar</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Anlık Aktif Kullanıcılar</div>
         </div>
       </div>
 

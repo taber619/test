@@ -168,6 +168,18 @@ export interface SiteConfig {
   statsOffset: number;
   usersOffset: number;
   todayOffset: number;
+  // Stats Offset Bot Settings
+  statsBotEnabled?: boolean;
+  statsBotSpeed?: "slow" | "medium" | "fast";
+  statsBotMinStep?: number;
+  statsBotMaxStep?: number;
+  statsBotTargetOffset?: number;
+  statsBotIncrementImages?: boolean;
+  statsBotIncrementUsers?: boolean;
+  statsBotUsersMode?: "fluctuate" | "increment_only";
+  statsBotUsersMinFloor?: number;
+  statsBotIncrementToday?: boolean;
+  statsBotLastTick?: number;
   appVersion?: string;
   maintenanceModeEnabled?: boolean;
   miniChatEnabled?: boolean;

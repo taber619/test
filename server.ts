@@ -862,6 +862,17 @@ async function startServer() {
     statsOffset: number;
     usersOffset: number;
     todayOffset: number;
+    statsBotEnabled?: boolean;
+    statsBotSpeed?: "slow" | "medium" | "fast";
+    statsBotMinStep?: number;
+    statsBotMaxStep?: number;
+    statsBotTargetOffset?: number;
+    statsBotIncrementImages?: boolean;
+    statsBotIncrementUsers?: boolean;
+    statsBotUsersMode?: "fluctuate" | "increment_only";
+    statsBotUsersMinFloor?: number;
+    statsBotIncrementToday?: boolean;
+    statsBotLastTick?: number;
     maintenanceModeEnabled?: boolean;
     miniChatEnabled?: boolean;
     guestMaxMb?: number;
@@ -1091,6 +1102,17 @@ async function startServer() {
     statsOffset: 0,
     usersOffset: 0,
     todayOffset: 0,
+    statsBotEnabled: false,
+    statsBotSpeed: "medium",
+    statsBotMinStep: 1,
+    statsBotMaxStep: 5,
+    statsBotTargetOffset: 5000,
+    statsBotIncrementImages: true,
+    statsBotIncrementUsers: true,
+    statsBotUsersMode: "fluctuate",
+    statsBotUsersMinFloor: 10,
+    statsBotIncrementToday: true,
+    statsBotLastTick: 0,
     maintenanceModeEnabled: false,
     miniChatEnabled: true,
     guestMaxMb: 100,
@@ -1231,6 +1253,17 @@ async function startServer() {
             statsOffset: data.statsOffset !== undefined ? Number(data.statsOffset) : defaultSiteConfig.statsOffset,
             usersOffset: data.usersOffset !== undefined ? Number(data.usersOffset) : defaultSiteConfig.usersOffset,
             todayOffset: data.todayOffset !== undefined ? Number(data.todayOffset) : defaultSiteConfig.todayOffset,
+            statsBotEnabled: data.statsBotEnabled !== undefined ? !!data.statsBotEnabled : defaultSiteConfig.statsBotEnabled,
+            statsBotSpeed: data.statsBotSpeed ?? defaultSiteConfig.statsBotSpeed,
+            statsBotMinStep: data.statsBotMinStep !== undefined ? Number(data.statsBotMinStep) : defaultSiteConfig.statsBotMinStep,
+            statsBotMaxStep: data.statsBotMaxStep !== undefined ? Number(data.statsBotMaxStep) : defaultSiteConfig.statsBotMaxStep,
+            statsBotTargetOffset: data.statsBotTargetOffset !== undefined ? Number(data.statsBotTargetOffset) : defaultSiteConfig.statsBotTargetOffset,
+            statsBotIncrementImages: data.statsBotIncrementImages !== undefined ? !!data.statsBotIncrementImages : defaultSiteConfig.statsBotIncrementImages,
+            statsBotIncrementUsers: data.statsBotIncrementUsers !== undefined ? !!data.statsBotIncrementUsers : defaultSiteConfig.statsBotIncrementUsers,
+            statsBotUsersMode: data.statsBotUsersMode ?? defaultSiteConfig.statsBotUsersMode,
+            statsBotUsersMinFloor: data.statsBotUsersMinFloor !== undefined ? Number(data.statsBotUsersMinFloor) : defaultSiteConfig.statsBotUsersMinFloor,
+            statsBotIncrementToday: data.statsBotIncrementToday !== undefined ? !!data.statsBotIncrementToday : defaultSiteConfig.statsBotIncrementToday,
+            statsBotLastTick: data.statsBotLastTick !== undefined ? Number(data.statsBotLastTick) : defaultSiteConfig.statsBotLastTick,
             maintenanceModeEnabled: data.maintenanceModeEnabled ?? defaultSiteConfig.maintenanceModeEnabled,
             miniChatEnabled: data.miniChatEnabled ?? defaultSiteConfig.miniChatEnabled,
             guestMaxMb: data.guestMaxMb !== undefined ? Number(data.guestMaxMb) : defaultSiteConfig.guestMaxMb,
@@ -6554,6 +6587,72 @@ ${urlsXml}</urlset>`;
       console.error("Background cleanup task error:", err);
     });
   }, 10 * 60 * 1000);
+
+  // Background Stats Offset Auto-Increment Bot Worker
+  let lastStatsBotExecTime = Date.now();
+  setInterval(async () => {
+    try {
+      const config = await dbGetConfig();
+      if (!config.statsBotEnabled) return;
+
+      const now = Date.now();
+      const speed = config.statsBotSpeed || "medium";
+      let intervalMs = 12000; // medium: ~12s
+      if (speed === "fast") intervalMs = 3000; // fast: ~3s
+      if (speed === "slow") intervalMs = 30000; // slow: ~30s
+
+      if (now - lastStatsBotExecTime < intervalMs) return;
+
+      lastStatsBotExecTime = now;
+
+      const minStep = Math.max(1, config.statsBotMinStep ?? 1);
+      const maxStep = Math.max(minStep, config.statsBotMaxStep ?? 5);
+
+      const incImages = config.statsBotIncrementImages !== false;
+      const incUsers = config.statsBotIncrementUsers !== false;
+      const incToday = config.statsBotIncrementToday !== false;
+
+      const step = Math.floor(Math.random() * (maxStep - minStep + 1)) + minStep;
+
+      let newStatsOffset = config.statsOffset || 0;
+      let newUsersOffset = config.usersOffset || 0;
+      let newTodayOffset = config.todayOffset || 0;
+
+      if (incImages) newStatsOffset += step;
+      if (incToday) newTodayOffset += step;
+
+      if (incUsers) {
+        const mode = config.statsBotUsersMode || "fluctuate";
+        if (mode === "fluctuate") {
+          const stepVal = Math.floor(Math.random() * (maxStep - minStep + 1)) + minStep;
+          const rand = Math.random();
+          let delta = 0;
+          if (rand < 0.48) {
+            delta = stepVal; // Online kullanıcılar katıldı (+)
+          } else if (rand < 0.96) {
+            delta = -stepVal; // Online kullanıcılar ayrıldı (-)
+          } else {
+            delta = 0;
+          }
+          const minFloor = config.statsBotUsersMinFloor ?? 0;
+          newUsersOffset = Math.max(minFloor, newUsersOffset + delta);
+        } else {
+          if (Math.random() > 0.4) {
+            newUsersOffset += Math.max(1, Math.floor(step / 2));
+          }
+        }
+      }
+
+      await dbSaveConfig({
+        statsOffset: newStatsOffset,
+        usersOffset: newUsersOffset,
+        todayOffset: newTodayOffset,
+        statsBotLastTick: now,
+      });
+    } catch (err) {
+      // Quiet background exception handling
+    }
+  }, 3000);
 
   // --- VITE DEVELOPMENT MIDDLEWARE OR PRODUCTION SERVING ---
 
