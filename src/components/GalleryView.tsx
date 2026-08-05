@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Image, Eye, Trash2, Calendar, FileType, Key, RefreshCw, Grid, CheckSquare, Square, Check, Loader2 } from "lucide-react";
 import { ClientImage, ClientUser } from "../types";
+import { generateAltText } from "../utils/altTextGenerator";
 
 interface GalleryViewProps {
   currentUser: ClientUser | null;
@@ -296,7 +297,7 @@ export default function GalleryView({ currentUser, onSelectImage, onDeleteImage 
                     ) : (
                       <img
                         src={img.directUrl}
-                        alt={img.name}
+                        alt={generateAltText(img.name, img.alt)}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         referrerPolicy="no-referrer"
                         loading="lazy"

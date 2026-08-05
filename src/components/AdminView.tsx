@@ -48,7 +48,8 @@ import {
   ShieldX,
   Filter,
   BookOpen,
-  User
+  User,
+  Video
 } from "lucide-react";
 import { SiteConfig, AdBanner, AdRequest, BankAccount, PaymentRequest, PaymentGatewayConfig, AnnouncementItem, AbuseReportItem, ContactMessageItem, BlogPostItem, AnnouncementTemplateItem } from "../types";
 
@@ -2954,16 +2955,29 @@ export default function AdminView({ onBack }: AdminViewProps) {
                       </div>
 
                       {/* Thumbnail */}
-                      <div className="aspect-video w-full rounded-xl bg-slate-100 border border-slate-200/60 overflow-hidden relative group">
-                        <img
-                          src={`/api/images/${img.id}`}
-                          alt={img.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = "none";
-                          }}
-                        />
-                        <div className="absolute top-2 right-2 bg-slate-900/70 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
+                      <div className="aspect-video w-full rounded-xl bg-slate-100 border border-slate-200/60 overflow-hidden relative group flex items-center justify-center">
+                        {img.mimeType?.startsWith("video/") || /\.(mp4|webm|ogg|mov|mkv|avi)$/i.test(img.name) ? (
+                          <video
+                            src={`/api/images/${img.id}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            muted
+                            playsInline
+                            controls
+                          />
+                        ) : (
+                          <img
+                            src={`/api/images/${img.id}`}
+                            alt={img.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = "none";
+                            }}
+                          />
+                        )}
+                        <div className="absolute top-2 right-2 bg-slate-900/70 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-mono font-bold z-10 flex items-center gap-1 pointer-events-none">
+                          {(img.mimeType?.startsWith("video/") || /\.(mp4|webm|ogg|mov|mkv|avi)$/i.test(img.name)) && (
+                            <Video className="w-3 h-3 text-sky-400 shrink-0" />
+                          )}
                           {img.id}
                         </div>
                       </div>

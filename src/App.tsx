@@ -24,6 +24,7 @@ import ContactView from "./components/ContactView";
 import ApiDocsView from "./components/ApiDocsView";
 import AboutView from "./components/AboutView";
 import TermsView from "./components/TermsView";
+import SEOMetaManager from "./components/SEOMetaManager";
 import { ActiveTab, ClientImage, ClientUser, SiteConfig } from "./types";
 import { Zap, ShieldCheck, Code, Target, ArrowRight, UserPlus, Image as ImageIcon, Volume2 } from "lucide-react";
 
@@ -87,21 +88,29 @@ export default function App() {
     try {
       const res = await fetch("/api/config");
       if (res.ok) {
-        const data = await res.json();
-        setSiteConfig(data);
+        const text = await res.text();
+        let data: any = null;
         try {
-          localStorage.setItem("inanresim_site_config", JSON.stringify(data));
-        } catch (e) {}
-        if (data.maintenanceModeEnabled !== undefined) {
-          localStorage.setItem("inanresim_maintenance_mode", String(data.maintenanceModeEnabled));
+          data = JSON.parse(text);
+        } catch (jsonErr) {
+          return;
         }
+        if (data) {
+          setSiteConfig(data);
+          try {
+            localStorage.setItem("inanresim_site_config", JSON.stringify(data));
+          } catch (e) {}
+          if (data.maintenanceModeEnabled !== undefined) {
+            localStorage.setItem("inanresim_maintenance_mode", String(data.maintenanceModeEnabled));
+          }
 
-        // Check if there is a new server-side boot ID or update
-        if (data.appVersion) {
-          if (!initialAppVersionRef.current) {
-            initialAppVersionRef.current = data.appVersion;
-          } else if (initialAppVersionRef.current !== data.appVersion) {
-            setShowUpdateToast(true);
+          // Check if there is a new server-side boot ID or update
+          if (data.appVersion) {
+            if (!initialAppVersionRef.current) {
+              initialAppVersionRef.current = data.appVersion;
+            } else if (initialAppVersionRef.current !== data.appVersion) {
+              setShowUpdateToast(true);
+            }
           }
         }
       }
@@ -160,6 +169,7 @@ export default function App() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedImages, setUploadedImages] = useState<ClientImage[]>([]);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
+  const [currentImageMeta, setCurrentImageMeta] = useState<any>(null);
 
   // Realtime User Session Syncing (VIP Updates, Banned status)
   const syncUserSession = async (userToSync?: ClientUser | null) => {
@@ -647,7 +657,13 @@ export default function App() {
 
   const renderContent = () => {
     if (activeTab === "image-detail" && selectedDetailId) {
-      return <ImageDetailView imageId={selectedDetailId} onBack={navigateBack} />;
+      return (
+        <ImageDetailView
+          imageId={selectedDetailId}
+          onBack={navigateBack}
+          onMetaLoaded={setCurrentImageMeta}
+        />
+      );
     }
 
     if (activeTab === "url-upload") {
@@ -1114,6 +1130,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden flex flex-col font-sans dark bg-slate-950 text-slate-100" id="app-root-container">
+      {/* SEO Meta Manager (Dynamic titles, meta tags, and Schema.org JSON-LD for Google) */}
+      <SEOMetaManager
+        activeTab={activeTab}
+        selectedDetailId={selectedDetailId || undefined}
+        imageMeta={currentImageMeta}
+        activeInfoModal={activeInfoModal}
+        siteConfig={siteConfig}
+      />
+
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}

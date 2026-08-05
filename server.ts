@@ -5532,6 +5532,7 @@ ${urlsXml}</urlset>`;
 
   // Get public config
   app.get("/api/config", async (req, res) => {
+    res.setHeader("Content-Type", "application/json");
     try {
       const config = await dbGetConfig();
       res.json({

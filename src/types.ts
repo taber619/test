@@ -51,6 +51,7 @@ export interface PaymentRequest {
 export interface ClientImage {
   id: string;
   name: string;
+  alt?: string;
   size: number;
   mimeType: string;
   uploadedAt: number;

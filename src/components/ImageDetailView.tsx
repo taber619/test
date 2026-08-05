@@ -26,10 +26,12 @@ import {
 } from "lucide-react";
 import { ClientImage } from "../types";
 import QRCodeShareModal from "./QRCodeShareModal";
+import { generateAltText, generateCleanTitle } from "../utils/altTextGenerator";
 
 interface ImageDetailViewProps {
   imageId: string;
   onBack: () => void;
+  onMetaLoaded?: (meta: ImageMeta) => void;
 }
 
 interface ImageMeta {
@@ -48,7 +50,7 @@ interface ImageMeta {
   watermarkPosition?: string;
 }
 
-export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProps) {
+export default function ImageDetailView({ imageId, onBack, onMetaLoaded }: ImageDetailViewProps) {
   const [meta, setMeta] = useState<ImageMeta | null>(null);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,6 +76,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
       })
       .then((data) => {
         setMeta(data);
+        if (onMetaLoaded) onMetaLoaded(data);
         if (!data.hasPassword) {
           setVerifiedDataUrl(`/api/images/${imageId}`);
         }
@@ -196,6 +199,9 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   const isVideo = meta?.mimeType?.startsWith("video/");
   const isImage = meta?.mimeType?.startsWith("image/");
 
+  const cleanTitle = generateCleanTitle(meta?.name);
+  const autoAltText = generateAltText(meta?.name, undefined, cleanTitle);
+
   const origin = window.location.origin;
   const directLink = `${origin}/api/images/${imageId}`;
   const previewLink = `${origin}/i/${imageId}`;
@@ -203,10 +209,10 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
   const bbCode = isVideo ? `[VIDEO]${directLink}[/VIDEO]` : `[IMG]${directLink}[/IMG]`;
   const htmlCode = isVideo 
     ? `<video src="${directLink}" controls width="100%"></video>` 
-    : `<a href="${previewLink}"><img src="${directLink}" alt="${meta?.name || 'Görsel'}" /></a>`;
+    : `<a href="${previewLink}"><img src="${directLink}" alt="${autoAltText}" /></a>`;
   const markdownCode = isVideo 
-    ? `[${meta?.name || 'Video'}](${directLink})` 
-    : `![${meta?.name || 'Görsel'}](${directLink})`;
+    ? `[${cleanTitle}](${directLink})` 
+    : `![${autoAltText}](${directLink})`;
 
   const getLinkValue = () => {
     switch (activeTab) {
@@ -327,7 +333,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
           </div>
 
           {/* Preview Box */}
-          <div className="mb-8 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 p-4 flex items-center justify-center min-h-[220px] max-h-[480px] overflow-hidden relative">
+          <div className="mb-6 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 p-4 flex items-center justify-center min-h-[220px] max-h-[480px] overflow-hidden relative">
             {isVideo ? (
               <video
                 src={verifiedDataUrl || ""}
@@ -337,7 +343,7 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
             ) : isImage ? (
               <img
                 src={verifiedDataUrl || ""}
-                alt={meta?.name}
+                alt={autoAltText}
                 className="max-h-[440px] w-auto rounded-xl object-contain shadow-sm"
                 referrerPolicy="no-referrer"
               />
@@ -348,6 +354,50 @@ export default function ImageDetailView({ imageId, onBack }: ImageDetailViewProp
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{formatSize(meta?.size || 0)} • Yüksek Hızlı Dosya İndirme</p>
               </div>
             )}
+          </div>
+
+          {/* Otomatik Google Görseller SEO Alt Metni Modülü */}
+          <div className="mb-8 bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-4 sm:p-5 border border-indigo-500/30 shadow-md">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2.5">
+                <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-xl border border-indigo-400/30">
+                  <Sparkles className="w-4 h-4 text-sky-400" />
+                </span>
+                <div>
+                  <h4 className="text-sm font-black tracking-tight text-white flex items-center gap-2">
+                    <span>Otomatik SEO Alt Metni</span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      Google Görseller İndeksi
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-indigo-200/80 mt-0.5">
+                    Arama motorlarında 'resim yükle' teriminde görünürlük sağlayan otomatik açıklama.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleCopy(autoAltText, "seo-alt")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
+              >
+                {copiedIndex === "seo-alt" ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Kopyalandı!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Alt Metnini Kopyala</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="bg-slate-950/90 border border-indigo-500/20 rounded-xl px-3.5 py-2.5 text-xs font-mono text-sky-200 flex items-center justify-between gap-2 overflow-x-auto">
+              <span>alt="{autoAltText}"</span>
+            </div>
           </div>
 
           {/* Prominent Blue Download Button Section (Exact match to sample image request) */}

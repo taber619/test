@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Copy, Check, Trash2, ArrowLeft, Eye, Shield, Lock, Calendar, Video, Image, QrCode, Archive, FileText } from "lucide-react";
 import { ClientImage } from "../types";
 import QRCodeShareModal from "./QRCodeShareModal";
+import { generateAltText } from "../utils/altTextGenerator";
 
 interface UploadSuccessProps {
   uploadedImages: ClientImage[];
@@ -129,7 +130,7 @@ export default function UploadSuccess({
                   ) : img.mimeType?.startsWith("image/") ? (
                     <img
                       src={img.directUrl}
-                      alt={img.name}
+                      alt={generateAltText(img.name, img.alt)}
                       className="w-full h-full object-contain"
                       referrerPolicy="no-referrer"
                     />
